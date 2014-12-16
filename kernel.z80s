@@ -192,74 +192,81 @@ escape  equ 1bh ; escape
 
 lastl defl  0   ; initial link pointer (end of chain)
 
-macro hdr, en,str,im,fl,axt
-  local @a,@b
-        ;; en  = enable hdr  0=disable
-        ;; str = name string
-        ;; im  = immediate
-        ;; fl  = application/system flag
-        ;; axt = alias xt
-
-   if en    ;; if header enable
-
-  cseg
-cfadr defl  $   ;; code field address
-
-  aseg      ;; put heads in system dictionary
-lnk defl  $   ;; link address for next word
-
-bits  defl  0
-
-   ifnb <im>
-bits  defl  bits+40h  ;; set immediate bit
-   endif
-
-   ifnb <axt>   ;; if alias
-cfadr defl  axt   ;; set cfa
-bits  defl  bits+80h  ;; set alias bit
-   endif
-
-  db  @a    ;; generate count byte
-@b: db  str   ;; generate name
-@a  defl  $-@b+bits
-
-  dw  lastl   ;; generate link field
-   ifb  <fl>    ;; generate pointer to code field
-  dw  cfadr   ;; for application words
-   else
-  dw  $+2   ;; for system words
-   endif
-
-lastl defl  lnk
-
-   endif
-
-   ifb  <fl>    ;; switch to system or application
-  cseg
-   else
-  aseg
-   endif
+hdr macro en,str,immediate,fl,axt
+  local _a,_b
+  ;; en  = enable hdr  0=disable
+  ;; str = name string
+  ;; immediate  = immediate
+  ;; fl  = application/system flag
+  ;; axt = alias xt
+  if en    ;; if header enable
+    ;   cseg ; XXX OLD
+    cfadr defl  $   ;; code field address
+    ;   aseg      ;; put heads in system dictionary ; XXX OLD
+    lnk defl  $   ;; link address for next word
+    bits  defl  0
+    if not nul immediate
+      bits  defl  bits+40h  ;; set immediate bit
+    endif
+    if not nul axt   ;; if alias
+      cfadr defl  axt   ;; set cfa
+      bits  defl  bits+80h  ;; set alias bit
+    endif
+; XXX OLD -- original method, fails with Pasmo
+; ('_a' undefined):
+;    db _a    ;; generate count byte
+;    _b db  str   ;; generate name
+;    _a defl  $-_b+bits
+; XXX Alternative:
+    db _a-_b+bits    ;; generate count byte
+    _b db  str   ;; generate name
+    _a
+    dw  lastl   ;; generate link field
+    if nul fl    ;; generate pointer to code field
+      dw  cfadr   ;; for application words
+    else
+      dw  $+2   ;; for system words
+    endif
+    lastl defl  lnk
+  endif
+;  if nul fl    ;; switch to system or application
+;    ;   cseg ; XXX OLD
+;  else
+;    ;   aseg ; XXX OLD
+;  endif
 
   endm
 
 ; Macro to generate counted string
 
-macro dcs, s1,s2,s3,s4 ;; allow comma separated
-  local @a,@b
+; XXX OLD -- original dcs macro
+; It seems M80 stores strings with 'db', and the inner
+; commas divide the argument string into several parameters.
+; Anyway, it fails with Pasmo ('_a' undefined).
+;dcs macro s1,s2,s3,s4 ;; allow comma separated
+;  local _a,_b
+;  db  _a    ;; generate count byte
+;  _b: db  s1
+;  if not nul s2
+;    db  s2
+;    if not nul s3
+;      db  s3
+;      if not nul s4
+;        db  s4
+;      endif
+;    endif
+;  endif
+;  _a defl  $-_b
+;  endm
 
-  db  @a    ;; generate count byte
-@b: db  s1
-   ifnb <s2>
-  db  s2
-   ifnb <s3>
-  db  s3
-   ifnb <s4>
-  db  s4
-   endif
-   endif
-   endif
-@a  defl  $-@b
-   endm
+; Simpler:
+
+dcs macro string
+  local _first,_next
+  db _next-_first ;; count byte
+  _first defm string
+  _next
+  endm
 
 ; Macro for inline NEXT
 
@@ -276,18 +283,18 @@ ignore1  macro
 ; Macro to generate fdb table
 
 gfdb   macro
-  local @a
-@a  defl  fdbs
+  local _a
+_a  defl  fdbs
    rept nfd
-  dw  @a
-@a  defl  @a+fdsiz
+  dw  _a
+_a  defl  _a+fdsiz
    endm
    endm
 
 ;
 ; System segment
 ;
-  aseg
+;   aseg ; XXX OLD
 
   org sm
 
@@ -306,7 +313,7 @@ hm  equ $   ; system definitions and header memory
 ;
 ; Application segment
 ;
-  cseg
+;   cseg ; XXX OLD
 
 ; jp  cldd    ; DO NOT INCLUDE - this statement is
 ;       ; automatically inserted by the linker
@@ -340,7 +347,7 @@ hpush:  push  hl    ; 11T     NEXT-1  011C
 
 ; NOOP  ( -- )
 
-  hdr, 1,'NOOP'
+  hdr 1,'NOOP'
 noop  equ $
 
 ; NEXT  -  Forth Address Interpreter
@@ -547,7 +554,7 @@ douse:  pop hl
 
 ; UNNEST  ( -- )
 
-  hdr, 1,'UNNEST'
+  hdr 1,'UNNEST'
 unnest: ld  hl,(rpp)
   inc hl
   inc hl
@@ -556,7 +563,7 @@ unnest: ld  hl,(rpp)
 
 ; (EXIT)  ( -- )    exit colon definition
 
-  hdr, 1,'(EXIT)'
+  hdr 1,'(EXIT)'
 exit: ld  bc,next
 exit1:  push  bc
   ld  hl,(rpp)  ; pop IP from return stack
@@ -568,12 +575,12 @@ exit1:  push  bc
 
 ; EXECUTE  ( xt -- )
 
-  hdr, 1,'EXECUTE'
+  hdr 1,'EXECUTE'
 exec: ret
 
 ; @EXECUTE  ( a-addr -- )
 
-  hdr, 1,'@EXECUTE'
+  hdr 1,'@EXECUTE'
 aexec:  pop hl
   ld  a,(hl)
   inc hl
@@ -585,7 +592,7 @@ aexec:  pop hl
 
 ; clit  ( -- char )
 
-  hdr, x,'CLIT'  ; FIG
+  hdr x,'CLIT'  ; FIG
 clit: ld  a,(bc)
   inc bc
 
@@ -597,7 +604,7 @@ apush:  ld  l,a
 
 ; lit  ( -- n )
 
-  hdr, x,'LIT'   ; FIG
+  hdr x,'LIT'   ; FIG
 lit:  ld  a,(bc)
   ld  l,a
   inc bc
@@ -608,7 +615,7 @@ lit:  ld  a,(bc)
 
 ; 2lit  ( -- d )
 
-  hdr, x,'2LIT'
+  hdr x,'2LIT'
 tlit: ld  a,(bc)
   ld  l,a
   inc bc
@@ -623,7 +630,7 @@ tlit: ld  a,(bc)
   inc bc
   jp  dpush
 
-  cseg
+;   cseg ; XXX OLD
 
   include stack.z80s ; stack functions
   include memory.z80s  ; memory operations
@@ -633,14 +640,14 @@ tlit: ld  a,(bc)
   include string.z80s  ; string functions
   include control.z80s ; control structures
 
-docre equ next
+docre equ next ; XXX this is repeated (and thus commented out) in <compile.z80s>
 doval equ at
 docon equ at
 docco equ cat
 
 ; (D.)  ( d -- c-addr u )  tuck dabs <# #s rot sign #>
 
-  hdr, 1,'(D.)'
+  hdr 1,'(D.)'
 pddot:  call  docol
   dw  tuck
   dw  dabs
@@ -652,7 +659,7 @@ pddot:  call  docol
 
 ; U.R  ( u1 u2 -- ) 0 swap d.r
 
-  hdr, 1,'U.R'
+  hdr 1,'U.R'
 udotr:  ld  hl,0
   ex  (sp),hl
   push  hl
@@ -660,7 +667,7 @@ udotr:  ld  hl,0
 
 ; D.R  ( d u -- )   >r (d.) r> over - spaces type
 
-  hdr, 1,'D.R'
+  hdr 1,'D.R'
 ddotr:  call  docol
   dw  tor
   dw  pddot
@@ -672,7 +679,7 @@ ddotr1: dw  fromr
 
 ; .R  ( n u -- )    >r s>d r> d.r
 
-  hdr, 1,'.R'
+  hdr 1,'.R'
 dotr: call  docol
   dw  tor
   dw  stod
@@ -681,14 +688,14 @@ dotr: call  docol
 
 ; U.  ( u -- )    0 d.
 
-  hdr, 1,'U.'
+  hdr 1,'U.'
 udot: ld  hl,0
   push  hl
 ; jp  ddot
 
 ; D.  ( d -- )    0 d.r space
 
-  hdr, 1,'D.'
+  hdr 1,'D.'
 ddot: call  docol
   dw  zero,ddotr
   dw  space
@@ -696,14 +703,14 @@ ddot: call  docol
 
 ; .  ( n -- )   s>d d.
 
-  hdr, 1,'.'
+  hdr 1,'.'
 dot:  call  docol
   dw  stod,ddot
   dw  exit
 
 ; ?  ( addr -- )    @ .
 
-  hdr, 1,'?'
+  hdr 1,'?'
 ques: call  docol
   dw  at,dot
   dw  exit
@@ -714,7 +721,7 @@ ques: call  docol
 
 ; UPCASE  ( char1 -- char2 )
 
-  hdr, 1,'UPCASE'  ; make char uppercase
+  hdr 1,'UPCASE'  ; make char uppercase
 upcas:  pop hl
   ld  a,l
   call  upc
@@ -722,7 +729,7 @@ upcas:  pop hl
 
 ; UPPER  ( c-addr u -- )
 
-  hdr, 1,'UPPER' ; make string uppercase
+  hdr 1,'UPPER' ; make string uppercase
 upper:  pop de
   pop hl
 upper1: ld  a,d
@@ -741,58 +748,58 @@ upper1: ld  a,d
 
 ; TRUE
 
-  hdr, 1,'TRUE'
+  hdr 1,'TRUE'
 true: ld  hl,-1
   jp  hpush
 
 ; FALSE
 
-  hdr, 1,'FALSE'
+  hdr 1,'FALSE'
 false:  ld  hl,0
   jp  hpush
 
 ; -1  ( -- -1 )   aka true -1
 
-  hdr, 1,'-1',,,true
+  hdr 1,'-1',,,true
 
 ; 0  ( -- 0 )   aka false 0
 
-  hdr, 1,'0',,,false
+  hdr 1,'0',,,false
 zero  equ false
 
 ; 1  ( -- 1 )
 
-  hdr, 1,'1'
+  hdr 1,'1'
 one:  call  docco
   db  1
 
 ; 2  ( -- 2 )
 
-  hdr, 1,'2'
+  hdr 1,'2'
 two:  call  docco
   db  2
 
 ; 3  ( -- 3 )
 
-  hdr, 1,'3'
+  hdr 1,'3'
 three:  call  docco
   db  3
 
 ; BL  ( -- 32 )   ascii value for space character
 
-  hdr, 1,'BL'
+  hdr 1,'BL'
 bll:  call  docco
   db  32
 
 ; B/BUF  ( -- 1024 )  bytes per screen buffer
 
-  hdr, 1,'B/BUF',,1  ; FIG
+  hdr 1,'B/BUF',,1  ; FIG
 bbuf: call  doval
 bbuf1:  dw  1024
 
 ; C/L  ( -- 64 )    chars per screen line
 
-  hdr, 1,'C/L',,1  ; FIG
+  hdr 1,'C/L',,1  ; FIG
 csll: call  doval
   dw  64
 
@@ -802,31 +809,31 @@ csll: call  doval
 
 ; LIMIT  ( -- addr )
 
-  hdr, 1,'LIMIT' ; FIG
+  hdr 1,'LIMIT' ; FIG
 limit:  call  doval   ; application word - used by BUF
 limit1: ds  cw    ; patched by COLD
 
 ; hbuf  ( -- addr ) handle r/w buffer
 
-  hdr, x,'HBUF'
+  hdr x,'HBUF'
 hbuf: call  doval
 hbuf1:  ds  cw    ; patched by COLD
 
 ; 'NEXT  ( -- addr )  address of NEXT
 
-  hdr, 1,"'NEXT"
+  hdr 1,"'NEXT"
 tnext:  call  docon
 tnext1: dw  next
 
 ; #FCB  ( -- u )    number of file handles
 
-  hdr, 1,'#FCB'
+  hdr 1,'#FCB'
 nfcb: call  doval
 nfcb1:  dw  fhno
 
 ; SYS-VEC  ( -- addr )  system vector table
 
-  hdr, 1,'SYS-VEC'
+  hdr 1,'SYS-VEC'
 sysvec: call  docre
 
 vkeyq:  dw  qterm   ;  0 KEY?
@@ -850,93 +857,93 @@ npno: dw  pno   ; 26 HOLD buffer size (bytes)
 
 ; UP  ( -- addr )   user area pointer
 
-  hdr, 1,'UP'
+  hdr 1,'UP'
 up: call  docon
   dw  upp
 
 ; FSP  ( -- addr )  fp stack pointer
 
-  hdr, 1,'FSP'
+  hdr 1,'FSP'
 fsp:  call  docre
 fspp: ds  cw
 
 ; boot  ( -- addr ) boot word (holds forth/application xt)
 
-  hdr, x,'BOOT'
+  hdr x,'BOOT'
 boot: call  docre
 boot1:  dw  0   ; xt
 boot2:  dw  0   ; 0=forth
 
 ; SYS  ( -- addr )  compile system or application
 
-  hdr, 1,'SYS'
+  hdr 1,'SYS'
 sys:  call  docre   ; application word - used by HERE, UNUSED
 sys1: dw  0
 
 ; last  ( -- addr ) occupies 2 cells
 
-  hdr, x,'LAST',,1
+  hdr x,'LAST',,1
 last: call  docre
 last1:  dw  topnfa    ; latest nfa
 last2:  dw  topxt   ; latest xt
 
 ; BLK
 
-  hdr, 1,'BLK',,1
+  hdr 1,'BLK',,1
 blk:  call  docre
 blk1: ds  cw
 
 ; >IN
 
-  hdr, 1,'>IN',,1
+  hdr 1,'>IN',,1
 inn:  call  docre
 inn1: ds  cw
 
 ; SCR     occupies 2 cells
 
-  hdr, 1,'SCR',,1
+  hdr 1,'SCR',,1
 scr:  call  docre
   ds  2*cw
 
 ; STATE
 
-  hdr, 1,'STATE',,1
+  hdr 1,'STATE',,1
 state:  call  docre
 state1: ds  cw
 
 ; 'SOURCE     occupies 2 cells
 
-  hdr, 1,"'SOURCE",,1
+  hdr 1,"'SOURCE",,1
 tsourc: call  docre
 tsour1: ds  2*cw
 
 ; WARNING
 
-  hdr, 1,'WARNING',,1  ; FIG
+  hdr 1,'WARNING',,1  ; FIG
 warnn:  call  docre
 warnn1: ds  cw
 
 ; CSP
 
-  hdr, 1,'CSP',,1  ; FIG
+  hdr 1,'CSP',,1  ; FIG
 cspp: call  docre
 cspp1:  ds  cw
 
 ; CHECKING
 
-  hdr, 1,'CHECKING',,1
+  hdr 1,'CHECKING',,1
 check:  call  docre
 check1: ds  cw
 
 ; errmsg  ( -- addr ) message holder for abort"
 
-  hdr, x,'ERRMSG'
+  hdr x,'ERRMSG'
 errmsg: call  docre
 errmsg1:ds  2*cw
 
 ; CONTEXT  ( -- addr )
 
-  hdr, 1,'CONTEXT',,1
+  hdr 1,'CONTEXT',,1
 cont: call  docre
 acont:  ds  cw    ; context
 acurr:  ds  cw    ; current
@@ -944,25 +951,25 @@ acurr:  ds  cw    ; current
 
 ; get-context  ( -- wid )
 
-  hdr, x,'GET-CONTEXT',,1
+  hdr x,'GET-CONTEXT',,1
 getcon: ld  hl,(acont)
   jp  hpush
 
 ; GET-CURRENT  ( -- wid )
 
-  hdr, 1,'GET-CURRENT',,1
+  hdr 1,'GET-CURRENT',,1
 getcur: ld  hl,(acurr)
   jp  hpush
 
 ; SET-CURRENT  ( wid -- )
 
-  hdr, 1,'SET-CURRENT',,1
+  hdr 1,'SET-CURRENT',,1
 setcur: ld  hl,acurr
   jp  store1
 
 ; zbuf  ( -- addr ) asciiz buffer pointers
 
-  hdr, x,'ZBUF'
+  hdr x,'ZBUF'
 zbuf: call  docre
 zbuf1:  dw  zb1 ; next buffer
   dw  zb2 ; last buffer
@@ -973,37 +980,37 @@ zbuf1:  dw  zb1 ; next buffer
 
 ; S0
 
-  hdr, 1,'S0'    ; FIG
+  hdr 1,'S0'    ; FIG
 szero:  call  douse
   dw  6
 
 ; R0
 
-  hdr, 1,'R0'    ; FIG
+  hdr 1,'R0'    ; FIG
 rzero:  call  douse
   dw  8
 
 ; DP      application dictionary pointer
 
-  hdr, 1,'DP'    ; FIG
+  hdr 1,'DP'    ; FIG
 dpp:  call  douse
   dw  10
 
 ; dph     system dictionary pointer
 
-  hdr, x,'DPH',,1  ; must follow DP
+  hdr x,'DPH',,1  ; must follow DP
 dph:  call  douse
   dw  12
 
 ; VOC-LINK
 
-  hdr, 1,'VOC-LINK',,1 ; FIG
+  hdr 1,'VOC-LINK',,1 ; FIG
 vocl: call  douse
   dw  14
 
 ; FS0
 
-  hdr, 1,'FS0'
+  hdr 1,'FS0'
 fszero: call  douse
   dw  16
 
@@ -1013,19 +1020,19 @@ fszero: call  douse
 
 ; DPL
 
-  hdr, 1,'DPL'   ; FIG
+  hdr 1,'DPL'   ; FIG
 dpl:  call  douse
   dw  20
 
 ; hld
 
-  hdr, x,'HLD'   ; FIG
+  hdr x,'HLD'   ; FIG
 hld:  call  douse
   dw  22
 
 ; BASE
 
-  hdr, 1,'BASE'
+  hdr 1,'BASE'
 base: call  douse
   dw  24
 
@@ -1033,7 +1040,7 @@ base: call  douse
 
 ; OUT
 
-  hdr, 1,'OUT'   ; FIG
+  hdr 1,'OUT'   ; FIG
 outt: call  douse
   dw  28
 
@@ -1041,7 +1048,7 @@ outt: call  douse
 
 ; CATCHER
 
-  hdr, 1,'CATCHER'
+  hdr 1,'CATCHER'
 catchr: call  douse
   dw  34
 
@@ -1051,7 +1058,7 @@ catchr: call  douse
 
 ; sys?  ( -- flag ) sys @ 0<>
 
-  hdr, x,'SYS?'
+  hdr x,'SYS?'
 sysq: ld  hl,sys1
 sysq1:  ld  e,(hl)
   inc hl
@@ -1061,31 +1068,31 @@ sysq1:  ld  e,(hl)
 
 ; state?  ( -- flag ) state @ 0<>
 
-  hdr, x,'STATE?',,1
+  hdr x,'STATE?',,1
 stateq: ld  hl,state1
   jp  sysq1
 
 ; check?  ( -- flag ) checking @ 0<>
 
-  hdr, x,'CHECK?',,1
+  hdr x,'CHECK?',,1
 chkq: ld  hl,check1
   jp  sysq1
 
 ; APPLICATION  ( -- ) sys off
 
-  hdr, 1,'APPLICATION',,1
+  hdr 1,'APPLICATION',,1
 app:  ld  hl,sys1
   jp  off1
 
 ; SYSTEM  ( -- )    sys on
 
-  hdr, 1,'SYSTEM',,1
+  hdr 1,'SYSTEM',,1
 system: ld  hl,sys1
   jp  on1
 
 ; h  ( -- addr )    sys @ if dph else dp then
 
-  hdr, x,'H'
+  hdr x,'H'
 hh: ld  hl,(sys1)
   ld  a,l
   or  h
@@ -1095,28 +1102,28 @@ hh: ld  hl,(sys1)
 ; ALLOT  ( n -- )   here over 0 max dup unused u>
 ;       abort" no data space" erase h +!
 
-  hdr, 1,'ALLOT'
+  hdr 1,'ALLOT'
 allot:  call  docol
   dw  here,over
   dw  zero,max
   dw  dupp
   dw  unus,ugrea
   dw  pabq
-  dcs, 'no data space'
+  dcs 'no data space'
   dw  erase
   dw  hh,pstor
   dw  exit
 
 ; HERE  ( -- addr ) h @
 
-  hdr, 1,'HERE'
+  hdr 1,'HERE'
 here: call  docol
   dw  hh,at
   dw  exit
 
 ; C,  ( char -- )   here 1 allot c!
 
-  hdr, 1,'C,',,1
+  hdr 1,'C,',,1
 ccomm:  call  docol
   dw  here
   dw  one,allot
@@ -1125,7 +1132,7 @@ ccomm:  call  docol
 
 ; ,  ( n -- )   here 2 allot !
 
-  hdr, 1,',',,1
+  hdr 1,',',,1
 comma:  call  docol
   dw  here
   dw  two,allot
@@ -1134,19 +1141,19 @@ comma:  call  docol
 
 ; >BODY  ( xt -- addr ) 3 +
 
-  hdr, 1,'>BODY'
+  hdr 1,'>BODY'
 tbody:  ld  de,3
   jp  plus1
 
 ; body>  ( addr -- xt ) 3 -
 ;
-; hdr, x,'BODY>'
+; hdr x,'BODY>'
 ;fbody: ld  de,-3
 ; jp  plus1
 
 ; n>link  ( nfa -- lfa )
 
-  hdr, x,'N>LINK',,1
+  hdr x,'N>LINK',,1
 nlnk: pop hl
   ld  a,(hl)
   and 1fh
@@ -1158,14 +1165,14 @@ nlnk: pop hl
 
 ; N>NAME  ( nfa1 -- nfa2 | 0 )
 
-  hdr, 1,'N>NAME',,1
+  hdr 1,'N>NAME',,1
 ntnam:  call  docol
   dw  nlnk,at
   dw  exit
 
 ; name>  ( nfa -- xt )  n>link link>
 
-  hdr, x,'NAME>',,1
+  hdr x,'NAME>',,1
 namef:  call  docol
   dw  nlnk
   dw  twop,at
@@ -1173,12 +1180,12 @@ namef:  call  docol
 
 ; W>NAME  ( wid -- nfa | 0 )  aka @ w>name
 
-  hdr, 1,'W>NAME',,,at
+  hdr 1,'W>NAME',,,at
 wtnam equ at
 
 ; -alias  ( nfa -- nfa flag )  dup c@ $80 <
 
-  hdr, x,'-ALIAS',,1 ; false if alias
+  hdr x,'-ALIAS',,1 ; false if alias
 dalias: pop hl
   push  hl
   ld  a,(hl)
@@ -1191,7 +1198,7 @@ dalias: pop hl
 ;       name> = if -rot 2drop exit then then
 ;       n>name repeat swap repeat nip
 
-  hdr, x,'>NAME',,1
+  hdr x,'>NAME',,1
 tname:  call  docol
   dw  vocl
 tnam1:  dw  at
@@ -1218,7 +1225,7 @@ tnam5:  dw  nip
 
 ; (NAME)  ( nfa -- c-addr u ) count 31 and
 
-  hdr, 1,'(NAME)',,1
+  hdr 1,'(NAME)',,1
 pname:  call  docol
   dw  count
   dw  clit
@@ -1229,7 +1236,7 @@ pname:  call  docol
 ; .ID  ( nfa | 0 -- )   ?dup if (name) type exit then
 ;         ." [noname]"
 
-  hdr, 1,'.ID',,1
+  hdr 1,'.ID',,1
 dotid:  call  docol
   dw  qdup
   dw  zbran,dotid1
@@ -1237,19 +1244,19 @@ dotid:  call  docol
   dw  typee
   dw  exit
 dotid1: dw  pdotq
-  dcs, '[noname]'
+  dcs '[noname]'
   dw  exit
 
 ; .NAME  ( xt -- )  >name .id
 
-  hdr, 1,'.NAME',,1
+  hdr 1,'.NAME',,1
 dotnam: call  docol
   dw  tname,dotid
   dw  exit
 
 ; .WID  ( wid -- )  cell+ cell+ @ .id
 
-  hdr, 1,'.WID',,1
+  hdr 1,'.WID',,1
 dotwid: call  docol
   dw  cellp,cellp
   dw  at,dotid
@@ -1257,7 +1264,7 @@ dotwid: call  docol
 
 ; !CSP  ( -- )    sp@ csp !
 
-  hdr, 1,'!CSP',,1 ; FIG
+  hdr 1,'!CSP',,1 ; FIG
 scsp: ld  hl,0
   add hl,sp
   ld  (cspp1),hl
@@ -1265,7 +1272,7 @@ scsp: ld  hl,0
 
 ; ?CSP  ( -- )    sp@ csp @ - ?bal
 
-  hdr, 1,'?CSP',,1 ; FIG
+  hdr 1,'?CSP',,1 ; FIG
 qcsp: call  docol
   dw  spat
   dw  cspp,at
@@ -1275,21 +1282,21 @@ qcsp: call  docol
 
 ; ?COMP  ( -- )   state @ 0= abort" compilation only'
 
-  hdr, 1,'?COMP',,1  ; FIG
+  hdr 1,'?COMP',,1  ; FIG
 qcomp:  call  docol
   dw  state,at
   dw  zequ
   dw  pabq
-  dcs, 'compilation only'
+  dcs 'compilation only'
   dw  exit
 
 ; ?EXEC  ( -- )   state @ abort" execution only'
 
-  hdr, 1,'?EXEC',,1  ; FIG
+  hdr 1,'?EXEC',,1  ; FIG
 qexec:  call  docol
   dw  state,at
   dw  pabq
-  dcs, 'execution only'
+  dcs 'execution only'
   dw  exit
 
 ; ?STACK  ( -- )    sp@ s0 @ over u< swap pad u< or
@@ -1297,7 +1304,7 @@ qexec:  call  docol
 ;       or abort" r-stack?" fs0 @ fsp @ u< fsp @
 ;       fs0 @ (nfpm) @ - u< or abort" f-stack?"
 
-  hdr, 1,'?STACK',,1 ; FIG
+  hdr 1,'?STACK',,1 ; FIG
 qstac:  call  docol
   dw  spat
   dw  szero,at
@@ -1307,7 +1314,7 @@ qstac:  call  docol
   dw  uless
   dw  orr
   dw  pabq
-  dcs, 'stack?'
+  dcs 'stack?'
   dw  rzero,at
   dw  rpat
   dw  uless
@@ -1316,7 +1323,7 @@ qstac:  call  docol
   dw  at
   dw  uless,orr
   dw  pabq
-  dcs, 'r-stack?'
+  dcs 'r-stack?'
 ; dw  fszero,at
 ; dw  fsp,at
 ; dw  uless
@@ -1328,34 +1335,34 @@ qstac:  call  docol
 ; dw  uless
 ; dw  orr
 ; dw  pabq
-; dcs, 'f-stack?'
+; dcs 'f-stack?'
   dw  exit
 
 ; ?defined  ( flag -- ) 0= abort" is undefined"
 
-  hdr, x,'?DEFINED',,1
+  hdr x,'?DEFINED',,1
 qdef: call  docol
   dw  zequ
   dw  pabq
-  dcs, 'is undefined'
+  dcs 'is undefined'
   dw  exit
 
 ; [       state off ;immediate
 
-  hdr, 1,'[',1,1
+  hdr 1,'[',1,1
 lbrac:  ld  hl,state1
   jp  off1
 
 ; ]     state on
 
-  hdr, 1,']',,1
+  hdr 1,']',,1
 rbrac:  ld  hl,state1 ; must be -1 for INTERPRET to work
   jp  on1
 
 ; COMPILE,  ( xt -- ) warning @ 0< if dup limit u< sys? d0=
 ;       if dup .name ."  is system " then then ,
 
-  hdr, 1,'COMPILE,',,1
+  hdr 1,'COMPILE,',,1
 comxt:  call  docol
   dw  warnn,at
    if wopt
@@ -1370,13 +1377,13 @@ comxt:  call  docol
   dw  dupp
   dw  dotnam
   dw  pdotq
-  dcs, ' is system '
+  dcs ' is system '
 comxt1: dw  comma
   dw  exit
 
 ; COMPILE  ( -- )   ?comp r> dup cell+ >r @ compile,
 
-  hdr, 1,'COMPILE',,1
+  hdr 1,'COMPILE',,1
 comp: call  docol
   dw  qcomp   ; prevent crash if interpreting
   dw  fromr
@@ -1389,9 +1396,9 @@ comp: call  docol
 ; POSTPONE    defined dup ?defined 0< if compile
 ;       compile then compile, ;immediate
 
-  hdr, 1,'POSTPONE',1,1
+  hdr 1,'POSTPONE',1,1
 postp:  call  docol
-  dw  defined
+  dw  defined_
   dw  dupp,qdef
   dw  zless
   dw  zbran,postp1
@@ -1407,7 +1414,7 @@ postp1: dw  comxt
 ;       dup 0= until then drop then r> 13 = until
 ;       -rot 2drop
 
-  hdr, x,'(ACCEPT)'
+  hdr x,'(ACCEPT)'
 pacce:  call  docol
   dw  zero
 pacce1: dw  key
@@ -1463,13 +1470,13 @@ pacce6: dw  fromr
 
 ; ACCEPT  ( c-addr +n1 -- +n2)
 
-  hdr, 1,'ACCEPT'
+  hdr 1,'ACCEPT'
 accept: call  aexec
   dw  pacce
 
 ; PAD  ( -- addr )  dp @ (npno) @ +
 
-  hdr, 1,'PAD'
+  hdr 1,'PAD'
 pad:  call  docol
   dw  dpp,at
   dw  lit,npno
@@ -1479,13 +1486,13 @@ pad:  call  docol
 
 ; SOURCE  ( -- c-addr u )   'source 2@
 
-  hdr, 1,'SOURCE',,1
+  hdr 1,'SOURCE',,1
 source: ld  hl,tsour1
   jp  tat1
 
 ; PARSE  ( char -- c-addr u ) 0 (parse)
 
-  hdr, 1,'PARSE',,1
+  hdr 1,'PARSE',,1
 parse:  ld  hl,0
   push  hl
 ; jp  ppars
@@ -1494,7 +1501,7 @@ parse:  ld  hl,0
 ;         r@ skip over - >in +! then 2dup r>
 ;         scan nip tuck - dup rot 0<> - >in +!
 
-  hdr, 0,'(PARSE)',,1
+  hdr 0,'(PARSE)',,1
 ppars:  call  docol
   dw  ttor
   dw  source
@@ -1518,7 +1525,7 @@ ppars1: dw  tdup
 ; +psb  ( a1 n1 n2 -- n3 )  >r (pssiz) r@ - umin r> 2dup + >r
 ;         (psb) + swap cmove r>
 
-  hdr, x,'+PSB',,1
+  hdr x,'+PSB',,1
 ppsb: call  docol
   dw  tor
   dw  lit,pssiz
@@ -1539,7 +1546,7 @@ ppsb: call  docol
 ;         while 1 dup >in +! r> +psb repeat
 ;         then 2drop (psb) r>
 
-  hdr, 1,'PARSE$',,1
+  hdr 1,'PARSE$',,1
 parss:  call  docol
   dw  zero
 parss1: dw  tor
@@ -1566,7 +1573,7 @@ parss2: dw  tdrop
 
 ; pwa  ( -- adr )   parsed word address
 
-  hdr, x,'PWA',,1
+  hdr x,'PWA',,1
 pwa:  call  doval
   ds  cw
 
@@ -1574,7 +1581,7 @@ pwa:  call  doval
 ;       255 min (hm-5) over - dup to pwa place pwa
 ;       bl affix
 
-  hdr, x,'>WBUF',,1  ; uses WORD's buffer
+  hdr x,'>WBUF',,1  ; uses WORD's buffer
 twbuf:  call  docol
   dw  clit
   db  255
@@ -1595,7 +1602,7 @@ twbuf:  call  docol
 
 ; WORD  ( char -- c-addr )  true (parse) >wbuf
 
-  hdr, 1,'WORD',,1
+  hdr 1,'WORD',,1
 wordd:  call  docol
   dw  true,ppars
   dw  twbuf
@@ -1603,52 +1610,52 @@ wordd:  call  docol
 
 ; bl-word  ( -- addr )  bl word
 
-  hdr, x,'BL-WORD',,1
+  hdr x,'BL-WORD',,1
 blword: call  docol
   dw  bll,wordd
   dw  exit
 
 ; token  ( -- addr u )  bl-word count
 
-  hdr, x,'TOKEN',,1
+  hdr x,'TOKEN',,1
 token:  call  docol
   dw  blword,count
   dw  exit
 
 ; defined  ( -- c-addr 0 | xt -1 | xt 1 ) bl-word find
 
-  hdr, x,'DEFINED',,1
-defined:call  docol
+  hdr x,'DEFINED',,1
+defined_:call  docol
   dw  blword,find
   dw  exit
 
 ; '  ( -- addr )    defined ?defined
 
-  hdr, 1,"'",,1
+  hdr 1,"'",,1
 tick: call  docol
-  dw  defined
+  dw  defined_
   dw  qdef
   dw  exit
 
 ; [UNDEFINED]  ( -- flag )  defined nip 0= ;immediate
 
-  hdr, 1,'[UNDEFINED]',1,1
+  hdr 1,'[UNDEFINED]',1,1
 budef:  call  docol
-  dw  defined
+  dw  defined_
   dw  nip
   dw  zequ
   dw  exit
 
 ; [DEFINED]  ( -- flag )  postpone [undefined] 0= ;immediate
 
-  hdr, 1,'[DEFINED]',1,1
+  hdr 1,'[DEFINED]',1,1
 bdef: call  docol
   dw  budef,zequ
   dw  exit
 
 ; (  ( "ccc<delim>" ) [char] ) parse 2drop ;immediate
 
-  hdr, 1,'(',1,1
+  hdr 1,'(',1,1
 paren:  call  docol
   dw  clit
   db  ')'
@@ -1657,7 +1664,7 @@ paren:  call  docol
 
 ; .(  ( "ccc<delim>" )  [char] ) parse$ type ;immediate
 
-  hdr, 1,'.(',1,1
+  hdr 1,'.(',1,1
 dotp: call  docol
   dw  clit
   db  ')'
@@ -1667,7 +1674,7 @@ dotp: call  docol
 ; \  ( "ccc" -- )   source nip blk @ if c/l >in @ over / 1+ *
 ;       min then >in ! ;immediate
 
-  hdr, 1,'\',1,1
+  hdr 1,'\',1,1
 bslas:  call  docol
   dw  source,nip
   dw  blk,at
@@ -1682,7 +1689,7 @@ bslas1: dw  inn,store
 
 ; \\  ( "ccc" -- )  source nip >in ! ;immediate
 
-  hdr, 1,'\\',1,1
+  hdr 1,'\\',1,1
 bslss:  call  docol
   dw  source,nip
   dw  inn,store
@@ -1691,7 +1698,7 @@ bslss:  call  docol
 ; WORDLIST  ( -- wid )  $2001 , here 0 , here dup voc-link @ , !
 ;       0 ,
 
-  hdr, 0,'WORDLIST',,1 ; nameless wordlists not supported
+  hdr 0,'WORDLIST',,1 ; nameless wordlists not supported
 wlist:  call  docol
   dw  lit,2001h
   dw  comma
@@ -1708,7 +1715,7 @@ wlist:  call  docol
 ; VOCABULARY  ( "name" )  sys? system wordlist create dup , last @
 ;       swap cell+ cell+ ! sys ! does> @ context !
 
-  hdr, 1,'VOCABULARY',,1
+  hdr 1,'VOCABULARY',,1
 vocab:  call  docol
   dw  sysq
   dw  system
@@ -1728,7 +1735,7 @@ dovoc:  call  docol
 
 ; DEFINITIONS  ( -- ) get-context set-current
 
-  hdr, 1,'DEFINITIONS',,1
+  hdr 1,'DEFINITIONS',,1
 defin:  call  docol
   dw  getcon
   dw  setcur
@@ -1736,7 +1743,8 @@ defin:  call  docol
 
 ; wordlist structure
 
-  aseg
+;   aseg ; XXX OLD
+forth3 defl 0 ; XXX TMP -- this solves "forth3 undefined"
 
   dw  2001h
 forth1: dw  topnfa    ; nfa of top word in vocabulary
@@ -1745,7 +1753,7 @@ forth2: dw  0   ; previous vocabulary
 
 ; FORTH     vocabulary forth
 
-  hdr, 1,'FORTH',,1
+  hdr 1,'FORTH',,1
 forth:  call  dovoc
   dw  forth1
 
@@ -1754,7 +1762,7 @@ forth3  defl  lastl
 ; UNUSED  ( -- u )  sys? if (esm) @ else sp@ then here
 ;       255 + 2dup u> -rot - and
 
-  hdr, 1,'UNUSED'
+  hdr 1,'UNUSED'
 unus: call  docol
   dw  sysq
   dw  zbran,unus1
@@ -1784,7 +1792,7 @@ unus2:  dw  here
 ;       fnumber then r> base ! ?defined then ?stack
 ;       repeat drop
 
-  hdr, 1,'INTERPRET',,1
+  hdr 1,'INTERPRET',,1
 inte: call  docol
 inte1:  dw  blword
   dw  dupp,cat
@@ -1843,7 +1851,7 @@ inte15: dw  drop
 ;         'source 2! >in off interpret 2r>
 ;         'source 2! 2r> >in ! blk !
 
-  hdr, x,'(EVAL)',,1   ; does not restore block contents
+  hdr x,'(EVAL)',,1   ; does not restore block contents
 peval:  call  docol
   dw  blk,at
   dw  inn,at
@@ -1861,7 +1869,7 @@ peval:  call  docol
 
 ; ?block   ( -- )     blk @ ?dup if block drop then
 
-  hdr, x,'?BLOCK',,1   ; restore block
+  hdr x,'?BLOCK',,1   ; restore block
 qblock: call  docol
   dw  blk,at,qdup
   dw  zbran,qblock1
@@ -1870,7 +1878,7 @@ qblock1:dw  exit
 
 ; EVALUATE  ( c-addr u -- ) 0 (eval) ?block
 
-  hdr, 1,'EVALUATE',,1
+  hdr 1,'EVALUATE',,1
 eval: call  docol
   dw  zero,peval
   dw  qblock
@@ -1881,11 +1889,11 @@ eval: call  docol
 ;       dup 80 accept space then 'source 2! >in
 ;       off true then
 
-  hdr, x,'(REFILL)',,1   ; doesn't correctly handle source
+  hdr x,'(REFILL)',,1   ; doesn't correctly handle source
 prefil: call  docol     ; from EVALUATE
    if debug
   dw  pdotq
-  dcs, '(REFILL) '
+  dcs '(REFILL) '
    endif
   dw  blk,at,qdup
   dw  zbran,prefil1
@@ -1909,13 +1917,13 @@ prefil3:dw  exit
 
 ; REFILL  ( -- flag )
 
-  hdr, 1,'REFILL',,1
+  hdr 1,'REFILL',,1
 refil:  call  aexec
   dw  prefil
 
 ; reset  ( -- )   catcher off -caps console
 
-  hdr, x,'RESET'
+  hdr x,'RESET'
 reset:  call  docol
   dw  catchr,off  ; reset error handler
   dw  dcaps   ; reset COMPARE/SEARCH caps
@@ -1924,7 +1932,7 @@ reset:  call  docol
 
 ; /interpret  ( -- )  blk off >in off postpone [
 
-  hdr, x,'/INTERPRET',,1
+  hdr x,'/INTERPRET',,1
 sinte:  ld  hl,0
   ld  (blk1),hl
   ld  (inn1),hl
@@ -1934,7 +1942,7 @@ sinte:  ld  hl,0
 ;       on (fdbs) (fdsiz*nfd) erase empty-buffers
 ;       /interpret 'source off bl-word drop
 
-  hdr, x,'FORTH-RESET',,1
+  hdr x,'FORTH-RESET',,1
 freset: call  docol
 ;** dw  lit,em
 ;** dw  setlim
@@ -1954,7 +1962,7 @@ freset: call  docol
 ;       cr (refill) drop interpret state? 0= if
 ;       ."  ok" then again
 
-  hdr, 1,'QUIT',,1
+  hdr 1,'QUIT',,1
 quit: call  docol
 quit1:  dw  rzero,at
   dw  rpsto
@@ -1963,7 +1971,7 @@ quit1:  dw  rzero,at
   dw  sinte
    if debug
   dw  pdotq
-  dcs, 'QUIT '
+  dcs 'QUIT '
    endif
 quit2:  dw  crr
   dw  prefil,drop
@@ -1972,12 +1980,12 @@ quit2:  dw  crr
   dw  zequ
   dw  zbran,quit3
   dw  pdotq
-  dcs, ' ok'
+  dcs ' ok'
 quit3:  dw  bran,quit2
 
 ; RETURN  ( x -- )  exit to DOS with return code x
 
-  hdr, 1,'RETURN'
+  hdr 1,'RETURN'
 retrn:  call  docol
   dw  consol
   dw  crr
@@ -2019,7 +2027,7 @@ retrn1: ld  a,(dosv)  ; set program return code
 
 ; BYE  ( -- )   close-all exit-video 0 return
 
-  hdr, 1,'BYE',,1
+  hdr 1,'BYE',,1
 bye:  call  docol
   dw  closa
   dw  exvid   ; terminal exit sequence
@@ -2027,14 +2035,14 @@ bye:  call  docol
 
 ; boot?  ( -- bootword )  (iboot) @
 
-  hdr, x,'BOOT?'
+  hdr x,'BOOT?'
 bootq:  ld  hl,(iboot)
   jp  hpush
 
 ; (abort)  ( -- )   s0 @ sp! fs0 @ fsp ! boot? if 1 return then
 ;       quit
 
-  hdr, x,'(ABORT)'
+  hdr x,'(ABORT)'
 pabor:  call  docol
   dw  szero,at
   dw  spsto
@@ -2046,7 +2054,7 @@ pabor:  call  docol
   dw  one
   dw  retrn
 pabor1  dw  pdotq
-  dcs, ' (ABORT) '
+  dcs ' (ABORT) '
   dw  quit
    else
   dw  zbran,quit1
@@ -2059,7 +2067,7 @@ pabor1  dw  pdotq
 ;       u. c/l / ." Line " . cr then then ." Error: "
 ;       [char] " dup emit pwa count 31 min type emit
 
-  hdr, x,'.ERROR',,1
+  hdr x,'.ERROR',,1
 doterr: call  docol
   dw  crr
   dw  blk,at
@@ -2076,16 +2084,16 @@ doterr: call  docol
   dw  tdup    ; set error block, offset
   dw  scr,tstor
   dw  pdotq
-  dcs, ' Screen '
+  dcs ' Screen '
   dw  udot
   dw  csll
   dw  slash
   dw  pdotq
-  dcs, 'Line '
+  dcs 'Line '
   dw  dot
   dw  crr
 doterr1:dw  pdotq
-  dcs, 'Error: '
+  dcs 'Error: '
   dw  clit
   db  '"'
   dw  dupp,emit
@@ -2103,7 +2111,7 @@ doterr1:dw  pdotq
 ;       (abort) then ."  exception = " . (abort)
 ;       endcase
 
-  hdr, x,'ERROR'
+  hdr x,'ERROR'
 error:  call  docol
   dw  true    ; -1
   dw  pof,error1
@@ -2119,7 +2127,7 @@ error2: dw  space
   dw  typee
   dw  pabor
 error3: dw  pdotq
-  dcs, ' exception = '
+  dcs ' exception = '
   dw  dot
   dw  pabor
   dw  exit
@@ -2127,7 +2135,7 @@ error3: dw  pdotq
 ; CATCH  ( xt -- n | 0 )  sp@ >r fsp @ >r catcher @ >r rp@ catcher
 ;       ! execute r> catcher ! 2r> 2drop 0
 
-  hdr, 1,'CATCH'
+  hdr 1,'CATCH'
 catch:  call  docol
   dw  spat,tor
   dw  fsp,at
@@ -2144,17 +2152,17 @@ catch:  call  docol
 ;       r> catcher ! r> fsp ! r> swap >r sp! drop
 ;       r> then
 
-  hdr, 1,'THROW'
+  hdr 1,'THROW'
 throw:  call  docol
   dw  qdup
   dw  zbran,throw2
   dw  catchr,at
    if debug
   dw  pdotq
-  dcs, ' THROW:'
+  dcs ' THROW:'
   dw  over,dot
   dw  pdotq
-  dcs, 'CATCHER:'
+  dcs 'CATCHER:'
   dw  dupp,udot,space,space
    endif
   dw  qdup,zequ
@@ -2170,7 +2178,7 @@ throw2: dw  exit
 
 ; ABORT  ( -- )   -1 throw
 
-  hdr, 1,'ABORT'
+  hdr 1,'ABORT'
 abort:  ld  hl,-1
 abort1: push  hl
   jp  throw
@@ -2178,7 +2186,7 @@ abort1: push  hl
 ; (abort")  ( n -- )  r> count rot if errmsg 2! -2 throw then +
 ;       >r
 
-  hdr, x,'(ABORT")'
+  hdr x,'(ABORT")'
 pabq: call  docol
   dw  fromr,count
   dw  rot
@@ -2193,7 +2201,7 @@ pabq1:  dw  plus
 
 ; ABORT"      postpone (abort") ," ;immediate
 
-  hdr, 1,'ABORT"',1,1
+  hdr 1,'ABORT"',1,1
 aborq:  call  docol
   dw  comp,pabq
   dw  comq
@@ -2201,13 +2209,13 @@ aborq:  call  docol
 
 ; CMDTAIL  ( -- c-addr u )  (dosbuf) count
 
-  hdr, 1,'CMDTAIL'
+  hdr 1,'CMDTAIL'
 cmdtail:ld  de,dosbuf
   jp  count1
 
 ; Cold start from DOS
 
-  cseg
+;   cseg ; XXX OLD
 
 ;nodos  db  cr,lf,'wrong DOS version',cr,lf,'$'
 
@@ -2282,7 +2290,7 @@ cldd7:  dw  movpat      ; later patched to 'cold'
 
 ; COLD  ( -- )
 
-  hdr, 1,'COLD'    ; FIG
+  hdr 1,'COLD'    ; FIG
 cold: ld  hl,(limit1)   ; get LIMIT
   ld  de,-recsiz    ; file r/w buffer size
   add hl,de
@@ -2339,7 +2347,7 @@ cold2:  dw  init      ; run INIT eg. for float
   dw  exec      ; run application
   dw  zero,retrn
 
-  aseg        ; run forth interpreter
+;   aseg        ; run forth interpreter ; XXX OLD
 
 cold3:  dw  cmdtail     ; process command-line
   dw  lit,cmdf
@@ -2387,7 +2395,7 @@ cold9:  dw  ident     ; run IDENTIFY
   dw  zbran,cold10
   dw  crr
   dw  pdotq
-  dcs, 'Using '
+  dcs 'Using '
   dw  loadf,typee
   dw  crr
 cold10: dw  quit      ; jump to interpreter
@@ -2396,7 +2404,7 @@ cold10: dw  quit      ; jump to interpreter
 
 ; string,  ( c-addr +n -- )  255 min here over 1+ allot place
 
-  hdr, x,'STRING,',,1
+  hdr x,'STRING,',,1
 scomm:  call  docol
   dw  clit
   db  255
@@ -2408,7 +2416,7 @@ scomm:  call  docol
 
 ; ,"  ( "ccc" -- )  [char] " parse$ string,
 
-  hdr, 1,',"',,1
+  hdr 1,',"',,1
 comq: call  docol
   dw  clit
   db  '"'
@@ -2418,7 +2426,7 @@ comq: call  docol
 
 ; (s")  ( -- c-addr u ) r> count 2dup + >r
 
-  hdr, x,'(S")'
+  hdr x,'(S")'
 psqot:  call  docol
   dw  fromr,count
   dw  tdup,plus,tor
@@ -2426,7 +2434,7 @@ psqot:  call  docol
 
 ; SLITERAL  ( c-addr u -- )  postpone (s") string, ;immediate
 
-  hdr, 1,'SLITERAL',1,1
+  hdr 1,'SLITERAL',1,1
 slite:  call  docol
   dw  comp,psqot
   dw  scomm
@@ -2435,7 +2443,7 @@ slite:  call  docol
 ; S"  ( -- c-addr u ) [char] " parse$ state? if postpone sliteral
 ;       then ;immediate
 
-  hdr, 1,'S"',1,1  ; state smart version
+  hdr 1,'S"',1,1  ; state smart version
 squot:  call  docol
   dw  clit
   db  '"'
@@ -2447,7 +2455,7 @@ squot1: dw  exit
 
 ; (.")      r> count 2dup + >r type
 
-  hdr, x,'(.")'
+  hdr x,'(.")'
 pdotq:  call  docol
   dw  fromr,count
   dw  tdup,plus,tor
@@ -2456,7 +2464,7 @@ pdotq:  call  docol
 
 ; ."      compile (.") ," ;immediate
 
-  hdr, 1,'."',1,1
+  hdr 1,'."',1,1
 dotq: call  docol
   dw  comp,pdotq
   dw  comq
@@ -2464,7 +2472,7 @@ dotq: call  docol
 
 ; CHAR?  ( x -- x flag )
 
-  hdr, x,'CHAR?',,1
+  hdr x,'CHAR?',,1
 charq:  pop hl
   push  hl
   ld  l,h
@@ -2473,7 +2481,7 @@ charq:  pop hl
 ; LITERAL  ( n -- ) char? if postpone clit c, exit then
 ;       postpone lit , ;immediate
 
-  hdr, 1,'LITERAL',1,1
+  hdr 1,'LITERAL',1,1
 liter:  call  docol
   dw  charq
   dw  zbran,liter1
@@ -2486,7 +2494,7 @@ liter1: dw  comp,lit
 
 ; 2LITERAL  ( d -- )  postpone 2lit , , ;immediate
 
-  hdr, 1,'2LITERAL',1,1
+  hdr 1,'2LITERAL',1,1
 tlite:  call  docol
   dw  comp,tlit
   dw  comma,comma
@@ -2494,7 +2502,7 @@ tlite:  call  docol
 
 ; [']     ' [compile] literal  ;immediate
 
-  hdr, 1,"[']",1,1
+  hdr 1,"[']",1,1
 btick:  call  docol
   dw  tick
   dw  liter
@@ -2502,7 +2510,7 @@ btick:  call  docol
 
 ; [COMPILE]   ' compile,  ;immediate
 
-  hdr, 1,'[COMPILE]',1,1
+  hdr 1,'[COMPILE]',1,1
 bcomp:  call  docol
   dw  tick
   dw  comxt
@@ -2510,14 +2518,14 @@ bcomp:  call  docol
 
 ; RECURSE  ( -- )   last cell+ @ compile, ;immediate
 
-  hdr, 1,'RECURSE',1,1
+  hdr 1,'RECURSE',1,1
 recurs: ld  hl,(last2)
   push  hl
   jp  comxt
 
 ; CHAR  ( -- char ) bl word 1+ c@
 
-  hdr, 1,'CHAR',,1
+  hdr 1,'CHAR',,1
 char: call  docol
   dw  bll,wordd
   dw  onep,cat
@@ -2525,7 +2533,7 @@ char: call  docol
 
 ; [CHAR]  ( -- char ) char [compile] literal
 
-  hdr, 1,'[CHAR]',1,1
+  hdr 1,'[CHAR]',1,1
 pchar:  call  docol
   dw  char
   dw  liter
@@ -2534,10 +2542,10 @@ pchar:  call  docol
 ; Y/N  ( -- flag )  ." (y/n) N\bs" key upcase [char] Y = dup
 ;       if [char] Y else [char] N then emit space
 
-  hdr, 1,'Y/N'
+  hdr 1,'Y/N'
 yn: call  docol
   dw  pdotq
-  dcs, '(y/n) N',bs
+  dcs '(y/n) N',bs
   dw  key,upcas
   dw  clit
   db  'Y'
@@ -2553,42 +2561,42 @@ yn2:  dw  emit,space
 
 ; CHAR+  ( c-addr1 -- c-addr2 ) aka 1+ char+
 
-  hdr, 1,'CHAR+',,,onep
+  hdr 1,'CHAR+',,,onep
 charp equ onep
 
 ; CHARS  ( n1 -- n2 )   aka noop chars immediate
 
-  hdr, 1,'CHARS',1,,noop
+  hdr 1,'CHARS',1,,noop
 chars equ next
 
 ; CELL+  ( addr1 -- addr2 ) aka 2+ cell+
 
-  hdr, 1,'CELL+',,,twop
+  hdr 1,'CELL+',,,twop
 cellp equ twop
 
 ; CELL-  ( addr1 -- addr2 ) aka 2- cell-
 
-  hdr, 1,'CELL-',,,twom
+  hdr 1,'CELL-',,,twom
 cellm equ twom
 
 ; CELLS  ( n1 -- n2 )   aka 2* cells
 
-  hdr, 1,'CELLS',,,tstar
+  hdr 1,'CELLS',,,tstar
 cells equ tstar
 
 ; ALIGN  ( -- )     aka noop align immediate
 
-  hdr, 1,'ALIGN',1,,noop
+  hdr 1,'ALIGN',1,,noop
 alignn  equ next
 
 ; ALIGNED  ( addr -- a-addr ) aka noop aligned immediate
 
-  hdr, 1,'ALIGNED',1,,noop
+  hdr 1,'ALIGNED',1,,noop
 alignd  equ next
 
 ; DXFORTH  ( -- minor major )
 
-  hdr, 1,'DXFORTH'
+  hdr 1,'DXFORTH'
 dxf:  ld  hl,(dxver)
   jp  dosver1
 
@@ -2602,13 +2610,13 @@ dxf:  ld  hl,(dxver)
 topnfa  equ lnk   ; nfa of top word in forth vocab
 topxt equ cfadr   ; xt  of top word in forth vocab
 
-  cseg
+;   cseg ; XXX OLD
 initdp  equ $
 
-  aseg
+;   aseg ; XXX OLD
 initdph equ $
 
-  cseg
+;   cseg ; XXX OLD
 
 ; Code is run once then disabled.
 
