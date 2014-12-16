@@ -1,0 +1,36 @@
+= DZX-Forth
+:author: Marcos Cruz (programandala.net)
+:revdate: 2016-03-21
+
+== Description
+
+DZX-Forth is an Forth system under development for
+http://www.worldofspectrum.org/zxplus3e[ZX Spectrum +3e].
+
+Home page: http://programandala.net/en.program.dzx-forth.html
+
+== Origin
+
+DZX-Forth was forked from http://dxforth.netbay.com.au/[CP/M DX-Forth]
+a Forth-94 system for 8088 CP/M.
+
+The fork was done from DX-Forth 4.00, but some changes and fixes from
+versions 4.09, 4.10 and 4.11 were incorporated later into DZX-Forth.
+
+== Status
+
+DZX-Forth is a sleeping project. It was developed from 2014-12-30 to
+2015-05-20.
+
+DZX-Forth is not finished but it's usable.
+
+A Git repository was created on 2016-03-21 from the development
+backups, in order to preserve the evolution of the sources and make
+future development easier.
+
+Some code from DZX-Forth has been reused in
+http://programandala.net/en.program.solo_forth.html[Solo Forth], a
+DTCfootnote:[Direct Threaded Code.] Forth system under active
+development for ZX Spectrum 128 and G+DOS.
+
+See the latest version of DZX-Forth for more details.

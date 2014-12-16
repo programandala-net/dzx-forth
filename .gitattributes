@@ -1,0 +1,10 @@
+*.bas linguist-language=BASIC
+*.bas.raw linguist-language=BASIC
+*.dsk binary
+*.fb linguist-language=Forth
+*.fbs linguist-language=Forth
+*.fs linguist-language=Forth
+*.fsb linguist-language=Forth
+*.tap binary
+*.vbas linguist-language=BASIC
+*.z80s linguist-language=Assembly
