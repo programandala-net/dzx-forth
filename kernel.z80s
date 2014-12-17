@@ -1,21 +1,10 @@
+; DZX-Forth
+; A direct-threaded Forth for ZX Spectrum
 ;
-;     DX-FORTH
+; A port of DX-Forth v4.00 (2014-07-30) for CP/M
 ;
-; A direct-threaded 8080 Forth compiler for CP/M 2.x and 3.x
-;
-;
-; Assemble to COM file using Microsoft M80 (or SLR180+ if
-; insufficient memory):
-;
-; M80 =KERNEL.Z80
-; L80 KERNEL,KERNEL/N/E
-;
-; Compress the executable by saving itself:
-;
-; KERNEL.COM - SAVE KERNEL BYE
-;
-
-;;  .z80      ; required for M80 assembler ;; XXX OLD
+; Assemble with Pasmo:
+;   pasmo --tapbas kernel.z80s kernel.tap
 
 no  equ 0
 yes equ not no
@@ -23,7 +12,7 @@ yes equ not no
 ; Date last revised
 
 date  macro
-  db  '2013-07-30'
+  db  '2014-12-17'
   endm
 
 ; Modification level
@@ -2380,7 +2369,7 @@ cold6:  db  'DX-Forth '
    if beta
   db  'unofficial test release'
    else
-  date
+  version
    endif
 cold7:  db  '  '
 cold8:  dw  lit,termn   ; show terminal name
