@@ -12,13 +12,14 @@ yes equ not no
 ; Date last revised
 
 version macro
-  db 'A-00-201412181825'
+  db 'A-00-201412181904'
   endm
 
   ; XXX NOTE:
   ;
-  ; Just included the changes in DX-Forth 4.09.
-  ; A lot of fixes are required.
+  ; - Included the changes in DX-Forth 4.09.
+  ; - Confirmed nothing was missed.
+  ;
 
 ; Modification level
 
@@ -934,27 +935,27 @@ roll:
 ;;  dw  exit
 
 ; XXX NEW -- DX-Forth 4.09
-droll:	pop	hl
-	add	hl,hl
-	ex	de,hl
-	ld	hl,0
-	add	hl,sp
-	push	bc
-	ld	c,(hl)
-	inc	hl
-	ld	b,(hl)
-	push	bc
-	ld	c,e
-	ld	b,d
-	ld	e,l
-	ld	d,h
-	dec	de
-	inc	hl
-	call	bmovd
-	pop	hl
-	pop	bc
-	ex	de,hl
-	jp	store2
+droll:  pop  hl
+  add  hl,hl
+  ex  de,hl
+  ld  hl,0
+  add  hl,sp
+  push  bc
+  ld  c,(hl)
+  inc  hl
+  ld  b,(hl)
+  push  bc
+  ld  c,e
+  ld  b,d
+  ld  e,l
+  ld  d,h
+  dec  de
+  inc  hl
+  call  bmovd
+  pop  hl
+  pop  bc
+  ex  de,hl
+  jp  store2
 
    endif
 
@@ -994,7 +995,7 @@ bswp:
   ld  l,d
   jp  push_hl
 
-;	2DUP  ( x1 x2 -- x1 x2 x1 x2 )
+;  2DUP  ( x1 x2 -- x1 x2 x1 x2 )
 
   header 1,'2DUP'
 tdup:
@@ -1004,7 +1005,7 @@ tdup:
   push  hl
   jp  push_de
 
-;	2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
+;  2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 
   header 1,'2SWAP'
 tswap:
@@ -1020,23 +1021,23 @@ tswap:
 ;;  ex  (sp),hl
 ;;  jp  push_de
 ; XXX NEW -- DX-Forth 4.09
-  pop	hl
-	pop	de
-	ex	(sp),hl
-	push	hl
-	ld	hl,5
-	add	hl,sp
-	ld	a,(hl)
-	ld	(hl),d
-	ld	d,a
-	dec	hl
-	ld	a,(hl)
-	ld	(hl),e
-	ld	e,a
-	pop	hl
-	jp	dpush
+  pop  hl
+  pop  de
+  ex  (sp),hl
+  push  hl
+  ld  hl,5
+  add  hl,sp
+  ld  a,(hl)
+  ld  (hl),d
+  ld  d,a
+  dec  hl
+  ld  a,(hl)
+  ld  (hl),e
+  ld  e,a
+  pop  hl
+  jp  dpush
 
-;	2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
+;  2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
 
   header 1,'2OVER'
 tover:
@@ -1044,8 +1045,8 @@ tover:
   add hl,sp
   jp  tat1
 
-;	2ROT  ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
-;	5 roll 5 roll
+;  2ROT  ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
+;  5 roll 5 roll
 
   header 1,'2ROT'
 trot:
@@ -1058,16 +1059,16 @@ trot:
   dw  roll
   dw  exit
 
-;	2NIP  ( x1 x2 x3 x4 -- x3 x4 )
+;  2NIP  ( x1 x2 x3 x4 -- x3 x4 )
 
-	hdr	1,'2NIP'
-tnip:	pop	hl
-	pop	de
-	inc	sp
-	inc	sp
-	inc	sp
-	inc	sp
-	jp	dpush
+  hdr  1,'2NIP'
+tnip:  pop  hl
+  pop  de
+  inc  sp
+  inc  sp
+  inc  sp
+  inc  sp
+  jp  dpush
 
 ; DEPTH  ( -- u )   sp@ s0 @ swap - 2/
 
@@ -1765,6 +1766,7 @@ fmmod1:
 
 ; M/MOD  ( d n1 -- n2 n3 )  fm/mod or sm/rem
 
+; XXX OLD -- DX-Forth 4.00 -- but kept
   header x,'M/MOD',,,msmod
 
    if floord
@@ -1775,6 +1777,7 @@ msmod equ smrem
 
 ; /MOD  ( n1 n2 -- n3 n4 )  >r s>d r> m/mod
 
+; XXX NEW -- DX-Forth 4.09 -- instead of 'M/MOD'
   header 1,'/MOD'
 slmod:
   call  docol
@@ -1798,13 +1801,24 @@ modd:
   dw  slmod,drop
   dw  exit
 
-; */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> m/mod
+; XXX OLD -- DX-Forth 4.00
+;;; */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> m/mod
+;;
+;;  header 1,'*/MOD'
+;;ssmod:
+;;  call  docol
+;;  dw  to_r,mstar
+;;  dw  from_r,msmod
+;;  dw  exit
 
-  header 1,'*/MOD'
+
+; XXX NEW -- DX-Forth 4.09
+;  */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> sm/rem
+  hdr  1,'*/MOD'
 ssmod:
   call  docol
   dw  to_r,mstar
-  dw  from_r,msmod
+  dw  from_r,smrem
   dw  exit
 
 ; */  ( n1 n2 n3 -- n4 )    */mod nip
@@ -2033,13 +2047,14 @@ ugrea1:
 
   hdr x,'0MAX'
 zmax: ld  de,0
-  jp max
+  jp max_de
 
 ; MAX  ( n1 n2 -- n1 | n2 )  2dup < if swap then drop
 
   header 1,'MAX'
 max:
   pop de
+max_de:
   pop hl
   call  cmps
 max1:
@@ -2130,7 +2145,7 @@ dzle:
   pop de
   jp  zless1
 
-; D<  ( d1 d2 -- flag ) rot 2dup = if 2drop u< exit then 2swap 2drop >
+; D<  ( d1 d2 -- flag ) rot 2dup = if 2drop u< exit then 2nip >
 
   header 1,'D<'
 dless:
@@ -2188,231 +2203,231 @@ dmax:
 ; }}} **********************************************************
 ; Numeric conversion {{{ 
 
-;	DECIMAL  ( -- )		10 base !
+;  DECIMAL  ( -- )    10 base !
 
-	hdr	1,'DECIMAL'
-decimal:	call	docol
-	dw	clit
-	db	10
-	dw	base,store
-	dw	exit
+  hdr  1,'DECIMAL'
+decimal:  call  docol
+  dw  clit
+  db  10
+  dw  base,store
+  dw  exit
 
-;	HEX  ( -- )		16 base !
+;  HEX  ( -- )    16 base !
 
-	hdr	1,'HEX'
-hex:	call	docol
-	dw	clit
-	db	16
-	dw	base,store
-	dw	exit
+  hdr  1,'HEX'
+hex:  call  docol
+  dw  clit
+  db  16
+  dw  base,store
+  dw  exit
 
-;	digit  ( char base -- u -1 | 0 )
+;  digit  ( char base -- u -1 | 0 )
 
-	hdr	x,'DIGIT'
-digit:	pop	hl
-	pop	de
-	ld	a,e
-	call	upc		; make uppercase
-	sub	'0'
-	jp	m,false
-	cp	10
-	jp	m,digit1
-	sub	7
-	cp	10
-	jp	m,false
-digit1:	cp	l
-	jp	p,false
-	ld	e,a
-	push	de
-	jp	true
+  hdr  x,'DIGIT'
+digit:  pop  hl
+  pop  de
+  ld  a,e
+  call  upc    ; make uppercase
+  sub  '0'
+  jp  m,false
+  cp  10
+  jp  m,digit1
+  sub  7
+  cp  10
+  jp  m,false
+digit1:  cp  l
+  jp  p,false
+  ld  e,a
+  push  de
+  jp  true
 
-;	>NUMBER  ( d1 addr1 u1 -- d2 addr2 u2 )
-;				begin dup while over c@ base @ digit while
-;				>r 2swap r> swap base @ um* drop rot base @
-;				um* d+ 2swap 1 /string 1 dpl +! repeat then
+;  >NUMBER  ( d1 addr1 u1 -- d2 addr2 u2 )
+;        begin dup while over c@ base @ digit while
+;        >r 2swap r> swap base @ um* drop rot base @
+;        um* d+ 2swap 1 /string 1 dpl +! repeat then
 
-	hdr	1,'>NUMBER'
-tonum:	call	docol
-tonum1:	dw	dupp		; begin
-	dw	zbran,tonum2	; while
-	dw	over,cat
-	dw	base,at
-	dw	digit
-	dw	zbran,tonum2	; while
-	dw	tor
-	dw	tswap,fromr
-	dw	swap
-	dw	base,at
-	dw	umstr,drop
-	dw	rot
-	dw	base,at
-	dw	umstr
-	dw	dplus
-	dw	tswap
-	dw	one,sstr
-	dw	one,dpl,pstor
-	dw	bran,tonum1	; repeat
-tonum2:	dw	exit		; then
+  hdr  1,'>NUMBER'
+tonum:  call  docol
+tonum1:  dw  dupp    ; begin
+  dw  zbran,tonum2  ; while
+  dw  over,cat
+  dw  base,at
+  dw  digit
+  dw  zbran,tonum2  ; while
+  dw  tor
+  dw  tswap,fromr
+  dw  swap
+  dw  base,at
+  dw  umstr,drop
+  dw  rot
+  dw  base,at
+  dw  umstr
+  dw  dplus
+  dw  tswap
+  dw  one,sstr
+  dw  one,dpl,pstor
+  dw  bran,tonum1  ; repeat
+tonum2:  dw  exit    ; then
 
-;	NUMBER?  ( c-addr u -- d -1 | 0 )
-;				over c@ [char] - = over 0> and dup >r 1
-;				and /string over c@ [char] . > and 0 0
-;				2swap ?dup if >number dpl on dup if 1-
-;				over c@ [char] . - or dpl off then while
-;				then r> 2drop 2drop false else drop r> if
-;				dnegate then true then
+;  NUMBER?  ( c-addr u -- d -1 | 0 )
+;        over c@ [char] - = over 0> and dup >r 1
+;        and /string over c@ [char] . > and 0 0
+;        2swap ?dup if >number dpl on dup if 1-
+;        over c@ [char] . - or dpl off then while
+;        then r> 2drop 2drop false else drop r> if
+;        dnegate then true then
 
-	hdr	1,'NUMBER?'
-numq:	call	docol		; convert string to double number
-	dw	over,cat
-	dw	clit
-	db	'-'
-	dw	equal
-	dw	over,zgrea
-	dw	andd
-	dw	dupp,tor
-	dw	one,andd
-	dw	sstr
-	dw	over,cat
-	dw	clit
-	db	'.'
-	dw	great,andd
-	dw	zero,zero
-	dw	tswap
-	dw	qdup
-	dw	zbran,numq2
-	dw	tonum
-	dw	dpl,on
-	dw	dupp
-	dw	zbran,numq1
-	dw	onem
-	dw	over,cat
-	dw	clit
-	db	'.'
-	dw	subb,orr
-	dw	dpl,off
-numq1:	dw	zbran,numq3
-numq2:	dw	fromr
-	dw	tdrop,tdrop
-	dw	false
-	dw	bran,numq5
-numq3:	dw	drop
-	dw	fromr
-	dw	zbran,numq4
-	dw	dnegat
-numq4:	dw	true
-numq5:	dw	exit
+  hdr  1,'NUMBER?'
+numq:  call  docol    ; convert string to double number
+  dw  over,cat
+  dw  clit
+  db  '-'
+  dw  equal
+  dw  over,zgrea
+  dw  andd
+  dw  dupp,tor
+  dw  one,andd
+  dw  sstr
+  dw  over,cat
+  dw  clit
+  db  '.'
+  dw  great,andd
+  dw  zero,zero
+  dw  tswap
+  dw  qdup
+  dw  zbran,numq2
+  dw  tonum
+  dw  dpl,on
+  dw  dupp
+  dw  zbran,numq1
+  dw  onem
+  dw  over,cat
+  dw  clit
+  db  '.'
+  dw  subb,orr
+  dw  dpl,off
+numq1:  dw  zbran,numq3
+numq2:  dw  fromr
+  dw  tdrop,tdrop
+  dw  false
+  dw  bran,numq5
+numq3:  dw  drop
+  dw  fromr
+  dw  zbran,numq4
+  dw  dnegat
+numq4:  dw  true
+numq5:  dw  exit
 
-;	<#  ( -- )		pad hld !
+;  <#  ( -- )    pad hld !
 
-	hdr	1,'<#'
-bdigs:	call	docol
-	dw	pad
-	dw	hld,store
-	dw	exit
+  hdr  1,'<#'
+bdigs:  call  docol
+  dw  pad
+  dw  hld,store
+  dw  exit
 
-;	#>  ( d -- c-addr u )	2drop hld @ pad over -
+;  #>  ( d -- c-addr u )  2drop hld @ pad over -
 
-	hdr	1,'#>'
-edigs:	call	docol
-	dw	tdrop
-	dw	hld,at
-	dw	pad
-	dw	over
-	dw	subb
-	dw	exit
+  hdr  1,'#>'
+edigs:  call  docol
+  dw  tdrop
+  dw  hld,at
+  dw  pad
+  dw  over
+  dw  subb
+  dw  exit
 
-;	+hld  ( +n -- c-addr )	negate hld +! hld @ dup dp @ u<
-;				abort" HOLD buffer overflow"
+;  +hld  ( +n -- c-addr )  negate hld +! hld @ dup dp @ u<
+;        abort" HOLD buffer overflow"
 
-	hdr	x,'+HLD'
-phld:	call	docol
-	dw	negat,hld,pstor
-	dw	hld,at,dupp
-	dw	dpp,at,uless
-	dw	pabq
-	dcs	'HOLD buffer overflow'
-	dw	exit
+  hdr  x,'+HLD'
+phld:  call  docol
+  dw  negat,hld,pstor
+  dw  hld,at,dupp
+  dw  dpp,at,uless
+  dw  pabq
+  dcs  'HOLD buffer overflow'
+  dw  exit
 
-;	HOLD  ( char -- )	1 +hld c!
+;  HOLD  ( char -- )  1 +hld c!
 
-	hdr	1,'HOLD'
-hold:	call	docol
-	dw	one,phld
-	dw	cstor
-	dw	exit
+  hdr  1,'HOLD'
+hold:  call  docol
+  dw  one,phld
+  dw  cstor
+  dw  exit
 
-;	SIGN  ( n -- )		0< if [char] - hold then
+;  SIGN  ( n -- )    0< if [char] - hold then
 
-	hdr	1,'SIGN'
-sign:	call	docol
-	dw	zless
-	dw	zbran,sign1
-	dw	clit
-	db	'-'
-	dw	hold
-sign1:	dw	exit
+  hdr  1,'SIGN'
+sign:  call  docol
+  dw  zless
+  dw  zbran,sign1
+  dw  clit
+  db  '-'
+  dw  hold
+sign1:  dw  exit
 
-;	#  ( ud1 -- ud2 )	0 base @ um/mod >r base @ um/mod r>
-;				rot 9 over < if 7 + then [char] 0 + hold
+;  #  ( ud1 -- ud2 )  0 base @ um/mod >r base @ um/mod r>
+;        rot 9 over < if 7 + then [char] 0 + hold
 
-	hdr	1,'#'
-dig:	call	docol
-	dw	zero
-	dw	base,at
-	dw	umslm
-	dw	tor
-	dw	base,at
-	dw	umslm
-	dw	fromr
-	dw	rot
-	dw	clit
-	db	9
-	dw	over,less
-	dw	zbran,dig1
-	dw	clit
-	db	7
-	dw	plus
-dig1:	dw	clit
-	db	'0'
-	dw	plus
-	dw	hold
-	dw	exit
+  hdr  1,'#'
+dig:  call  docol
+  dw  zero
+  dw  base,at
+  dw  umslm
+  dw  tor
+  dw  base,at
+  dw  umslm
+  dw  fromr
+  dw  rot
+  dw  clit
+  db  9
+  dw  over,less
+  dw  zbran,dig1
+  dw  clit
+  db  7
+  dw  plus
+dig1:  dw  clit
+  db  '0'
+  dw  plus
+  dw  hold
+  dw  exit
 
-;	#S  ( +d -- 0 0 )	begin # 2dup d0= until
+;  #S  ( +d -- 0 0 )  begin # 2dup d0= until
 
-	hdr	1,'#S'
-digs:	call	docol
-digs1:	dw	dig
-	dw	tdup,dzequ
-	dw	zbran,digs1
-	dw	exit
+  hdr  1,'#S'
+digs:  call  docol
+digs1:  dw  dig
+  dw  tdup,dzequ
+  dw  zbran,digs1
+  dw  exit
 
-;	SHOLD  ( c-addr u -- )	dup +hld swap move
+;  SHOLD  ( c-addr u -- )  dup +hld swap move
 
-	hdr	1,'SHOLD'	; hold string
-shold:	call	docol
-	dw	dupp,phld
-	dw	swap,move
-	dw	exit
+  hdr  1,'SHOLD'  ; hold string
+shold:  call  docol
+  dw  dupp,phld
+  dw  swap,move
+  dw  exit
 
-;	NHOLD  ( n char -- )	over +hld -rot fill
+;  NHOLD  ( n char -- )  over +hld -rot fill
 
-	hdr	1,'NHOLD'	; hold n characters
-nhold:	call	docol
-	dw	over,phld
-	dw	drot,fill
-	dw	exit
+  hdr  1,'NHOLD'  ; hold n characters
+nhold:  call  docol
+  dw  over,phld
+  dw  drot,fill
+  dw  exit
 
-;	decimal? ( -- flag )	base @ 10 =
+;  decimal? ( -- flag )  base @ 10 =
 
-	hdr	x,'DECIMAL?'
-dcmq:	call	docol
-	dw	base,at		; decimal base?
-	dw	clit
-	db	10
-	dw	equal
-	dw	exit
+  hdr  x,'DECIMAL?'
+dcmq:  call  docol
+  dw  base,at    ; decimal base?
+  dw  clit
+  db  10
+  dw  equal
+  dw  exit
 
 ; }}} **********************************************************
 ; String functions {{{ 
@@ -2463,31 +2478,31 @@ count:
   push  de
   jp  apush
 
-;	PACKED  ( c-addr1 u c-addr2 -- c-addr2 )
-;					  2dup 2>r 1+ swap move 2r> tuck c!
+;  PACKED  ( c-addr1 u c-addr2 -- c-addr2 )
+;            2dup 2>r 1+ swap move 2r> tuck c!
 
-	hdr	1,'PACKED'
-packd:	ld	l,c
-	ld	h,b
-	pop	de
-	pop	bc
-	ex	(sp),hl
-	push	bc
-	push	de
-	inc	de
-	call	bmove
-	pop	hl
-	pop	de
-	ld	(hl),e
-	pop	bc
-	jp	hpush
+  hdr  1,'PACKED'
+packd:  ld  l,c
+  ld  h,b
+  pop  de
+  pop  bc
+  ex  (sp),hl
+  push  bc
+  push  de
+  inc  de
+  call  bmove
+  pop  hl
+  pop  de
+  ld  (hl),e
+  pop  bc
+  jp  hpush
 
-;	PLACE  ( c-addr1 u c-addr2 -- )  packed drop
+;  PLACE  ( c-addr1 u c-addr2 -- )  packed drop
 
-	hdr	1,'PLACE'
-place:	call	docol
-	dw	packd,drop
-	dw	exit
+  hdr  1,'PLACE'
+place:  call  docol
+  dw  packd,drop
+  dw  exit
 
 ; XXX OLD -- DX-Forth 4.00
 ;;; PLACE  ( c-addr1 u c-addr2 -- )  2dup 2>r 1+ swap move 2r> c!
@@ -2768,91 +2783,91 @@ cmpp4:
 
 
 ; XXX NEW -- DX-Forth 4.09
-;	SEARCH  ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 -1 | c-addr1 u1 0 )
+;  SEARCH  ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 -1 | c-addr1 u1 0 )
 
-	hdr	1,'SEARCH'	; uses temps 1-3
-sear:	call	docol
-	dw	$+2
-	pop	hl
-	ld	(t1),hl		; u2
-	ld	a,l
-	or	h
-	pop	bc
-	pop	hl
-	ld	(t2),hl		; u1
-	ex	de,hl
-	pop	hl
-	ld	(t3),hl		; adr1
-	jp	z,sear2
-	dec	hl
-	inc	de
-sear1:	inc	hl
-	dec	de
-	ld	a,e
-	or	d
-	jp	z,sear4
-;	ld	a,(bc)
-;	cp	(hl)
-;	jp	nz,sear1
-	push	de
-	push	bc
-	push	hl
-	ex	de,hl
-	ld	hl,(t1)		; u2
-	ex	de,hl
-	call	cmpss
-	pop	hl
-	pop	bc
-	pop	de
-	jp	nz,sear1
+  hdr  1,'SEARCH'  ; uses temps 1-3
+sear:  call  docol
+  dw  $+2
+  pop  hl
+  ld  (t1),hl    ; u2
+  ld  a,l
+  or  h
+  pop  bc
+  pop  hl
+  ld  (t2),hl    ; u1
+  ex  de,hl
+  pop  hl
+  ld  (t3),hl    ; adr1
+  jp  z,sear2
+  dec  hl
+  inc  de
+sear1:  inc  hl
+  dec  de
+  ld  a,e
+  or  d
+  jp  z,sear4
+;  ld  a,(bc)
+;  cp  (hl)
+;  jp  nz,sear1
+  push  de
+  push  bc
+  push  hl
+  ex  de,hl
+  ld  hl,(t1)    ; u2
+  ex  de,hl
+  call  cmpss
+  pop  hl
+  pop  bc
+  pop  de
+  jp  nz,sear1
 
-sear2:	ld	bc,-1
-sear3:	push	hl
-	push	de
-	push	bc
-	xor	a
-	ld	(scaps),a
-	jp	exit
+sear2:  ld  bc,-1
+sear3:  push  hl
+  push  de
+  push  bc
+  xor  a
+  ld  (scaps),a
+  jp  exit
 
-sear4:	ld	bc,0
-	ld	hl,(t2)		; u1
-	ex	de,hl
-	ld	hl,(t3)		; adr1
-	jp	sear3
-
-; XXX NEW -- DX-Forth 4.09
-;	+STRING  ( c-addr1 u1 c-addr2 u2 -- c-addr2 u3)
-;					2swap swap 2over + 2 pick cmove +
-
-	hdr	1,'+STRING'	; uses temps 1-3
-pstr:	ld	l,c
-	ld	h,b
-	ld	(t3),hl		; bsave
-	pop	de
-	pop	hl
-	ld	(t2),hl		; adr2
-	add	hl,de
-	ex	de,hl
-	pop	bc
-	add	hl,bc
-	ld	(t1),hl		; u3
-	pop	hl
-	call	bmovd
-	ld	hl,(t3)		; bsave
-	ld	c,l
-	ld	b,h
-	ld	hl,t1
-	jp	tat1
+sear4:  ld  bc,0
+  ld  hl,(t2)    ; u1
+  ex  de,hl
+  ld  hl,(t3)    ; adr1
+  jp  sear3
 
 ; XXX NEW -- DX-Forth 4.09
-;	S.R  ( c-addr n1 n2 -- )  over - spaces type
+;  +STRING  ( c-addr1 u1 c-addr2 u2 -- c-addr2 u3)
+;          2swap swap 2over + 2 pick cmove +
 
-	hdr	1,'S.R'		; type string right-justified
-sdotr:	call	docol
-	dw	over,subb
-	dw	spacs
-	dw	typee
-	dw	exit
+  hdr  1,'+STRING'  ; uses temps 1-3
+pstr:  ld  l,c
+  ld  h,b
+  ld  (t3),hl    ; bsave
+  pop  de
+  pop  hl
+  ld  (t2),hl    ; adr2
+  add  hl,de
+  ex  de,hl
+  pop  bc
+  add  hl,bc
+  ld  (t1),hl    ; u3
+  pop  hl
+  call  bmovd
+  ld  hl,(t3)    ; bsave
+  ld  c,l
+  ld  b,h
+  ld  hl,t1
+  jp  tat1
+
+; XXX NEW -- DX-Forth 4.09
+;  S.R  ( c-addr n1 n2 -- )  over - spaces type
+
+  hdr  1,'S.R'    ; type string right-justified
+sdotr:  call  docol
+  dw  over,subb
+  dw  spacs
+  dw  typee
+  dw  exit
 
 ; }}} **********************************************************
 ; Control structures {{{
@@ -3865,6 +3880,7 @@ atxy7:  inc  de
 atxy8:  db  100,10,1
 
 ;  cls  ( -- )    home cursor and clear-screen sequence
+;  XXX TODO -- make it a word and call it from 'PAGE'
 
   cseg
 
@@ -3958,6 +3974,7 @@ key:
   header 1,'SPACE'
 space:
   ld  l,32
+emit_l:
   push  hl
   jp  emit ; XXX NEW -- because headers and code share the same zone
 
@@ -3972,12 +3989,13 @@ emit:
   dw  pause
   dw  exit
 
-; TYPE  ( c-addr u -- ) 0 ?do count emit loop drop
+; TYPE  ( c-addr u -- )
+; 0max 0 ?do count emit loop drop
 
   header 1,'TYPE'
 typee:
   call  docol
-  dw  zero
+  dw  0max,zero
   dw  xqdo,typee2
 typee1:
   dw  count,emit
@@ -3986,12 +4004,12 @@ typee2:
   dw  drop
   dw  exit
 
-; SPACES  ( +n -- ) 0 max 0 ?do space loop
+; SPACES  ( +n -- ) 0max 0 ?do space loop
 
   header 1,'SPACES'
 spacs:
   call  docol
-  dw  zero,max,zero
+  dw  zmax,zero
   dw  xqdo,spacs2
 spacs1:
   dw  space
@@ -4015,6 +4033,15 @@ crr:
 ;;  dw  emit
 ;;  dw  outt,off
 ;;  dw  exit
+
+;  PAGE  ( -- )
+;  12 emit
+
+  hdr  1,'PAGE'
+page:
+  ; XXX FIXME -- this is only for printer
+  ld  l,ff_char ; formfeed char
+  jp  emit_l
 
 ; CONSOLE  ( -- )   (vcon) @ (vemit) !
 
@@ -9218,7 +9245,7 @@ norm1:  ld  a,b
   sub  8
   ld  l,a
   jp  nz,norm1
-  ret      ; bcde = zero
+  ret     ; bcde = zero
 
 norm2:  dec  l    ; shl until bit 31 set
   call  shl
