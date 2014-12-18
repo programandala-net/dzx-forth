@@ -11,15 +11,16 @@ yes equ not no
 
 ; Date last revised
 
-date  macro
-  db  '2014-12-18T04:38'
+version macro
+  db 'A-00-201412180504'
   endm
 
 ; Modification level
 
-rel   equ 4 ; release #
-rev   equ 00  ; revision #
-beta  equ no  ; beta release
+; XXX OLD
+;;rel   equ 4 ; release #
+;;rev   equ 00  ; revision #
+;;beta  equ no  ; beta release
 
 ; Equates for conditional assembly
 
@@ -40,8 +41,7 @@ retro   equ no  ; classic forth behaviours
 
 ; Memory sizes
 
-;sm  equ 0x6590 ; 26000, start of system memory
-sm  equ 0 ; XXX TMP
+sm  equ 0x6590 ; 26000, start of system memory
 
 cw  equ 2   ; cell size (bytes)
 
@@ -333,23 +333,26 @@ hm  equ $   ; system definitions and header memory
 
 ; The following 5 bytes are reserved exclusively for user applications
 
-  db  0,0,0,0,0 ; user patch bytes    010B
+; XXX OLD
+;;  db  0,0,0,0,0 ; user patch bytes    010B
 
 ; If the following byte is non-zero, a warm boot is NOT performed on
 ; exit to CPM.
 
-noboot:
-  db  0   ; no warm boot flag   0110
+; XXX OLD
+;;noboot:
+;;  db  0   ; no warm boot flag   0110
 
 ; Identification and version
 
-  dw  0x4683   ; id  ('DXF' in radix 36) 0111
-dxver:
-  db  rel   ; release     0113
-  db  rev   ; revision      0114
+;;  dw  0x4683   ; id  ('DXF' in radix 36) 0111
+;;dxver:
+;;  db  rel   ; release     0113
+;;  db  rev   ; revision      0114
 
 ;
-  ds  cw    ; reserved    NEXT-8  0115
+; XXX OLD
+;;  ds  cw    ; reserved    NEXT-8  0115
 upp:
   ds  cw    ; user area pointer NEXT-6  0117
 rpp:
@@ -811,7 +814,7 @@ trat:
 ; 2DROP  ( xd -- )
 
   header 1,'2DROP'
-tdrop:
+two_drop:
   pop hl
   pop hl ; XXX NEW
   jp  next ; XXX NEW -- because headers and code share the same zone
@@ -2078,7 +2081,7 @@ dmin1:
   dw  zbran,dmin2
   dw  tswap
 dmin2:
-  dw  tdrop
+  dw  two_drop
   dw  exit
 
 ; DMAX  ( d1 d2 -- d1 | d2 )  2over 2over d< if 2swap then 2drop
@@ -2088,7 +2091,7 @@ dmax:
   call  docol
   dw  tover,tover
   dw  dless
-  dw  bran,dmin1
+  dw  branch,dmin1
 
 ; end
 
@@ -2164,7 +2167,7 @@ tonum1:
   dw  tswap
   dw  one,sstr
   dw  one,dpl,pstor
-  dw  bran,tonum1 ; repeat
+  dw  branch,tonum1 ; repeat
 tonum2:
   dw  exit    ; then
 
@@ -2210,9 +2213,9 @@ numq1:
   dw  zbran,numq3
 numq2:
   dw  from_r
-  dw  tdrop,tdrop
+  dw  two_drop,two_drop
   dw  false
-  dw  bran,numq5
+  dw  branch,numq5
 numq3:
   dw  drop
   dw  from_r
@@ -2251,7 +2254,7 @@ bdigs:
   header 1,'#>'
 edigs:
   call  docol
-  dw  tdrop
+  dw  two_drop
   dw  hld,fetch
   dw  pad
   dw  over
@@ -2652,12 +2655,12 @@ pof:
   or  h
   jp  z,zbran1
   push  de
-  jp  bran  ; XXX NEW -- because headers and code share the same zone
+  jp  branch  ; XXX NEW -- because headers and code share the same zone
 
 ; branch  ( -- )
 
   header x,'BRANCH'
-bran:
+branch:
   ld  h,b
   ld  l,c
   ld  c,(hl)
@@ -2672,7 +2675,7 @@ zbran:
   pop hl
   ld  a,l
   or  h
-  jp  z,bran
+  jp  z,branch
 zbran1:
   inc bc
   inc bc
@@ -2684,10 +2687,10 @@ zbran1:
 xloop:
   ld  hl,(rpp)
   inc (hl)
-  jp  nz,bran
+  jp  nz,branch
   inc hl
   inc (hl)
-  jp  nz,bran
+  jp  nz,branch
 xloop1:
   inc bc    ; skip over branch
   inc bc
@@ -2723,7 +2726,7 @@ xploo1:
   ld  (hl),e
   inc hl
   ld  (hl),d
-  jp  bran
+  jp  branch
 
 xploo2:
   add hl,de
@@ -2751,7 +2754,7 @@ xqdo:
   call  docol
   dw  tdup,equal
   dw  zbran,xdo1
-  dw  tdrop
+  dw  two_drop
   dw  from_r,fetch,to_r
   dw  exit
 
@@ -2866,7 +2869,7 @@ iff:
   header 1,'AHEAD',1,1
 ahead:
   call  docol
-  dw  comp,bran
+  dw  comp,branch
   dw  fmark
   dw  exit
 
@@ -2899,7 +2902,7 @@ until1:
 
   header 1,'AGAIN',1,1
 again:
-  ld  hl,bran
+  ld  hl,branch
   jp  until1
 
 ; WHILE  ( dest -- orig dest )  postpone if swap ;immediate
@@ -3041,12 +3044,12 @@ cspic:
 ; CS-ROLL       aka roll cs-roll
 
   header 1,'CS-ROLL',,,roll
-csrol equ roll
+cs_roll equ roll
 
 ; CS-DROP       drop -bal
 
   header 1,'CS-DROP',,1
-csdro:
+cs_drop:
   pop hl
   jp  dbal
 
@@ -3121,9 +3124,9 @@ thens1:
   dw  cstes
   dw  zbran,thens2
   dw  then
-  dw  bran,thens1
+  dw  branch,thens1
 thens2:
-  dw  csdro
+  dw  cs_drop
   dw  exit
 
    else
@@ -3146,7 +3149,7 @@ thens1:
   dw  qdup
   dw  zbran,thens2
   dw  then
-  dw  bran,thens1
+  dw  branch,thens1
 thens2:
   dw  dbal
   dw  exit
@@ -3217,19 +3220,19 @@ pels1:
   dw  psqot
   dcs '[THEN]'
   dw  cmpp,zequ
-  dw  bran,pels3
+  dw  branch,pels3
 pels2:
-  dw  tdrop
+  dw  two_drop
   dw  dupp,one,equal
 pels3:
-  dw  bran,pels5
+  dw  branch,pels5
 pels4:
-  dw  tdrop,one
+  dw  two_drop,one
 pels5:
   dw  plus
-  dw  bran,pels7
+  dw  branch,pels7
 pels6:
-  dw  tdrop
+  dw  two_drop
   dw  refil,and_
 pels7:
   dw  qdup,zequ
@@ -3342,16 +3345,17 @@ ques:
 ; }}} **********************************************************
 ; DOS functions
 
-; DOSVER  ( -- minor major )
-
-  header 1,'DOSVER'
-dosver:
-  ld  hl,(dosv)
-dosver1:ld  e,h
-  xor a
-  ld  h,a
-  ld  d,a
-  jp  push_de
+; XXX OLD
+;;; DOSVER  ( -- minor major )
+;;
+;;  header 1,'DOSVER'
+;;dosver:
+;;  ld  hl,(dosv)
+;;dosver1:ld  e,h
+;;  xor a
+;;  ld  h,a
+;;  ld  d,a
+;;  jp  push_de
 
 ; FDOS  ( DE u -- HL A )
 
@@ -4032,7 +4036,7 @@ pfind1:
   dw  cont,plus,fetch
   dw  wfind,qdup
   dw  zbran,pfind2
-  dw  nip,tswap,tdrop
+  dw  nip,tswap,two_drop
   dw  pleav,pfind1-cw
 pfind2:
   dw  xloop,pfind1
@@ -4071,7 +4075,7 @@ qwarn:
   dw  tuck
   dw  zbran,qwarn1
   dw  true    ; enable all warnings
-  dw  bran,qwarn2
+  dw  branch,qwarn2
 qwarn1:
   dw  lit,07fffh  ; disable compile warning
   dw  and_
@@ -4242,7 +4246,7 @@ nonam:
   dw  dupp    ; allow RECURSE etc
   dw  lit,dnfa
   dw  last,tstor
-  dw  bran,colon1
+  dw  branch,colon1
 
 ; BUILD  ( xt "name" -- )  0 header ,call
 
@@ -4381,7 +4385,7 @@ to:
   dw  zbran,to1
   dw  comp,pto
   dw  comma
-  dw  bran,to2
+  dw  branch,to2
 to1:
   dw  tbody,store
 to2:
@@ -5013,14 +5017,14 @@ tnam2:
   dw  tdup,namef
   dw  equal
   dw  zbran,tnam3
-  dw  drot,tdrop
+  dw  drot,two_drop
   dw  exit
 tnam3:
   dw  ntnam
-  dw  bran,tnam2
+  dw  branch,tnam2
 tnam4:
   dw  swap
-  dw  bran,tnam1
+  dw  branch,tnam1
 tnam5:
   dw  nip
   dw  exit    ; not found
@@ -5256,7 +5260,7 @@ pacce1:
   dw  plus
   dw  cstor
   dw  onep
-  dw  bran,pacce6
+  dw  branch,pacce6
 pacce2:
   dw  tdup
   dw  dupp
@@ -5273,7 +5277,7 @@ pacce2:
   dw  equal
   dw  zbran,pacce3
   dw  zero,swap
-  dw  bran,pacce4
+  dw  branch,pacce4
 pacce3:
   dw  onem,one
 pacce4:
@@ -5292,7 +5296,7 @@ pacce6:
   db  cr_char
   dw  equal
   dw  zbran,pacce1
-  dw  drot,tdrop
+  dw  drot,two_drop
   dw  exit
 
 ; ACCEPT  ( c-addr +n1 -- +n2)
@@ -5401,9 +5405,9 @@ parss1:
   dw  one,dupp
   dw  inn,pstor
   dw  from_r,ppsb
-  dw  bran,parss1
+  dw  branch,parss1
 parss2:
-  dw  tdrop
+  dw  two_drop
   dw  lit,psb
   dw  from_r
   dw  exit
@@ -5505,7 +5509,7 @@ paren:
   call  docol
   dw  clit
   db  ')'
-  dw  parse,tdrop
+  dw  parse,two_drop
   dw  exit
 
 ; .(  ( "ccc<delim>" )  [char] ) parse$ type ;immediate
@@ -5626,7 +5630,7 @@ unus:
   dw  zbran,unus1
   dw  lit,esm
   dw  fetch
-  dw  bran,unus2
+  dw  branch,unus2
 unus1:
   dw  sp_fetch
 unus2:
@@ -5666,11 +5670,11 @@ inte1:
   dw  equal
   dw  zbran,inte2 ; if compiling and not immediate
   dw  comxt
-  dw  bran,inte3
+  dw  branch,inte3
 inte2:
   dw  execute
 inte3:
-  dw  bran,inte14
+  dw  branch,inte14
 inte4:
   dw  count
   dw  base,fetch,to_r
@@ -5679,13 +5683,13 @@ inte4:
   db  '$'
   dw  pof,inte5
   dw  hex,one
-  dw  bran,inte7
+  dw  branch,inte7
 inte5:
   dw  clit
   db  '#'
   dw  pof,inte6
   dw  decimal,one
-  dw  bran,inte7
+  dw  branch,inte7
 inte6:
   dw  zero,swap
   dw  drop
@@ -5695,7 +5699,7 @@ inte7:
 inte8:
   dw  numq    ; NUMBER? patch
   dw  zbran,inte12
-  dw  tswap,tdrop
+  dw  tswap,two_drop
   dw  dpl,fetch,zless
   dw  zbran,inte10
   dw  drop
@@ -5703,14 +5707,14 @@ inte8:
   dw  zbran,inte9
   dw  liter
 inte9:
-  dw  bran,inte11
+  dw  branch,inte11
 inte10:
   dw  stateq
   dw  zbran,inte11
   dw  tlite
 inte11:
   dw  true
-  dw  bran,inte13
+  dw  branch,inte13
 inte12:
   dw  fnu     ; FNUMBER patch
 inte13:
@@ -5718,7 +5722,7 @@ inte13:
   dw  qdef
 inte14:
   dw  qstac
-  dw  bran,inte1
+  dw  branch,inte1
 inte15:
   dw  drop
   dw  exit
@@ -5783,7 +5787,7 @@ prefil:
   dw  zbran,prefil3
   dw  dupp,blk,store
   dw  block,bbuf
-  dw  bran,prefil2
+  dw  branch,prefil2
 prefil1:dw  lit,tib
   dw  dupp
   dw  clit
@@ -5869,7 +5873,7 @@ quit2:
   dw  pdotq
   dcs ' ok'
 quit3:
-  dw  bran,quit2
+  dw  branch,quit2
 
 ; RETURN  ( x -- )  exit to DOS with return code x
 
@@ -6050,7 +6054,7 @@ catch:
   dw  rpat,catchr,store
   dw  execute
   dw  from_r,catchr,store
-  dw  tfrom,tdrop
+  dw  tfrom,two_drop
   dw  zero
   dw  exit
 
@@ -6308,14 +6312,8 @@ cold5:
   db  cold8-$-1
 cold6:
   db  'DX-Forth '
-  db  '0'+rel,'.','0'+rev/10
-  db  '0'+rev mod 10
-  db  '  '
-   if beta
-  db  'unofficial test release'
-   else
   version
-   endif
+  db  '  '
 cold7:
   db  '  '
 cold8:
@@ -6401,7 +6399,7 @@ pruns1:
   dw  tat
   dw  tprun,store
   dw  execute
-  dw  bran,pruns1
+  dw  branch,pruns1
 pruns2:
   dw  drop
   dw  exit
@@ -6455,7 +6453,7 @@ behead2:dw  dupp
   dw  subb
   dw  zbran,behead3
   dw  fetch,nlnk
-  dw  bran,behead2
+  dw  branch,behead2
 behead3:dw  store
   dw  from_r,drop
   dw  exit
@@ -6474,7 +6472,7 @@ flink1:
   dw  rat,subb
   dw  zbran,flink2
   dw  fetch,nlnk
-  dw  bran,flink1
+  dw  branch,flink1
 flink2:
   dw  from_r,drop
   dw  exit
@@ -6564,7 +6562,7 @@ pforg3:
   dw  umin,dpp,store  ; trim dict
 pforg4:
   dw  ntnam
-  dw  bran,pforg3
+  dw  branch,pforg3
 pforg5:
   dw  swap,store
   dw  fetch
@@ -6801,7 +6799,7 @@ yn:
   dw  zbran,yn1
   dw  clit
   db  'Y'
-  dw  bran,yn2
+  dw  branch,yn2
 yn1:
   dw  clit
   db  'N'
@@ -6844,12 +6842,15 @@ alignn  equ next
   header 1,'ALIGNED',1,,noop
 alignd  equ next
 
-; DXFORTH  ( -- minor major )
+; DZX-FORTH  ( -- minor major )
 
-  header 1,'DXFORTH'
+  header 1,'DZX-FORTH'
 dxf:
-  ld  hl,(dxver)
-  jp  dosver1
+; XXX OLD
+;;  ld  hl,(dxver)
+;;  jp  dosver1
+; XXX TODO
+  jp  next
 
 ; }}} **********************************************************
 ; Disk and screen Input/Output {{{
@@ -6890,7 +6891,7 @@ path:
   dw  rot,qdup
   dw  zbran,path1
   dw  onem
-  dw  bran,path2
+  dw  branch,path2
 path1:
   dw  zero
   dw  clit
@@ -6919,7 +6920,7 @@ dpath:
   dw  one,sstr
   dw  tswap
 dpath1:
-  dw  tdrop
+  dw  two_drop
   dw  exit
 
 ; filetype?  ( addr1 u1 -- u2 )  -path [char] . scan nip
@@ -6943,7 +6944,7 @@ pext:
   call  docol
   dw  tover,ftype
   dw  zbran,pext1
-  dw  tdrop,exit
+  dw  two_drop,exit
 pext1:
   dw  three,min
   dw  psqot
@@ -7314,7 +7315,7 @@ stfh:
   dw  and_
   dw  exit
 stfh1:
-  dw  tdrop
+  dw  two_drop
   dw  clit
   db  6
   dw  exit
@@ -7339,8 +7340,8 @@ reposf:
   dw  three,stfh
   dw  dupp,to_r
   dw  zbran,reposf1
-  dw  tdrop
-  dw  bran,reposf2
+  dw  two_drop
+  dw  branch,reposf2
 reposf1:dw  rwpst
 reposf2:dw  from_r
   dw  ior
@@ -7464,7 +7465,7 @@ open1:
   call  docol
   dw  gtfh,zequ
   dw  zbran,open11
-  dw  tdrop
+  dw  two_drop
   dw  clit
   db  4
   dw  ior
@@ -7590,7 +7591,7 @@ delf:
   dw  tfcb,setusr
   dw  clit
   db  19
-  dw  bran,closf2
+  dw  branch,closf2
 
 ; RENAME-FILE  ( addr1 u1 addr2 u2 -- ior )
 ;         2swap >fcb setusr >r >fcb drop r@ c@
@@ -7623,12 +7624,12 @@ renf:
   dw  cmove,from_r
   dw  clit
   db  23
-  dw  bran,closf2
+  dw  branch,closf2
 renf1:
   dw  clit
   db  16
   dw  bdos
-  dw  from_r,tdrop
+  dw  from_r,two_drop
   dw  clit
   db  5
   dw  ior
@@ -7750,7 +7751,7 @@ fread1:
   dw  clit
   db  33
   dw  ranrw
-  dw  bran,fread3
+  dw  branch,fread3
 fread2:
   dw  hbuf,setdma
   dw  clit
@@ -7766,7 +7767,7 @@ fread3:
   dw  rat,mplus
   dw  rwpst
   dw  tfrom,subb
-  dw  bran,fread1
+  dw  branch,fread1
 fread4:
   dw  exit
 
@@ -7816,7 +7817,7 @@ fwrit:
 ;;  dw  equal
 ;;  dw  zbran,fwrit2
 ;;  dw  over,setdma
-;;  dw  bran,fwrit3
+;;  dw  branch,fwrit3
 ;;fwrit2:
 ;;  dw  hbuf
 ;;  dw  clit
@@ -7844,7 +7845,7 @@ fwrit:
 ;;  dw  rat,mplus
 ;;  dw  rwpst
 ;;  dw  tfrom,subb
-;;  dw  bran,fwrit1
+;;  dw  branch,fwrit1
 ;;fwrit4:
 ;;  dw  exit
 
@@ -8151,7 +8152,7 @@ blkrw:
   dw  from_r
   dw  zbran,blkrw1
   dw  writf
-  dw  bran,blkrw2
+  dw  branch,blkrw2
 blkrw1:
   dw  readf
   dw  blkerr
@@ -8224,7 +8225,7 @@ block:
   dw  zbran,block1
   dw  dupp,buffer,drop
   dw  zero,blkrw
-  dw  bran,block2
+  dw  branch,block2
 block1:
   dw  drop
 block2:
@@ -8512,7 +8513,7 @@ using:
   dw  pdotq
   dcs 'access denied'
   dw  zero
-  dw  bran,using2
+  dw  branch,using2
 using1:
   dw  pdotq
   dcs 'not found - create it? '
@@ -8555,76 +8556,76 @@ fload:
   dw  loaded
   dw  exit
 
-; SAVE  ( "filename[.COM]" -- ) 0 0 over swap boot 2! freeze
-;         getfilename s" com" +ext ?create >r
-;         (cold6) (zb1) dup (zbsiz*2) erase
-;         (cold7-cold6) cmove $100 dp @ over
-;         - r@ write-file swap 0= if dup 0=
-;         if (hm) dph @ over - r@ write-file
-;         or then then r> close-file or
-;         abort" can't save file"
-
-  header 1,'SAVE',,1
-save:
-  call  docol
-  dw  zero,zero
-save1:
-  dw  over,swap
-  dw  boot,tstor
-  dw  freez
-  dw  getfn
-  dw  psqot
-  dcs 'com'
-  dw  pext
-  dw  qcreat
-  dw  to_r
-  dw  lit,cold6 ; insert compiler logo
-  dw  lit,zb1
-  dw  dupp
-  dw  clit
-  db  zbsiz*2
-  dw  erase
-  dw  clit
-  db  cold7-cold6
-  dw  cmove
-  dw  lit,0x0100
-  dw  dpp,fetch
-  dw  over,subb
-  dw  rat,writf ; save application
-  dw  swap
-  dw  zequ
-  dw  zbran,save2
-  dw  dupp,zequ
-  dw  zbran,save2
-  dw  lit,hm
-  dw  dph,fetch
-  dw  over,subb
-  dw  rat,writf,or_ ; save system
-save2:
-  dw  from_r,closf,or_
-  dw  pabq
-  dcs "can't save file"
-  dw  exit
-
-; TURNKEY  ( "bootword" "filename[.COM]" -- )
-
-  header 1,'TURNKEY',,1
-turnk:
-  call  docol
-  dw  true
-turnk1:
-  dw  tick
-  dw  bran,save1
-
-; TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
-
-  header 1,'TURNKEY-SYSTEM',,1
-turnks:
-  call  docol
-  dw  zero
-  dw  bran,turnk1
-
-; end
+; XXX TODO
+;;; SAVE  ( "filename[.COM]" -- )
+;;;         0 0 over swap boot 2! freeze
+;;;         getfilename s" com" +ext ?create >r
+;;;         (cold6) (zb1) dup (zbsiz*2) erase
+;;;         (cold7-cold6) cmove $100 dp @ over
+;;;         - r@ write-file swap 0= if dup 0=
+;;;         if (hm) dph @ over - r@ write-file
+;;;         or then then r> close-file or
+;;;         abort" can't save file"
+;;
+;;  header 1,'SAVE',,1
+;;save:
+;;  call  docol
+;;  dw  zero,zero
+;;save1:
+;;  dw  over,swap
+;;  dw  boot,tstor
+;;  dw  freez
+;;  dw  getfn
+;;  dw  psqot
+;;  dcs 'com'
+;;  dw  pext
+;;  dw  qcreat
+;;  dw  to_r
+;;  dw  lit,cold6 ; insert compiler logo
+;;  dw  lit,zb1
+;;  dw  dupp
+;;  dw  clit
+;;  db  zbsiz*2
+;;  dw  erase
+;;  dw  clit
+;;  db  cold7-cold6
+;;  dw  cmove
+;;  dw  lit,0x0100
+;;  dw  dpp,fetch
+;;  dw  over,subb
+;;  dw  rat,writf ; save application
+;;  dw  swap
+;;  dw  zequ
+;;  dw  zbran,save2
+;;  dw  dupp,zequ
+;;  dw  zbran,save2
+;;  dw  lit,hm
+;;  dw  dph,fetch
+;;  dw  over,subb
+;;  dw  rat,writf,or_ ; save system
+;;save2:
+;;  dw  from_r,closf,or_
+;;  dw  pabq
+;;  dcs "can't save file"
+;;  dw  exit
+;;
+;;; TURNKEY  ( "bootword" "filename[.COM]" -- )
+;;
+;;  header 1,'TURNKEY',,1
+;;turnk:
+;;  call  docol
+;;  dw  true
+;;turnk1:
+;;  dw  tick
+;;  dw  branch,save1
+;;
+;;; TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
+;;
+;;  header 1,'TURNKEY-SYSTEM',,1
+;;turnks:
+;;  call  docol
+;;  dw  zero
+;;  dw  branch,turnk1
 
 ; }}} **********************************************************
 ; Floating point functions {{{
@@ -8702,8 +8703,8 @@ fdepth:
 
 ; FDROP  ( r -- )
 
-  header 1,'FDROP',,,tdrop ; aka 2drop fdrop
-fdrop equ tdrop
+  header 1,'FDROP',,,two_drop ; aka 2drop fdrop
+fdrop equ two_drop
 
 ; FDUP  ( r -- r r )
 
@@ -8931,9 +8932,9 @@ repr:
   dw  fill
   dw  dupp,zless
   dw  zbran,repr1
-  dw  tdrop,fdrop
+  dw  two_drop,fdrop
   dw  zero,zero
-  dw  bran,repr7
+  dw  branch,repr7
 repr1:
   dw  mprec,min
   dw  ttor
@@ -8951,7 +8952,7 @@ repr2:
   dw  zbran,repr3 ; while
   dw  ften,fslas
   dw  one,exsn,pstor
-  dw  bran,repr2  ; repeat
+  dw  branch,repr2  ; repeat
 repr3:
   dw  fdup    ; begin
   dw  flit
@@ -8960,7 +8961,7 @@ repr3:
   dw  zbran,repr4 ; while
   dw  ften,fstar
   dw  true,exsn,pstor
-  dw  bran,repr3  ; repeat
+  dw  branch,repr3  ; repeat
 repr4:
   dw  rat,zero
   dw  xqdo,repr6
@@ -8984,7 +8985,7 @@ repr7:
   dw  dzequ
   dw  zbran,repr8
   dw  one,zero  ; 0.0E fixup
-  dw  bran,repr9
+  dw  branch,repr9
 repr8:
   dw  exsn,tat
   dw  swap
@@ -9048,7 +9049,7 @@ pf1:
   call  docol
   dw  fdup
   dw  fbuf,mprec
-  dw  repr,tdrop  ; never error
+  dw  repr,two_drop  ; never error
   dw  exit
 
 ; (f2)  ( exp -- offset exp' )  s>d ef# fm/mod ef# *
@@ -9075,7 +9076,7 @@ pf3:
   dw  zless
   dw  zbran,pf31
   dw  prec
-  dw  bran,pf33
+  dw  branch,pf33
 pf31:
   dw  pf1
   dw  efn,zgrea
@@ -9114,7 +9115,7 @@ pf4:
   dw  dig
 pf41:
   dw  digs
-  dw  tdrop
+  dw  two_drop
   dw  dupp,sign
   dw  zless
   dw  from_r
@@ -9153,9 +9154,9 @@ pf61:
   dw  tdup,plus
   dw  cat
   dw  pf5
-  dw  bran,pf61
+  dw  branch,pf61
 pf62:
-  dw  tdrop
+  dw  two_drop
   dw  exit
 
 ; (f7)  ( n -- )    0 max 0 ?do [char] 0 (f5) loop
@@ -9214,7 +9215,7 @@ pfaa:
   dw  pln,zless
   dw  zbran,pfaa1
   dw  dupp
-  dw  bran,pfaa2
+  dw  branch,pfaa2
 pfaa1:
   dw  pln
 pfaa2:
@@ -9295,7 +9296,7 @@ fsdr:
   call  docol
   dw  to_r
   dw  pfsd
-  dw  bran,ddotr1
+  dw  branch,ddotr1
 
 ; FS.  ( r -- )   -1 0 fs.r space
 
@@ -9324,7 +9325,7 @@ fedr:
   call  docol
   dw  to_r
   dw  pfse
-  dw  bran,ddotr1
+  dw  branch,ddotr1
 
 ; FE.  ( r -- )   -1 0 fe.r space
 
@@ -9358,12 +9359,12 @@ pfd:
   dw  mprec,subb
   dw  pf7
   dw  pf6
-  dw  bran,pfd3 ; else
+  dw  branch,pfd3 ; else
 pfd1:
   dw  dupp,zgrea
   dw  zbran,pfd2
   dw  pfcc
-  dw  bran,pfd3 ; else
+  dw  branch,pfd3 ; else
 pfd2:
   dw  abss
   dw  pfbb
@@ -9380,7 +9381,7 @@ fdotr:
   call  docol
   dw  to_r
   dw  pfd
-  dw  bran,ddotr1
+  dw  branch,ddotr1
 
 ; F.  ( r -- )    -1 0 f.r space
 
@@ -9408,7 +9409,7 @@ pgd:
   dw  from_r,swap
   dw  zbran,pgd1  ; if
   dw  pfd
-  dw  bran,pgd2 ; else
+  dw  branch,pgd2 ; else
 pgd1:
   dw  pfsd
 pgd2:
@@ -9421,7 +9422,7 @@ pgd2:
 gdotr:
   call  docol
   dw  to_r,pgd
-  dw  bran,ddotr1
+  dw  branch,ddotr1
 
 ; G.  ( r -- )    -1 0 g.r space
 
@@ -11069,7 +11070,7 @@ fnumb:
   dw  caps
    endif
   dw  sear
-  dw  drot,tdrop
+  dw  drot,two_drop
   dw  base,fetch   ; decimal base?
   dw  clit
   db  10
@@ -11077,9 +11078,9 @@ fnumb:
   dw  zbran,fnumb2
 fnumb1:
   dw  tflt
-  dw  bran,fnumb3
+  dw  branch,fnumb3
 fnumb2:
-  dw  tdrop,zero
+  dw  two_drop,zero
 fnumb3:
   dw  dupp,to_r
   dw  stateq
@@ -11112,9 +11113,6 @@ fprun1:
   dw  0   ; link
   dw  fprun   ; xt
 
-; end
-
-
   endif
 
 ; }}} **********************************************************
@@ -11137,7 +11135,7 @@ initdph equ $
 
 ; MOVE-PATCH  ( -- )
 
-movpat:
+;;movpat:
 ;;  ld  a,0x44   ; change to LD B,H
 ;;  ld  (cldd4),a
 ;;  ld  (cldd5),a
@@ -11145,7 +11143,4 @@ movpat:
 ;;  ld  (cldd7),hl  ; patch myself out
 ;;  jp  (hl)
 
-  end cold_boot    ; start address
-
-; End
-
+  end cold_boot
