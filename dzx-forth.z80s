@@ -12,7 +12,7 @@ yes equ not no
 ; Date last revised
 
 date  macro
-  db  '2014-12-18T03:36'
+  db  '2014-12-18T04:11'
   endm
 
 ; Modification level
@@ -40,7 +40,9 @@ retro   equ no  ; classic forth behaviours
 
 ; Memory sizes
 
-sm  equ 0x6590 ; 26000, start of system memory
+;sm  equ 0x6590 ; 26000, start of system memory
+sm  equ 0 ; XXX TMP
+
 cw  equ 2   ; cell size (bytes)
 
 ; Buffer sizes
@@ -186,9 +188,6 @@ escape  equ 0x1b ; escape
 
 ; Header structure
 
-; In the original DX-Forth, headers and code are separated.
-; A header:
-
 ; nfa db length+flags     ; length = 1..31
 ;     ds length           ; name 
 ; lfa dw previous_nfa
@@ -200,42 +199,26 @@ escape  equ 0x1b ; escape
 ; ------------------------------
 ; Macro for generating word headers
 
-last_nfa defl  0   ; initial link pointer (end of chain)
+previous_nfa defl  0   ; initial link pointer (end of chain)
 
 header macro enabled,name,immediate,fl,alias_xt
   ; enabled  = enable the header? (0=disable)
   ; name = name string
   ; immediate  = immediate
-  ; fl  = application/system flag
+  ; fl  = application/system flag ; XXX OLD not used anymore
+  ; XXX TODO remove 'fl' from the macro header calls
   ; alias_xt = alias xt
   if enabled
 
-    ; XXX FIXME DX-Forth separates headers and code in different memory
-    ; segments. This means a word's code is not separated from its next word
-    ; (see the definition of '2drop', that runs into 'drop').
-
-    ; ..........................
-    ; Calculate the header
-    
-    ;  cseg ; XXX OLD
-;    cfadr defl  $   ; code field address
-    ;   aseg      ; put heads in system dictionary ; XXX OLD
-    next_nfa defl  $ ; link address for next word
+    ; the name field
+    last_nfa defl  $ ; link address for next word
     bits  defl  0
     if not nul immediate
       bits  defl  bits+0x40  ; set immediate bit
     endif
-    if nul alias_xt
-      cfadr defl  $   ; code field address
-    else
-      cfadr defl  alias_xt   ; set cfa
+    if not nul alias_xt
       bits  defl  bits+0x80  ; set alias bit
     endif
-
-    ; ..........................
-    ; Create the header
-
-    ; the name
     local _first ; address of the first char of the name
     local _next  ; address after the last char of the name
     db _next-_first+bits    ; count and flags byte
@@ -243,24 +226,18 @@ header macro enabled,name,immediate,fl,alias_xt
     _next
     
     ; the link field
-    dw  last_nfa
+    dw  previous_nfa
 
-    ; the pointer to the code field
-    if nul fl
-      dw  cfadr   ; for application words
+    ; the code field
+    if nul alias_xt
+      last_xt defl $+2
     else
-      dw  $+2     ; for system words
+      last_xt defl alias_xt
     endif
-    last_nfa defl  next_nfa
+    dw last_xt
+    previous_nfa defl  last_nfa
 
   endif
-
-; XXX OLD
-;;  if nul fl    ; switch to system or application
-;;    cseg
-;;  else
-;;    aseg
-;;  endif
 
   endm
 
@@ -4640,9 +4617,9 @@ sys1:
 last:
   call  docre
 last1:
-  dw  topnfa    ; latest nfa
+  dw  top_nfa    ; latest nfa
 last2:
-  dw  topxt   ; latest xt
+  dw  top_xt   ; latest xt
 
 ; BLK
 
@@ -5619,7 +5596,7 @@ forth3 defl 0 ; XXX TMP -- this solves "forth3 undefined"
 
   dw  0x2001
 forth1:
-  dw  topnfa    ; nfa of top word in vocabulary
+  dw  top_nfa    ; nfa of top word in vocabulary
 forth2:
   dw  0   ; previous vocabulary
   dw  forth3    ; vocab nfa
@@ -5631,7 +5608,7 @@ forth:
   call  dovoc
   dw  forth1
 
-forth3  defl  last_nfa
+forth3  defl  previous_nfa
 
 ; UNUSED  ( -- u )  sys? if (esm) @ else sp@ then here
 ;       255 + 2dup u> -rot - and
@@ -11137,8 +11114,10 @@ fprun1:
 ; }}} **********************************************************
 ; XXX {{{
 
-topnfa  equ next_nfa   ; nfa of top word in forth vocab
-topxt equ cfadr   ; xt  of top word in forth vocab
+; XXX TODO it seems these 'last_' labels could be renamed
+; to 'top_' instead:
+top_nfa  equ last_nfa   ; nfa of top word in forth vocab
+top_xt equ last_xt   ; xt of top word in forth vocab
 
 ;   cseg ; XXX OLD
 initdp  equ $
