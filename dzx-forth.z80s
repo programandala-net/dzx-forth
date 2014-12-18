@@ -12,14 +12,12 @@ yes equ not no
 ; Date last revised
 
 version macro
-  db 'A-00-201412182009'
+  db 'A-00-201412182050'
   endm
 
-  ; XXX NOTE:
+  ; XXX Last changes:
   ;
-  ; - Included the changes in DX-Forth 4.09.
-  ; - Confirmed nothing was missed.
-  ; - Doing changes and fixes needed to compile...
+  ; - Update to DX-Forth 4.09. Compiled.
 
 ; Modification level
 
@@ -8497,42 +8495,48 @@ eolq:
 
   header  1,'READ-LINE'
 readl:
-  call  docol
-  dw  to_r,over,swap,from_r
-  dw  readf,qdup
-  dw  zbran,readl1
-  dw  exit
-readl1:
-  dw  tdup,over,plus,swap
-  dw  xqdo,readl5
-readl2:
-  dw  ido
-  dw  dupp,cat
-  dw  clit
-  db  ctlz
-  dw  equal
-  dw  zbran,readl3
-  dw  rot,subb
-  dw  fh,fsiz,drop,rwpst
-  dw  pleav,readl2-cw
-readl3:
-  dw  eolq,qdup
-  dw  zbran,readl4
-  dw  ido,plus,to_r
-  dw  over,plus
-  dw  from_r
-  dw  swap,subb
-  dw  dupp,zneq  ; handle buffer > 32K
-  dw  rwpat,dplus,rwpst
-  dw  ido,swap,subb
-  dw  true,zero
-  dw  unloo,exit
-readl4:
-  dw  xloop,readl2
-readl5:
-  dw  nip
-  dw  dupp,zneq,zero
-  dw  exit
+; XXX TODO
+  pop hl
+  pop hl
+  pop hl
+  jp next
+; XXX OLD -- DX-Forth 4.00
+;;  call  docol
+;;  dw  to_r,over,swap,from_r
+;;  dw  readf,qdup
+;;  dw  zbran,readl1
+;;  dw  exit
+;;readl1:
+;;  dw  tdup,over,plus,swap
+;;  dw  xqdo,readl5
+;;readl2:
+;;  dw  ido
+;;  dw  dupp,cat
+;;  dw  clit
+;;  db  ctlz
+;;  dw  equal
+;;  dw  zbran,readl3
+;;  dw  rot,subb
+;;  dw  fh,fsiz,drop,rwpst
+;;  dw  pleav,readl2-cw
+;;readl3:
+;;  dw  eolq,qdup
+;;  dw  zbran,readl4
+;;  dw  ido,plus,to_r
+;;  dw  over,plus
+;;  dw  from_r
+;;  dw  swap,subb
+;;  dw  dupp,zneq  ; handle buffer > 32K
+;;  dw  rwpat,dplus,rwpst
+;;  dw  ido,swap,subb
+;;  dw  true,zero
+;;  dw  unloo,exit
+;;readl4:
+;;  dw  xloop,readl2
+;;readl5:
+;;  dw  nip
+;;  dw  dupp,zneq,zero
+;;  dw  exit
 
 ; screen file selector
 
