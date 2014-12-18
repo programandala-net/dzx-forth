@@ -12,7 +12,7 @@ yes equ not no
 ; Date last revised
 
 date  macro
-  db  '2014-12-18T01:50'
+  db  '2014-12-18T03:36'
   endm
 
 ; Modification level
@@ -40,8 +40,7 @@ retro   equ no  ; classic forth behaviours
 
 ; Memory sizes
 
-sm  equ 7000h   ; start of system memory
-
+sm  equ 0x6590 ; 26000, start of system memory
 cw  equ 2   ; cell size (bytes)
 
 ; Buffer sizes
@@ -60,9 +59,9 @@ pno     equ 68    ; pictured numeric buffer size
 
 ; DOS and memory equates
 
-dosfcb  equ 005Ch   ; default file control block
-dosbuf  equ 0080h   ; default DTA and command-line buffer
-tpa     equ 0100h   ; program start
+dosfcb  equ 0x005c   ; default file control block
+dosbuf  equ 0x0080   ; default DTA and command-line buffer
+tpa     equ 0x0100   ; program start
 recsiz  equ 128   ; CP/M record size
 
 ; Equates
@@ -103,15 +102,15 @@ toppru  defl  fprun1
 
 ; ASCII characters
 ; XXX TODO adapt
-;; bel equ 07h ; bell ; XXX OLD
-bs_char  equ 08h ; backspace
-tab_char equ 09h ; tab
-lf_char  equ 0ah ; line feed
-ff_char  equ 0ch ; form feed
-cr_char  equ 0dh ; carriage return
-;;can equ 18h ; ctl-x 
-ctrl_z_char  equ 1ah ; ctl-z ;; XXX OLD -- still used in old code
-escape  equ 1bh ; escape
+;; bel equ 0x07 ; bell ; XXX OLD
+bs_char  equ 0x08 ; backspace
+tab_char equ 0x09 ; tab
+lf_char  equ 0x0a ; line feed
+ff_char  equ 0x0c ; form feed
+cr_char  equ 0x0d ; carriage return
+;;can equ 0x18 ; ctl-x 
+ctrl_z_char  equ 0x1a ; ctl-z ;; XXX OLD -- still used in old code
+escape  equ 0x1b ; escape
 
 
 ; }}} **********************************************************
@@ -183,7 +182,17 @@ escape  equ 1bh ; escape
 ; |   word and number conversion area
 ; DP  |-------------
 ; |   application dictionary
-; 0100h |-------------
+; 0x0100 |-------------
+
+; Header structure
+
+; In the original DX-Forth, headers and code are separated.
+; A header:
+
+; nfa db length+flags     ; length = 1..31
+;     ds length           ; name 
+; lfa dw previous_nfa
+; cfa dw code_address
 
 ; }}} **********************************************************
 ; Macros {{{
@@ -191,55 +200,67 @@ escape  equ 1bh ; escape
 ; ------------------------------
 ; Macro for generating word headers
 
-lastl defl  0   ; initial link pointer (end of chain)
+last_nfa defl  0   ; initial link pointer (end of chain)
 
-header macro en,str,immediate,fl,axt
-  local _a,_b
-  ; en  = enable the header? (0=disable)
-  ; str = name string
+header macro enabled,name,immediate,fl,alias_xt
+  ; enabled  = enable the header? (0=disable)
+  ; name = name string
   ; immediate  = immediate
   ; fl  = application/system flag
-  ; axt = alias xt
-  if en    ; if header enable
+  ; alias_xt = alias xt
+  if enabled
 
     ; XXX FIXME DX-Forth separates headers and code in different memory
     ; segments. This means a word's code is not separated from its next word
     ; (see the definition of '2drop', that runs into 'drop').
+
+    ; ..........................
+    ; Calculate the header
     
     ;  cseg ; XXX OLD
-    cfadr defl  $   ; code field address
+;    cfadr defl  $   ; code field address
     ;   aseg      ; put heads in system dictionary ; XXX OLD
-    lnk defl  $   ; link address for next word
+    next_nfa defl  $ ; link address for next word
     bits  defl  0
     if not nul immediate
-      bits  defl  bits+40h  ; set immediate bit
+      bits  defl  bits+0x40  ; set immediate bit
     endif
-    if not nul axt   ; if alias
-      cfadr defl  axt   ; set cfa
-      bits  defl  bits+80h  ; set alias bit
+    if nul alias_xt
+      cfadr defl  $   ; code field address
+    else
+      cfadr defl  alias_xt   ; set cfa
+      bits  defl  bits+0x80  ; set alias bit
     endif
-; XXX OLD -- original method, fails with Pasmo
-; ('_a' undefined):
-;    db _a    ; generate count byte
-;    _b db  str   ; generate name
-;    _a defl  $-_b+bits
-; XXX Alternative:
-    db _a-_b+bits    ; generate count byte
-    _b db  str   ; generate name
-    _a
-    dw  lastl   ; generate link field
-    if nul fl    ; generate pointer to code field
+
+    ; ..........................
+    ; Create the header
+
+    ; the name
+    local _first ; address of the first char of the name
+    local _next  ; address after the last char of the name
+    db _next-_first+bits    ; count and flags byte
+    _first db  name
+    _next
+    
+    ; the link field
+    dw  last_nfa
+
+    ; the pointer to the code field
+    if nul fl
       dw  cfadr   ; for application words
     else
-      dw  $+2   ; for system words
+      dw  $+2     ; for system words
     endif
-    lastl defl  lnk
+    last_nfa defl  next_nfa
+
   endif
-;  if nul fl    ; switch to system or application
-;    ;   cseg ; XXX OLD
-;  else
-;    ;   aseg ; XXX OLD
-;  endif
+
+; XXX OLD
+;;  if nul fl    ; switch to system or application
+;;    cseg
+;;  else
+;;    aseg
+;;  endif
 
   endm
 
@@ -276,7 +297,7 @@ dcs macro string1,string2,string3,string4 ; allow comma separated
 ; Macro to ignore next 1 bytes
 
 ignore1  macro
-  db  0feh  ; cp n
+  db  0x00fe  ; cp n
    endm
 
 ; ------------------------------
@@ -323,13 +344,13 @@ hm  equ $   ; system definitions and header memory
 ;
 ;   cseg ; XXX OLD
 
-; jp  cldd    ; DO NOT INCLUDE - this statement is
-;       ; automatically inserted by the linker
+  jp  cold_boot
 
-  db  'Z3ENV'   ; Z-System signature    0103
-  db  1   ; external environment    0108
-z3eadr:
-  dw  0   ; ZENV address      0109
+; XXX OLD
+;;  db  'Z3ENV'   ; Z-System signature    0103
+;;  db  1   ; external environment    0108
+;;z3eadr: 
+;;  dw  0   ; ZENV address      0109
 
 ; The following 5 bytes are reserved exclusively for user applications
 
@@ -343,7 +364,7 @@ noboot:
 
 ; Identification and version
 
-  dw  4683h   ; id  ('DXF' in radix 36) 0111
+  dw  0x4683   ; id  ('DXF' in radix 36) 0111
 dxver:
   db  rel   ; release     0113
   db  rev   ; revision      0114
@@ -422,10 +443,10 @@ dosv:
 
 ; Arrow key codes (default = Wordstar style)
 
-  db  'E'-40h   ; up arrow      014F
-  db  'X'-40h   ; down arrow      0150
-  db  'D'-40h   ; right arrow     0151
-  db  'S'-40h   ; left arrow      0152
+  db  'E'-0x40   ; up arrow      014F
+  db  'X'-0x40   ; down arrow      0150
+  db  'D'-0x40   ; right arrow     0151
+  db  'S'-0x40   ; left arrow      0152
 
 ; XXX OLD
 ; Terminal install area (TURBO PASCAL compatible)
@@ -531,7 +552,7 @@ upc:
   ret c
   cp  'z'+1
   ret nc
-  xor 20h
+  xor 0x20
   ret
 
 gdrv:
@@ -539,7 +560,7 @@ gdrv:
   jp  bdoss
 
 gusr:
-  ld  a,0ffh  ; get current user a
+  ld  a,0xff  ; get current user a
 
 susr:
   ld  e,a ; set current user a
@@ -548,7 +569,7 @@ susr:
 bdoss:
   push  bc  ; call bdos a
   ld  c,a
-  call  0005h
+  call  0x0005
   pop bc
   ret
 
@@ -1349,7 +1370,7 @@ dabs:
   header 1,'+'
 plus:
   pop de
-plus1:
+plus_de:
   pop hl
   add hl,de
   jp  push_hl
@@ -3383,18 +3404,18 @@ biosj:
   jp  c,biosj2
 biosj1:
   ld  a,(dosv)
-  cp  30h
+  cp  0x30
   jp  c,biosj2
   ld  de,biospb
   ld  c,50    ; CP/M 3 BDOS 50
-  jp  0005h
+  jp  0x0005
 
 biosj2:
   push  hl    ; CP/M 2 bios call
   ld  hl,(biospb+1)
   ld  c,l
   ld  b,h
-  ld  hl,(0000h+1)
+  ld  hl,(0x0000+1)
   dec de    ; fn
   add hl,de
   add hl,de
@@ -3477,7 +3498,9 @@ wait:
   jr z,wait
 endif
 
-; conin  ( -- char )  begin key? until 0 3 bios
+; conin  ( -- char )
+;
+; begin key? until 0 3 bios
 
   header x,'CONIN'
 conin:
@@ -3509,12 +3532,13 @@ lstout:
   dw  bios,drop
   dw  exit
 
-; ZENV  ( -- addr ) return Z-System address (0=none)
-
-  header 1,'ZENV'
-zenv:
-  ld  hl,(z3eadr)
-  jp  push_hl
+; XXX OLD
+;;; ZENV  ( -- addr ) return Z-System address (0=none)
+;;
+;;  header 1,'ZENV'
+;;zenv:
+;;  ld  hl,(z3eadr)
+;;  jp  push_hl
 
 ; end
 
@@ -3940,11 +3964,11 @@ wfind2:
   push  hl    ; save nfa
   ld  c,(hl)
   ld  a,c
-  and 1fh
+  and 0x1f
   ld  b,a   ; dict name length
   ld  a,(de)    ; string length
   xor c   ; check lengths/smudge bit
-  and 3fh
+  and 0x3f
   jp  z,wfind4
   inc hl    ; to link
 wfind3:
@@ -3984,7 +4008,7 @@ wfind4:
   push  de
   push  hl
   ld  a,(hl)
-  and 40h   ; immediate?
+  and 0x40   ; immediate?
   ld  hl,-1
   jp  z,wfind5
   inc hl
@@ -4048,7 +4072,7 @@ find:
   header 1,'-?',,1 ; disable warnings for next definition only
 dques:
   ld  hl,warnn1
-  ld  a,0feh    ; clear bit 0
+  ld  a,0xfe    ; clear bit 0
   and (hl)
   ld  (hl),a
   jp  next
@@ -4083,14 +4107,14 @@ qwarn3:
 
   header 1,'IMMEDIATE',,1
 immed:
-  ld  e,40h
+  ld  e,0x40
   jp  xnfa1
 
 ; SMUDGE  ( -- )    $20 xnfa
 
   header 1,'SMUDGE',,1 ; FIG
 smudg:
-  ld  e,20h
+  ld  e,0x20
   ignore1
 
 ; xnfa  ( x -- )    toggle nfa bit
@@ -4165,7 +4189,7 @@ headr2:
   header x,',CALL',,1
 comcall:call  docol
   dw  clit
-  db  0CDh    ; 'call' opcode
+  db  0xcd    ; 'call' opcode
   dw  ccomm
   dw  comma
   dw  exit
@@ -4417,7 +4441,7 @@ aka:
   dw  tuck,qdef
   dw  headr   ; equivalent of
   dw  clit    ; ALIAS ( xt "newname" -- )
-  db  80h   ;
+  db  0x80   ;
   dw  xnfa    ;
   dw  zgrea
   dw  zbran,aka1
@@ -4927,22 +4951,22 @@ comma:
   header 1,'>BODY'
 tbody:
   ld  de,3
-  jp  plus1
+  jp  plus_de
 
 ; body>  ( addr -- xt ) 3 -
 ;
 ; hdr x,'BODY>'
 ;fbody:
   ld  de,-3
-; jp  plus1
+; jp  plus_de
 
 ; n>link  ( nfa -- lfa )
 
   header x,'N>LINK',,1
 nlnk:
   pop hl
-  ld  a,(hl)
-  and 1fh
+  ld  a,(hl)  ; name length and flags
+  and 0x1f    ; name length only
   ld  e,a
   ld  d,0
   add hl,de
@@ -4978,7 +5002,7 @@ dalias:
   pop hl
   push  hl
   ld  a,(hl)
-  cp  80h
+  cp  0x80
   jp  zless2
 
 ; >name  ( xt -- nfa | 0 )
@@ -5544,7 +5568,7 @@ bslss:
   header 0,'WORDLIST',,1 ; nameless wordlists not supported
 wlist:
   call  docol
-  dw  lit,2001h
+  dw  lit,0x2001
   dw  comma
   dw  here
   dw  zero    ; nfa of top word in vocabulary
@@ -5593,7 +5617,7 @@ defin:
 ;   aseg ; XXX OLD
 forth3 defl 0 ; XXX TMP -- this solves "forth3 undefined"
 
-  dw  2001h
+  dw  0x2001
 forth1:
   dw  topnfa    ; nfa of top word in vocabulary
 forth2:
@@ -5607,7 +5631,7 @@ forth:
   call  dovoc
   dw  forth1
 
-forth3  defl  lastl
+forth3  defl  last_nfa
 
 ; UNUSED  ( -- u )  sys? if (esm) @ else sp@ then here
 ;       255 + 2dup u> -rot - and
@@ -5867,46 +5891,50 @@ quit3:
 ; RETURN  ( x -- )  exit to DOS with return code x
 
   header 1,'RETURN'
-retrn:
-  call  docol
-  dw  console
-  dw  crr
-  dw  $+2
-  pop bc
-  ld  hl,(z3eadr) ; for ZSYSTEM
-  ld  a,h
-  or  l
-  jp  z,retrn1
-  ld  de,34   ; Z3MSG?
-  add hl,de
-  ld  a,(hl)
-  inc hl
-  ld  h,(hl)
-  ld  l,a
-  or  h
-  jp  z,retrn1
-  ld  de,6    ; offset to error byte
-  add hl,de
-  ld  (hl),c
-retrn1:
-  ld  a,(dosv)  ; set program return code
-  cp  30h   ; CPM3 ?
-  ld  e,c
-  ld  d,0
-  ld  c,108
-  call  nc,0005h
-  ld  a,(defusr)  ; restore default drive/user
-  call  susr
-  ld  a,(defdrv)
-  ld  e,a
-  ld  c,14
-  call  0005h
-  ld  hl,(stack)  ; return to CP/M
-  ld  a,h
-  or  l
-  jp  z,0000h   ; warm boot
-  ld  sp,hl
-  ret
+return:
+  ; XXX TODO
+  pop hl  ; XXX TMP drop
+  jp  next
+; XXX OLD
+;;  call  docol
+;;  dw  console
+;;  dw  crr
+;;  dw  $+2
+;;  pop bc
+;;  ld  hl,(z3eadr) ; for ZSYSTEM
+;;  ld  a,h
+;;  or  l
+;;  jp  z,retrn1
+;;  ld  de,34   ; Z3MSG?
+;;  add hl,de
+;;  ld  a,(hl)
+;;  inc hl
+;;  ld  h,(hl)
+;;  ld  l,a
+;;  or  h
+;;  jp  z,retrn1
+;;  ld  de,6    ; offset to error byte
+;;  add hl,de
+;;  ld  (hl),c
+;;retrn1:
+;;  ld  a,(dosv)  ; set program return code
+;;  cp  0x30   ; CPM3 ?
+;;  ld  e,c
+;;  ld  d,0
+;;  ld  c,108
+;;  call  nc,0x0005
+;;  ld  a,(defusr)  ; restore default drive/user
+;;  call  susr
+;;  ld  a,(defdrv)
+;;  ld  e,a
+;;  ld  c,14
+;;  call  0x0005
+;;  ld  hl,(stack)  ; return to CP/M
+;;  ld  a,h
+;;  or  l
+;;  jp  z,0x0000   ; warm boot
+;;  ld  sp,hl
+;;  ret
 
 ; BYE  ( -- )   close-all exit-video 0 return
 
@@ -5918,7 +5946,7 @@ bye:
 ;;  call  docol
 ;;  dw  closa
 ;;  dw  exvid   ; terminal exit sequence
-;;  dw  zero,retrn
+;;  dw  zero,return
 
 ; boot?  ( -- bootword )  (iboot) @
 
@@ -5941,14 +5969,14 @@ pabor:
    if debug
   dw  zbran,pabor1
   dw  one
-  dw  retrn
+  dw  return
 pabor1  dw  pdotq
   dcs ' (ABORT) '
   dw  quit
    else
   dw  zbran,quit1
   dw  one
-  dw  retrn
+  dw  return
    endif
 
 ; .error  ( -- )    cr blk @ ?dup if file? and if filename type
@@ -6116,88 +6144,91 @@ aborq:
 cmdtail:ld  de,dosbuf
   jp  count1
 
-; Cold start from DOS
+; Cold boot
 
 ;   cseg ; XXX OLD
 
 ;nodos  db  cr_char,lf_char,'wrong DOS version',cr_char,lf_char,'$'
 
-cldd:
-  call  gdrv      ; save default drive and user
-  ld  (defdrv),a
-  call  gusr
-  ld  (defusr),a
-
-  ld  c,12      ; get CP/M version
-  call  0005h
-  ld  (dosv),hl
-
-  ld  hl,(z3eadr)   ; test for ZSYSTEM
-  push  hl
-  ld  de,27
-  add hl,de
-  ld  e,(hl)
-  inc hl
-  ld  d,(hl)
-  pop hl
-  call  ssub
-  ld  hl,0
-  jp  z,cldd1
-  ld  (z3eadr),hl   ; not present or invalid z3eadr
-
-cldd1:
-  ld  (stack),hl    ; hl=0
-
-  ld  a,(noboot)    ; test noboot flag
-  or  a
-  ld  a,(0005h+2)   ; bdos base
-  jp  z,cldd2
-
-  add hl,sp     ; save old stack
-  ld  (stack),hl
-  sub 8     ; skip over CCP
-
-cldd2:
-  ld  h,a
-  ld  l,0
-  ld  (esm),hl    ; patch end of memory value
-  ex  de,hl
-
-  ld  hl,(boot1)    ; get BOOT word
-  ld  (iboot),hl    ; save it
-  ld  a,h
-  or  l
-  ld  l,a
-  ld  a,(boot2)
-  and l
-  jp  z,cldd3     ; need forth system
-
-  ld  hl,noop
-  ld  (cold1),hl
-  jp  cldd6
-
-cldd3:
-  dec a     ; set command line flag
-  ld  (cmdf),a
-
-  ld  hl,(idph)   ; move system segment into place
-  ld  de,hm
-  call  ssub
-cldd4:
-  ld  b,0     ; later patched to LD B,H
-cldd5:
-  ld  c,0     ; later patched to LD C,L
-  ld  hl,(idp)
-  call  bmovu
-  ld  de,sm
-
-cldd6:
-  ex  de,hl
-  ld  (limit1),hl   ; patch LIMIT
-
-  db  0C3h      ; 'jmp'
-cldd7:
-  dw  movpat      ; later patched to 'cold'
+cold_boot:
+  ; XXX TODO
+  jp  cold ; XXX TMP
+; XXX OLD
+;;  call  gdrv      ; save default drive and user
+;;  ld  (defdrv),a
+;;  call  gusr
+;;  ld  (defusr),a
+;;
+;;  ld  c,12      ; get CP/M version
+;;  call  0x0005
+;;  ld  (dosv),hl
+;;
+;;  ld  hl,(z3eadr)   ; test for ZSYSTEM
+;;  push  hl
+;;  ld  de,27
+;;  add hl,de
+;;  ld  e,(hl)
+;;  inc hl
+;;  ld  d,(hl)
+;;  pop hl
+;;  call  ssub
+;;  ld  hl,0
+;;  jp  z,cldd1
+;;  ld  (z3eadr),hl   ; not present or invalid z3eadr
+;;
+;;cldd1:
+;;  ld  (stack),hl    ; hl=0
+;;
+;;  ld  a,(noboot)    ; test noboot flag
+;;  or  a
+;;  ld  a,(0x0005+2)   ; bdos base
+;;  jp  z,cldd2
+;;
+;;  add hl,sp     ; save old stack
+;;  ld  (stack),hl
+;;  sub 8     ; skip over CCP
+;;
+;;cldd2:
+;;  ld  h,a
+;;  ld  l,0
+;;  ld  (esm),hl    ; patch end of memory value
+;;  ex  de,hl
+;;
+;;  ld  hl,(boot1)    ; get BOOT word
+;;  ld  (iboot),hl    ; save it
+;;  ld  a,h
+;;  or  l
+;;  ld  l,a
+;;  ld  a,(boot2)
+;;  and l
+;;  jp  z,cldd3     ; need forth system
+;;
+;;  ld  hl,noop
+;;  ld  (cold1),hl
+;;  jp  cldd6
+;;
+;;cldd3:
+;;  dec a     ; set command line flag
+;;  ld  (cmdf),a
+;;
+;;  ld  hl,(idph)   ; move system segment into place
+;;  ld  de,hm
+;;  call  ssub
+;;cldd4:
+;;  ld  b,0     ; later patched to LD B,H
+;;cldd5:
+;;  ld  c,0     ; later patched to LD C,L
+;;  ld  hl,(idp)
+;;  call  bmovu
+;;  ld  de,sm
+;;
+;;cldd6:
+;;  ex  de,hl
+;;  ld  (limit1),hl   ; patch LIMIT
+;;
+;;  db  0xc3      ; 'jmp'
+;;cldd7:
+;;  dw  movpat      ; later patched to 'cold'
 
 ; COLD  ( -- )
 
@@ -6245,7 +6276,7 @@ cold:
 ; XXX OLD
 ;;  ld  de,dosbuf   ; reset DOS DTA
 ;;  ld  c,26
-;;  call  0005h
+;;  call  0x0005
 
   call  docol
   dw  zfh     ; reset handles
@@ -6261,7 +6292,7 @@ cold2:
   dw  qdup
   dw  zbran,cold3
   dw  execute      ; run application
-  dw  zero,retrn
+  dw  zero,return
 
 ;   aseg        ; run forth interpreter ; XXX OLD
 
@@ -6504,7 +6535,7 @@ chain:
   dw  tdup,equal  ; same wordlist
   dw  qchai
   dw  cellm
-  dw  lit,2001h
+  dw  lit,0x2001
   dw  over,fetch,subb  ; not a wordlist
   dw  qchai
   dw  swap,zero,flink
@@ -7342,7 +7373,7 @@ xff:
   db  5
   dw  plus
   dw  clit
-  db  80h
+  db  0x80
   dw  toggl
   dw  exit
 
@@ -7637,7 +7668,7 @@ setsiz:
   call  docol
   dw  rwpat,over
   dw  clit
-  db  7fh
+  db  0x7f
   dw  and_
   dw  pto,offs
   dw  clit
@@ -7891,7 +7922,9 @@ writl1:
   dw  writf
   dw  exit
 
-; READ-LINE  ( addr u1 fid -- u2 flag ior )  >r over swap r> read-file
+; READ-LINE  ( addr u1 fid -- u2 flag ior ) 
+;
+;         >r over swap r> read-file
 ;         ?dup if exit then 2dup over + swap ?do
 ;         i c@ $1A = if i rot - fh @ file-size
 ;         drop rwp! leave then i c@ 13 = if over
@@ -8093,7 +8126,7 @@ nscr:
 
   header 1,'EMPTY-BUFFERS',,1
 mtbuf:
-  ld  hl,7fffh
+  ld  hl,0x7fff
   ld  (bnum1),hl
   jp  next
 
@@ -8104,7 +8137,7 @@ update:
   call  docol
   dw  qopen
   dw  bnum,fetch
-  dw  lit,8000h
+  dw  lit,0x8000
   dw  or_
   dw  bnum,store
   dw  exit
@@ -8168,7 +8201,7 @@ savbuf:
   dw  zless
   dw  zbran,savbuf1
   dw  bnum,fetch
-  dw  lit,7fffh
+  dw  lit,0x7fff
   dw  and_
   dw  dupp
   dw  bnum,store
@@ -8203,7 +8236,7 @@ block:
   call  docol
   dw  qopen
   dw  bnum,fetch
-  dw  lit,7fffh
+  dw  lit,0x7fff
   dw  and_,over,subb
   dw  zbran,block1
   dw  dupp,buffer,drop
@@ -8571,7 +8604,7 @@ save1:
   dw  clit
   db  cold7-cold6
   dw  cmove
-  dw  lit,100h
+  dw  lit,0x0100
   dw  dpp,fetch
   dw  over,subb
   dw  rat,writf ; save application
@@ -8930,7 +8963,7 @@ repr1:
 repr2:
   dw  fdup    ; begin
   dw  flit
-  db  81h,0,0,0
+  db  0x81,0,0,0
   dw  fles,zequ
   dw  zbran,repr3 ; while
   dw  ften,fslas
@@ -8939,7 +8972,7 @@ repr2:
 repr3:
   dw  fdup    ; begin
   dw  flit
-  db  7dh,4ch,0cch,0cdh
+  db  0x7d,0x4c,0xcc,0xcd
   dw  fles
   dw  zbran,repr4 ; while
   dw  ften,fstar
@@ -9479,7 +9512,7 @@ fatan:
   header 1,'PI'
 fpi:
   call  dofcon
-  db  82h,49h,0fh,0dbh  ; pi
+  db  0x82,0x49,0x0f,0xdb  ; pi
 
 ; FRANDOM  ( r1 -- r2 )
 
@@ -9506,21 +9539,21 @@ rand1:
   dec hl
   ld  d,(hl)
   dec hl
-  ld  (hl),80h  ; make positive
+  ld  (hl),0x80  ; make positive
   dec hl
   ld  e,(hl)
-  ld  (hl),80h  ; fix exponent
+  ld  (hl),0x80  ; fix exponent
   call  fad6    ; normalise
   ld  hl,rand4
   call  str
   jp  svop
 
 rand2:
-  db  98h,35h,44h,7ah
+  db  0x98,0x35,0x44,0x7a
 rand3:
-  db  68h,28h,0b1h,46h
+  db  0x68,0x28,0xb1,0x46
 rand4:
-  db  80h,31h,41h,59h   ; seed
+  db  0x80,0x31,0x41,0x59   ; seed
 
   ; cseg ; XXX OLD
 
@@ -9604,7 +9637,7 @@ zro:
 ; overflow - set regs to maximum, set cy
 
 ovf:
-  ld  bc,7fffh
+  ld  bc,0x7fff
   ld  a,c
   ld  d,c
   scf
@@ -9617,7 +9650,7 @@ ovf:
 ; exit  - bcd (packed), a=exp, flags set
 
 chs:
-  ld  a,80h
+  ld  a,0x80
   jp  fab1
 
 ;
@@ -9641,7 +9674,7 @@ fab:
 fab1:
   ld  hl,accs
   and (hl)
-  xor 80h
+  xor 0x80
   ld  (hl),a    ; fall thru tst
 
 ;
@@ -9683,7 +9716,7 @@ lod:
   inc hl
   ld  d,(hl)
   ld  l,a
-  or  80h
+  or  0x80
   ld  b,a
   xor l
   call  strr
@@ -9755,7 +9788,7 @@ fcmp1:
 ;
 
 fsu:
-  ld  a,80h   ; mask to change operand sign
+  ld  a,0x80   ; mask to change operand sign
   jp  fad1
 
 ;
@@ -9779,7 +9812,7 @@ fad1:
 
   ld  l,b   ; unpack
   ld  a,b
-  or  80h
+  or  0x80
   ld  b,a
   xor l   ; generate subtraction flag
   ld  hl,accs
@@ -9945,7 +9978,7 @@ mdex:
   rra     ; carry to sign
   xor b   ; carry and sign must differ
   ld  a,b   ; result exp plus bias
-  ld  b,80h   ; exp bias, sign mask, most sig bit
+  ld  b,0x80   ; exp bias, sign mask, most sig bit
   jp  p,mdex1   ; if over or underflow
   sub b   ; remove excess exp bias
   ret z   ; return if underflow
@@ -10286,7 +10319,7 @@ shr3:
 fcpl:
   ld  hl,accs   ; change accum sign
   ld  a,(hl)
-  xor 80h
+  xor 0x80
   ld  (hl),a
   xor a   ; complement fraction
   ld  l,a
@@ -10368,7 +10401,7 @@ rondr1:
   ret nz
   inc b
   ret nz
-  ld  b,80h   ; new 1st fraction
+  ld  b,0x80   ; new 1st fraction
   ld  a,e   ; inc exp
   add a,1   ; adjust cy
   ld  e,a
@@ -10388,11 +10421,11 @@ flt:
   ld  b,a
   ld  a,l
 flt1:
-  xor 80h   ; apply exponent bias
+  xor 0x80   ; apply exponent bias
   ld  hl,acce
   ld  (hl),a
   inc hl
-  ld  (hl),80h  ; assume positive accum sign
+  ld  (hl),0x80  ; assume positive accum sign
   ld  a,b   ; set cy if integer negative
   and a
   rla
@@ -10410,7 +10443,7 @@ fix:
   and a
   jp  z,zro   ; zero
   ld  a,e
-  add a,80h-1   ; add bias-1
+  add a,0x80-1   ; add bias-1
   sub (hl)    ; shift count -1
   ret c   ; accum too large
   cp  31    ; compare to large shift
@@ -10441,7 +10474,7 @@ fix:
 rnd:
   call  tstr
   call  m,chss
-  cp  98h
+  cp  0x98
   ret nc    ; no fraction
   ld  hl,ffiv   ; 0.5
   call  fad
@@ -10455,11 +10488,11 @@ rnd:
 
 flr:
   ld  e,d
-  cp  98h
+  cp  0x98
   ret nc    ; no fraction
 flr1:
   ld  e,a
-  ld  a,80h   ; unpack b
+  ld  a,0x80   ; unpack b
   or  b
   ld  b,a
   ld  a,(accs)
@@ -10473,12 +10506,12 @@ flr1:
 flr2:
   dec d
 flr3:
-  ld  a,98h
+  ld  a,0x98
   sub e
   call  bcd_shr
   pop af
   call  nc,rondr1 ; incr bcd
-  ld  a,98h
+  ld  a,0x98
   ld  (acce),a
   ld  a,d
   jp  c,flr4
@@ -10515,7 +10548,7 @@ fin:
   inc a
   ld  (finstr+2),a
 
-  ld  a,80h   ; set sign positive
+  ld  a,0x80   ; set sign positive
   ld  (finsgn),a
   xor a
   ld  (finpt),a ; clear decimal point flag
@@ -10578,8 +10611,8 @@ fin7:
   call  fmu
   call  savf1
   pop af    ; convert digit to floating point
-  ld  bc,0000h
-  ld  de,0008h  ; e=8
+  ld  bc,0x0000
+  ld  de,0x0008  ; e=8
   call  flt
   ld  hl,f1   ; add to old value
   call  fad
@@ -10672,7 +10705,7 @@ fin15:
 fin16:
   call  fmu   ; mul by 10
   ret c   ; overflow
-  ld  a,0ffh
+  ld  a,0xff
   jp  fin15
 
 ; get next char, return z if end reached
@@ -10704,7 +10737,7 @@ sqr:
   call  savf1
   and a
   rra
-  add a,40h
+  add a,0x40
   call  savf2
   ld  d,5
 sqr1:
@@ -10727,16 +10760,16 @@ sqr1:
 exp:
   ld  hl,ln2
   call  fdi
-  cp  88h
+  cp  0x88
   jp  nc,ovf
-  cp  68h
+  cp  0x68
   ld  hl,fone
   jp  c,lod
   call  savf2
   call  flr
   call  savf1
   ld  a,e
-  add a,81h
+  add a,0x81
   jp  z,exp1
   push  af
   call  lodf2
@@ -10758,15 +10791,15 @@ exp1:
 
 exp2:
   db  7
-  db  74h,59h,88h,7ch
-  db  77h,26h,97h,0e0h
-  db  7ah,1eh,1dh,0c4h
-  db  7ch,63h,50h,5eh
-  db  7eh,75h,0feh,1ah
+  db  0x74,0x59,0x88,0x7c
+  db  0x77,0x26,0x97,0x00e0
+  db  0x7a,0x1e,0x1d,0xc4
+  db  0x7c,0x63,0x50,0x5e
+  db  0x7e,0x75,0xfe,0x1a
 ln2:
-  db  80h,31h,72h,18h   ; ln2
+  db  0x80,0x31,0x72,0x18   ; ln2
 fone:
-  db  81h,0,0,0   ; 1.0
+  db  0x81,0,0,0   ; 1.0
 
 ; log
 
@@ -10774,9 +10807,9 @@ log:
   call  tstr
   jp  m,ovf   ; neg
   jp  z,ovf   ; zero
-  xor 80h
+  xor 0x80
   push  af
-  ld  a,80h
+  ld  a,0x80
   ld  hl,log1
   call  poly
   call  savf1
@@ -10795,15 +10828,15 @@ log:
 
 log1:
   db  9
-  db  82h,94h,0eeh,0d8h
-  db  84h,7dh,0aah,0a9h
-  db  86h,0bfh,99h,7dh
-  db  87h,28h,0e5h,7bh
-  db  87h,0c0h,71h,8ah
-  db  87h,14h,95h,6eh
-  db  86h,0a0h,1eh,0b2h
-  db  85h,02h,7ah,0adh
-  db  83h,8dh,9dh,09h
+  db  0x82,0x94,0xee,0xd8
+  db  0x84,0x7d,0xaa,0xa9
+  db  0x86,0xbf,0x99,0x7d
+  db  0x87,0x28,0xe5,0x7b
+  db  0x87,0x00c0,0x71,0x8a
+  db  0x87,0x14,0x95,0x6e
+  db  0x86,0x00a0,0x1e,0xb2
+  db  0x85,0x02,0x7a,0xad
+  db  0x83,0x8d,0x9d,0x09
 
 ; sin / cos
 
@@ -10813,7 +10846,7 @@ cos:
 sin:
   or  a
   ret z
-  cp  99h
+  cp  0x99
   jp  nc,ovf
   ld  hl,f2pi
   call  fdi
@@ -10845,26 +10878,26 @@ sin1:
   jp  polx
 
 sin2:
-  db  7fh,0,0,0   ; 0.25
+  db  0x7f,0,0,0   ; 0.25
 
 sin3:
   db  5
-  db  86h,1eh,0d7h,0fbh
-  db  87h,99h,26h,64h
-  db  87h,23h,34h,58h
-  db  86h,0a5h,5dh,0e1h
+  db  0x86,0x1e,0xd7,0xfb
+  db  0x87,0x99,0x26,0x64
+  db  0x87,0x23,0x34,0x58
+  db  0x86,0xa5,0x5d,0xe1
 f2pi:
-  db  83h,49h,0fh,0dbh  ; 2pi
+  db  0x83,0x49,0x0f,0xdb  ; 2pi
 
 fpi2:
-  db  81h,49h,0fh,0dbh  ; pi/2
+  db  0x81,0x49,0x0f,0xdb  ; pi/2
 
 ; atan
 
 atan:
   call  tstr
   call  m,chss    ; make positive
-  cp  81h
+  cp  0x81
   jp  c,atan1   ; < 1
   ld  hl,atan3
   push  hl
@@ -10905,20 +10938,20 @@ atan4:
 atan5:
   db  2
 atan6:
-  db  81h,5dh,0b3h,0d7h
-  db  81h,80h,0,0   ; -1.0
+  db  0x81,0x5d,0xb3,0xd7
+  db  0x81,0x80,0,0   ; -1.0
 
 atan7:
   db  4
-  db  7eh,83h,35h,62h
-  db  7eh,4ch,24h,50h
-  db  7fh,0aah,0a9h,79h
-  db  81h,0,0,0
+  db  0x7e,0x83,0x35,0x62
+  db  0x7e,0x4c,0x24,0x50
+  db  0x7f,0xaa,0xa9,0x79
+  db  0x81,0,0,0
 
 atan8:
-  db  7fh,09h,38h,0a3h
+  db  0x7f,0x09,0x38,0xa3
 atan9:
-  db  80h,06h,0ah,92h
+  db  0x80,0x06,0x0a,0x92
 
 atan10:
   ds  4
@@ -10991,10 +11024,10 @@ lodf2:
 ften:
   call  tat   ; fconstant
 ften1:
-  db  84h,20h,0,0 ; 10.0
+  db  0x84,0x20,0,0 ; 10.0
 
 ffiv:
-  db  80h,0,0,0 ; 0.5
+  db  0x80,0,0,0 ; 0.5
 
 acce:
   ds  5   ; accumulator exponent
@@ -11104,7 +11137,7 @@ fprun1:
 ; }}} **********************************************************
 ; XXX {{{
 
-topnfa  equ lnk   ; nfa of top word in forth vocab
+topnfa  equ next_nfa   ; nfa of top word in forth vocab
 topxt equ cfadr   ; xt  of top word in forth vocab
 
 ;   cseg ; XXX OLD
@@ -11120,15 +11153,14 @@ initdph equ $
 ; MOVE-PATCH  ( -- )
 
 movpat:
-  ld  a,44h   ; change to LD B,H
-  ld  (cldd4),a
-  ld  a,4Dh   ; change to LD C,L
-  ld  (cldd5),a
-  ld  hl,cold
-  ld  (cldd7),hl  ; patch myself out
-  jp  (hl)
+;;  ld  a,0x44   ; change to LD B,H
+;;  ld  (cldd4),a
+;;  ld  (cldd5),a
+;;  ld  hl,cold
+;;  ld  (cldd7),hl  ; patch myself out
+;;  jp  (hl)
 
-  end cldd    ; start address
+  end cold_boot    ; start address
 
 ; End
 
