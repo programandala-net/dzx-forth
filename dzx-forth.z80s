@@ -12,7 +12,7 @@ yes equ not no
 ; Date last revised
 
 date  macro
-  db  '2014-12-18T04:11'
+  db  '2014-12-18T04:38'
   endm
 
 ; Modification level
@@ -273,9 +273,11 @@ dcs macro string1,string2,string3,string4 ; allow comma separated
 ; ------------------------------
 ; Macro to ignore next 1 bytes
 
-ignore1  macro
-  db  0x00fe  ; cp n
-   endm
+; XXX OLD -- not needed anymore
+; XXX TODO -- how does it worked?
+;;ignore1  macro
+;;  db  0x00fe  ; cp n
+;;   endm
 
 ; ------------------------------
 ; Macro to generate fdb table
@@ -575,7 +577,6 @@ bmovu1:
 bmove:
   call  cmpu
   jp  c,bmovu
-; jp  bmovd
 
 ; move block downwards  HL = source, DE = destination, BC = count
 
@@ -812,7 +813,8 @@ trat:
   header 1,'2DROP'
 tdrop:
   pop hl
-; jp  next
+  pop hl ; XXX NEW
+  jp  next ; XXX NEW -- because headers and code share the same zone
 
 ; DROP  ( x -- )
 
@@ -1039,8 +1041,8 @@ tstor1:
   inc hl
   ld  (hl),d
   inc hl
-; jp  store1
-  ignore1
+  jp  store1 ; XXX NEW -- because headers and code share the same zone
+;  ignore1 ; XXX OLD
 
 ; !  ( x a-addr -- )
 
@@ -1125,8 +1127,8 @@ move:
   header 1,'ERASE'
 erase:
   ld  e,0
-; jp  fill1
-  ignore1
+  jp  fill1  ; XXX NEW -- because headers and code share the same zone
+;  ignore1 ; XXX OLD
 
 ; FILL  ( c-addr u char -- )
 
@@ -2469,13 +2471,15 @@ sstr:
   header 1,'CAPS'
 caps:
   ld  a,1
-  ignore1
+  jp  dcaps1 ; XXX NEW -- because headers and code share the same zone
+;  ignore1 ; XXX OLD
 
 ; -caps  ( -- )   disable caps COMPARE/SEARCH
 
   header x,'-CAPS'
 dcaps:
   xor a
+dcaps1:
   ld  (scaps),a
   jp  next
 
@@ -2648,7 +2652,7 @@ pof:
   or  h
   jp  z,zbran1
   push  de
-; jp  bran
+  jp  bran  ; XXX NEW -- because headers and code share the same zone
 
 ; branch  ( -- )
 
@@ -2687,7 +2691,7 @@ xloop:
 xloop1:
   inc bc    ; skip over branch
   inc bc
-; jp  unloo
+  jp  unloo  ; XXX NEW -- because headers and code share the same zone
 
 ; UNLOOP  ( -- )
 
@@ -2771,6 +2775,7 @@ bal:
   call  docre
 bal1:
   ds  2
+  ; XXX FIXME -- jp next ?
 
 ; +BAL  ( -- )      1 bal +!
 
@@ -2869,7 +2874,7 @@ ahead:
 ;         ;immediate
 
   header 1,'ELSE',1,1
-elsee:
+else_:
   call  docol
   dw  ahead
   dw  swap
@@ -2965,7 +2970,7 @@ ido2:
   add hl,de
   jp  push_hl
 
-   if 0
+   if 0 ; XXX --  this was in DX-Forth
 
 ; I'  ( -- x )
 
@@ -3178,8 +3183,8 @@ of:
 
 ; ENDOF  ( addr1 -- addr2 ) aka else endof
 
-  header 1,'ENDOF',1,,elsee
-endof equ elsee
+  header 1,'ENDOF',1,,else_
+endof equ else_
 
 ; [ELSE]  ( -- )    1 begin token 2dup upper dup if 2dup
 ;       s" [IF]" compare if 2dup s" [ELSE]"
@@ -3189,7 +3194,7 @@ endof equ elsee
 ;       ;immediate
 
   header 1,'[ELSE]',1,1
-pels:
+bracket_else:
   call  docol
   dw  one
 pels1:
@@ -3234,19 +3239,18 @@ pels7:
 ; [IF]  ( flag -- ) 0= if [compile] [else] then ;immediate
 
   header 1,'[IF]',1,1  ; ANS
-pif:
+bracket_if:
   pop hl
   ld  a,l
   or  h
-  jp  z,pels
+  jp  z,bracket_else
   jp  next
 
 ; [THEN]  ( -- )    aka noop [then] immediate
 
+  ; XXX -- why 'noop' alias but 'next' equ?
   header 1,'[THEN]',1,,noop
-pthen equ next
-
-; end
+bracket_then equ next
 
 ; }}} **********************************************************
 ; {{{ XXX
@@ -3276,7 +3280,7 @@ udotr:
   ld  hl,0
   ex  (sp),hl
   push  hl
-; jp  ddotr
+  jp  ddotr ; XXX NEW -- because headers and code share the same zone
 
 ; D.R  ( d u -- )   >r (d.) r> over - spaces type
 
@@ -3308,7 +3312,7 @@ dotr:
 udot:
   ld  hl,0
   push  hl
-; jp  ddot
+  jp  ddot ; XXX NEW -- because headers and code share the same zone
 
 ; D.  ( d -- )    0 d.r space
 
@@ -3806,7 +3810,7 @@ key:
 space:
   ld  l,32
   push  hl
-; jp  emit
+  jp  emit ; XXX NEW -- because headers and code share the same zone
 
 ; EMIT  ( char -- ) (vemit) @execute 1 out +! pause
 
@@ -4092,7 +4096,8 @@ immed:
   header 1,'SMUDGE',,1 ; FIG
 smudg:
   ld  e,0x20
-  ignore1
+  jp  xnfa1 ; XXX NEW -- because headers and code share the same zone
+;  ignore1 ; XXX OLD
 
 ; xnfa  ( x -- )    toggle nfa bit
 
@@ -4930,12 +4935,13 @@ tbody:
   ld  de,3
   jp  plus_de
 
-; body>  ( addr -- xt ) 3 -
+; BODY>  ( addr -- xt ) 3 -
 ;
-; hdr x,'BODY>'
-;fbody:
+; XXX -- this word was commented out in DX-Forth, why?
+  header x,'BODY>'
+fbody:
   ld  de,-3
-; jp  plus_de
+  jp  plus_de
 
 ; n>link  ( nfa -- lfa )
 
@@ -5320,7 +5326,7 @@ source:
 parse:
   ld  hl,0
   push  hl
-; jp  ppars
+  jp  ppars ; XXX NEW -- because headers and code share the same zone
 
 ; (parse)  ( char f -- c-addr u ) 2>r source >in @ /string r> if tuck
 ;         r@ skip over - >in +! then 2dup r>
