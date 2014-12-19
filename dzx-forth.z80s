@@ -12,8 +12,14 @@ yes equ not no
 ; Date last revised
 
 version macro
-  db 'A-00-201412190135'
+  db 'A-00-201412190200'
   endm
+  ; XXX NOTE about the version
+  ; Just before convertir all
+  ;   jp push_de/hl
+  ; To
+  ;   push de/hl
+  ;   jp next
 
 ; Modification level
 
@@ -126,13 +132,13 @@ sp_char  equ 0x20 ; space
 ;
 ; FORTH 8080  Forth preservation rules
 ; ----- ----  ------------------------
-; IP  BC  Interpretive pointer. Should be preserved across
-;     forth words.
-; SP  SP  Data stack pointer. Should be used only as data
-;     stack across forth words. May be used within forth
-;     words if restored before NEXT.
-;   DE  Input only when push_de called.
-;   HL  Input only when push_hl called.
+; IP    BC    Interpretive pointer. Should be preserved across
+;             forth words.
+; SP    SP    Data stack pointer. Should be used only as data
+;             stack across forth words. May be used within forth
+;             words if restored before NEXT.
+;       DE    Input only when push_de called.
+;       HL    Input only when push_hl called.
 ;
 ; comment conventions:
 ;
@@ -155,7 +161,7 @@ sp_char  equ 0x20 ; space
 ; ANS ANS FORTH Standard (document dpANS-6, June 1993)
 
 
-; Memory allocation
+; Memory allocation ; XXX OLD
 
 ; The memory above LIMIT is used only by the interpreter.  This space
 ; is not wasted for turnkey applications as LIMIT, user variables and
@@ -197,6 +203,26 @@ sp_char  equ 0x20 ; space
 ; lfa dw previous_nfa
 ; cfa dw code_address
 ; pfa ds ...              ; data or code
+
+; Memory map ; XXX TODO -- in progress
+
+
+; ----- end of memory
+; UDG
+; ...
+; WORD buffer
+; parsed string buffer
+; TIB
+; file descriptor
+; block buffer
+; boot jumps
+; ---- DZX-Forth's org
+; ---- BASIC's RAMTOP
+; ...
+; BASIC program and variables
+; system variables
+; screen memory
+; ROM
 
 ; }}} **********************************************************
 ; Macros {{{
@@ -328,23 +354,6 @@ hm  equ $   ; system definitions and header memory
 dnfa:
   db  0   ; dummy nfa - don't remove! ; XXX NEW -- changed its position in DX-Forth 4.09
 
-;
-; Application segment
-;
-;   cseg ; XXX OLD
-
-;  jp  cold_boot ; XXX OLD
-
-; XXX OLD
-;;  db  'Z3ENV'   ; Z-System signature    0103
-;;  db  1   ; external environment    0108
-;;z3eadr: 
-;;  dw  0   ; ZENV address      0109
-
-; The following 5 bytes are reserved exclusively for user applications
-
-; XXX OLD
-;;  db  0,0,0,0,0 ; user patch bytes    010B
 
 ; If the following byte is non-zero, a warm boot is NOT performed on
 ; exit to CPM.
@@ -368,10 +377,17 @@ upp:
 rpp:
   ds  cw    ; return stack pointer  NEXT-4  0119
 
-push_de:
-  push  de    ; 11T     NEXT-2  011B
-push_hl:
-  push  hl    ; 11T     NEXT-1  011C
+; XXX OLD 
+; TODO -- I don't fully understand these yet:
+; I guess push_hl originally ran into 'next'
+; (because the headers were apart)
+; but what about 'push_de'?
+;;push_de:
+;;  push  de    ; 11T     NEXT-2  011B
+;;  jp next ; XXX NEW -- now needed, but makes the whole thing pointless
+;;push_hl:
+;;  push  hl    ; 11T     NEXT-1  011C
+;;  jp next ; XXX NEW -- now needed, but makes the whole thing pointless
 
 ; NOOP  ( -- )
 
