@@ -12,12 +12,8 @@ yes equ not no
 ; Date last revised
 
 version macro
-  db 'A-00-201412182050'
+  db 'A-00-201412190135'
   endm
-
-  ; XXX Last changes:
-  ;
-  ; - Update to DX-Forth 4.09. Compiled.
 
 ; Modification level
 
@@ -46,7 +42,7 @@ retro   equ no  ; classic forth behaviours
 
 ; Memory sizes
 
-sm  equ 0x6590 ; 26000, start of system memory
+sm  equ 0x8000 ; start of system memory
 
 cw  equ 2   ; cell size (bytes)
 fw  equ 4 ; float size (bytes)
@@ -56,14 +52,15 @@ fw  equ 4 ; float size (bytes)
 us  equ 128   ; user variable space
 rts equ 256   ; return stack space
 
-tibsiz  equ 80    ; TIB buffer size
-bufsiz  equ 10*128    ; max block size (multiple of 128)
-fhsiz   equ 6+36    ; file handle size (keep even)
-pfsiz   equ 16+1    ; max path/filename size
-wbsiz   equ 31+5    ; min WORD buffer size
-pssiz   equ 255   ; max parsed string buffer size
-fdsiz   equ pfsiz+(4*cw)  ; file descriptor size
-pno     equ 68    ; pictured numeric buffer size
+tib_size  equ 80    ; TIB buffer size
+;block_size                    equ 10*128    ; max block size (multiple of 128) ; XXX OLD
+block_size                    equ 1024      ; max block size
+file_handle_size              equ 6+36      ; file handle size (keep even)
+filename_size                 equ 10        ; max path/filename size
+word_buffer_size              equ 31+5      ; min WORD buffer size
+parsed_string_buffer_size     equ 255       ; max parsed string buffer size
+file_descriptor_size          equ filename_size+(4*cw)  ; file descriptor size ; XXX OLD
+pictured_numeric_buffer_size  equ 68        ; pictured numeric buffer size
 
 ; DOS and memory equates
 
@@ -118,7 +115,8 @@ ff_char  equ 0x0c ; form feed
 cr_char  equ 0x0d ; carriage return
 ;;can equ 0x18 ; ctl-x 
 ctrl_z_char  equ 0x1a ; ctl-z ;; XXX OLD -- still used in old code
-escape  equ 0x1b ; escape
+esc_char  equ 0x1b ; escape
+sp_char  equ 0x20 ; space
 
 
 ; }}} **********************************************************
@@ -156,14 +154,14 @@ escape  equ 0x1b ; escape
 ; FIG Fig-FORTH model
 ; ANS ANS FORTH Standard (document dpANS-6, June 1993)
 
-;
+
 ; Memory allocation
-;
+
 ; The memory above LIMIT is used only by the interpreter.  This space
 ; is not wasted for turnkey applications as LIMIT, user variables and
 ; stacks are relocated to EM giving applications more free ram (as
 ; indicated by UNUSED).
-;
+
 ; EM  |-------------  end of memory
 ; |
 ; DPH |-------------
@@ -198,6 +196,7 @@ escape  equ 0x1b ; escape
 ;     ds length           ; name 
 ; lfa dw previous_nfa
 ; cfa dw code_address
+; pfa ds ...              ; data or code
 
 ; }}} **********************************************************
 ; Macros {{{
@@ -207,7 +206,7 @@ escape  equ 0x1b ; escape
 
 previous_nfa defl  0   ; initial link pointer (end of chain)
 
-header macro enabled,name,immediate,fl,alias_xt
+hdr macro enabled,name,immediate,fl,alias_xt
   ; enabled  = enable the header? (0=disable)
   ; name = name string
   ; immediate  = immediate
@@ -293,7 +292,7 @@ gfdb   macro
 _a  defl  fdbs
    rept nfd
   dw  _a
-_a  defl  _a+fdsiz
+_a  defl  _a+file_descriptor_size
    endm
    endm
 
@@ -308,18 +307,21 @@ _a  defl  _a+fdsiz
 
   org sm
 
+  jp  cold_boot
+;  jp  warm_boot  ; XXX TODO
+
 sfb:
-  ds  bufsiz    ; screen block buffer
+  ds  block_size    ; block buffer
 fdbs:
-  ds  fdsiz*nfd ; file descriptor blocks
+  ds  file_descriptor_size*nfd ; file descriptor blocks
 tib:
-  ds  tibsiz    ; TIB
+  ds  tib_size  ; TIB (terminal input buffer)
 
 psb:
    if retro
-  ds  pssiz   ; buffer S"
+  ds  parsed_string_buffer_size   ; buffer S"
    else
-  ds  pssiz+wbsiz ; buffer S" WORD
+  ds  parsed_string_buffer_size+word_buffer_size ; buffer S" WORD
    endif
 
 hm  equ $   ; system definitions and header memory
@@ -331,7 +333,7 @@ dnfa:
 ;
 ;   cseg ; XXX OLD
 
-  jp  cold_boot
+;  jp  cold_boot ; XXX OLD
 
 ; XXX OLD
 ;;  db  'Z3ENV'   ; Z-System signature    0103
@@ -373,7 +375,7 @@ push_hl:
 
 ; NOOP  ( -- )
 
-  header 1,'NOOP'
+  hdr 1,'NOOP'
 noop  equ $
 
 ; NEXT  -  Forth Address Interpreter
@@ -499,7 +501,7 @@ sbuf  equ $
 
 ; Buffer for temporary filename/fcb
 
-zbsiz equ pfsiz+1+36
+zbsiz equ filename_size+1+36
 
 zb1:
   ds  zbsiz
@@ -537,14 +539,6 @@ cmps:
   or  a
   ret p
   scf
-  ret
-
-upc:
-  cp  'a' ; make uppercase a
-  ret c
-  cp  'z'+1
-  ret nc
-  xor 0x20
   ret
 
 gdrv:
@@ -616,7 +610,7 @@ amovd:
 
 ; runtime for colon definitions
 
-docol:
+do_colon:
   ld  hl,(rpp)  ; push IP onto return stack
   dec hl
   ld  (hl),b
@@ -639,7 +633,7 @@ douse:
 
 ; UNNEST  ( -- )
 
-  header 1,'UNNEST'
+  hdr 1,'UNNEST'
 unnest:
   ld  hl,(rpp)
   inc hl
@@ -649,7 +643,7 @@ unnest:
 
 ; (EXIT)  ( -- )    exit colon definition
 
-  header 1,'(EXIT)'
+  hdr 1,'(EXIT)'
 exit:
   ld  bc,next
 exit1:
@@ -663,14 +657,14 @@ exit1:
 
 ; EXECUTE  ( xt -- )
 
-  header 1,'EXECUTE'
+  hdr 1,'EXECUTE'
 execute:
   ret
 
 ; @EXECUTE  ( a-addr -- )
 
-  header 1,'@EXECUTE'
-aexec:
+  hdr 1,'@EXECUTE'
+fetch_execute:
   pop hl
   ld  a,(hl)
   inc hl
@@ -682,7 +676,7 @@ aexec:
 
 ; clit  ( -- char )
 
-  header x,'CLIT'  ; FIG
+  hdr x,'CLIT'  ; FIG
 clit:
   ld  a,(bc)
   inc bc
@@ -696,7 +690,7 @@ apush:
 
 ; lit  ( -- n )
 
-  header x,'LIT'   ; FIG
+  hdr x,'LIT'   ; FIG
 lit:
   ld  a,(bc)
   ld  l,a
@@ -708,7 +702,7 @@ lit:
 
 ; 2lit  ( -- d )
 
-  header x,'2LIT'
+  hdr x,'2LIT'
 tlit:
   ld  a,(bc)
   ld  l,a
@@ -731,7 +725,7 @@ tlit:
 
 ; SP@  ( -- addr )
 
-  header 1,'SP@'
+  hdr 1,'SP@'
 sp_fetch:
   ld  hl,0
   add hl,sp
@@ -739,30 +733,30 @@ sp_fetch:
 
 ; SP!  ( addr -- )
 
-  header 1,'SP!'
-spsto:
+  hdr 1,'SP!'
+sp_store:
   pop hl
   ld  sp,hl
   jp  next
 
 ; RP@  ( -- addr )
 
-  header 1,'RP@'
-rpat:
+  hdr 1,'RP@'
+rp_fetch:
   ld  hl,(rpp)
   jp  push_hl
 
 ; RP!  ( addr -- )
 
-  header 1,'RP!'
-rpsto:
+  hdr 1,'RP!'
+rp_store:
   pop hl
   ld  (rpp),hl
   jp  next
 
 ; >R  ( x -- )
 
-  header 1,'>R'
+  hdr 1,'>R'
 to_r:
   ld  hl,(rpp)
   pop de
@@ -775,7 +769,7 @@ to_r:
 
 ; R>  ( -- x )
 
-  header 1,'R>'
+  hdr 1,'R>'
 from_r:
   ld  hl,(rpp)
   ld  e,(hl)
@@ -788,25 +782,25 @@ from_r:
 
 ; R@  ( -- x )
 
-  header 1,'R@'
-rat:
+  hdr 1,'R@'
+r_fetch:
   ld  hl,(rpp)
   jp  fetch1
 
 ; 2>R  ( x1 x2 -- )
 
-  header 1,'2>R'
-ttor:
+  hdr 1,'2>R'
+two_to_r:
   ld  hl,(rpp)
   ld  de,-cw*2
   add hl,de
   ld  (rpp),hl
-  jp  tstor1
+  jp  two_store1
 
 ; 2R>  ( -- x1 x2 )
 
-  header 1,'2R>'
-tfrom:
+  hdr 1,'2R>'
+two_from_r:
   ld  hl,(rpp)
   push  hl
   ld  de,cw*2
@@ -816,14 +810,14 @@ tfrom:
 
 ; 2R@  ( -- x1 x2 )
 
-  header 1,'2R@'
-trat:
+  hdr 1,'2R@'
+two_r_fetch:
   ld  hl,(rpp)
   jp  tat1
 
 ; 2DROP  ( x1 x2 -- )
 
-  header 1,'2DROP'
+  hdr 1,'2DROP'
 two_drop:
   pop hl
   pop hl ; XXX NEW
@@ -831,22 +825,22 @@ two_drop:
 
 ; DROP  ( x -- )
 
-  header 1,'DROP'
+  hdr 1,'DROP'
 drop:
   pop hl
   jp  next
 
 ; DUP  ( x -- x x )
 
-  header 1,'DUP'
-dupp:
+  hdr 1,'DUP'
+dup:
   pop hl
   push  hl
   jp  push_hl
 
 ; ?DUP  ( x -- 0 | x x )
 
-  header 1,'?DUP'
+  hdr 1,'?DUP'
 qdup:
   pop hl
   ld  a,l
@@ -857,7 +851,7 @@ qdup:
 
 ; SWAP  ( x1 x2 -- x2 x1 )
 
-  header 1,'SWAP'
+  hdr 1,'SWAP'
 swap:
   pop hl
   ex  (sp),hl
@@ -865,7 +859,7 @@ swap:
 
 ; OVER  ( x1 x2 -- x1 x2 x1 )
 
-  header 1,'OVER'
+  hdr 1,'OVER'
 over:
   pop de
   pop hl
@@ -874,7 +868,7 @@ over:
 
 ; ROT  ( x1 x2 x3 -- x2 x3 x1 )
 
-  header 1,'ROT'
+  hdr 1,'ROT'
 rot:
   pop de
   pop hl
@@ -883,7 +877,7 @@ rot:
 
 ; -ROT  ( x1 x2 x3 -- x3 x1 x2 )
 
-  header 1,'-ROT'
+  hdr 1,'-ROT'
 drot:
   pop hl
   pop de
@@ -893,7 +887,7 @@ drot:
 
 ; ROLL  ( xu xn .. x0 u -- xn .. x0 xu )
 
-  header 1,'ROLL'
+  hdr 1,'ROLL'
 roll:
   pop hl
   add hl,hl
@@ -921,15 +915,15 @@ roll:
 
 ; -ROLL  ( xu .. xu+1 x0 u -- x0 xu .. xu+1 )
 
-  header 1,'-ROLL'
+  hdr 1,'-ROLL'
 
 ; XXX OLD -- DX-Forth 4.00
 ;;droll:
-;;  call  docol
-;;  dw  cells,ttor
+;;  call  do_colon
+;;  dw  cells,two_to_r
 ;;  dw  sp_fetch,sp_fetch,tuck
-;;  dw  rat,cmove
-;;  dw  sp_fetch,tfrom
+;;  dw  r_fetch,cmove
+;;  dw  sp_fetch,two_from_r
 ;;  dw  rot,plus,store
 ;;  dw  exit
 
@@ -961,7 +955,7 @@ droll:
 
 ; PICK  ( xu .. x1 x0 u -- xu .. x1 x0 xu )
 
-  header 1,'PICK'
+  hdr 1,'PICK'
 pick:
   pop hl
   add hl,hl
@@ -970,7 +964,7 @@ pick:
 
 ; NIP  ( x1 x2 -- x2 )
 
-  header 1,'NIP'
+  hdr 1,'NIP'
 nip:
   pop hl
   inc sp
@@ -979,7 +973,7 @@ nip:
 
 ; TUCK  ( x1 x2 -- x2 x1 x2 )
 
-  header 1,'TUCK'
+  hdr 1,'TUCK'
 tuck:
   pop hl
   pop de
@@ -988,7 +982,7 @@ tuck:
 
 ; ><  ( x1 -- x2 )
 
-  header 1,'><'
+  hdr 1,'><'
 bswp:
   pop de
   ld  h,e
@@ -997,7 +991,7 @@ bswp:
 
 ;  2DUP  ( x1 x2 -- x1 x2 x1 x2 )
 
-  header 1,'2DUP'
+  hdr 1,'2DUP'
 tdup:
   pop hl
   pop de
@@ -1007,7 +1001,7 @@ tdup:
 
 ;  2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 
-  header 1,'2SWAP'
+  hdr 1,'2SWAP'
 tswap:
 ; XXX OLD -- DX-Forth 4.00
 ;;  pop de
@@ -1039,7 +1033,7 @@ tswap:
 
 ;  2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
 
-  header 1,'2OVER'
+  hdr 1,'2OVER'
 tover:
   ld  hl,4
   add hl,sp
@@ -1048,9 +1042,9 @@ tover:
 ;  2ROT  ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
 ;  5 roll 5 roll
 
-  header 1,'2ROT'
+  hdr 1,'2ROT'
 trot:
-  call  docol
+  call  do_colon
   dw  clit
   db  5
   dw  roll
@@ -1061,7 +1055,7 @@ trot:
 
 ;  2NIP  ( x1 x2 x3 x4 -- x3 x4 )
 
-  header  1,'2NIP'
+  hdr  1,'2NIP'
 tnip:
   pop  hl
   pop  de
@@ -1073,9 +1067,9 @@ tnip:
 
 ; DEPTH  ( -- u )   sp@ s0 @ swap - 2/
 
-  header 1,'DEPTH'
+  hdr 1,'DEPTH'
 depth:
-  call  docol
+  call  do_colon
   dw  sp_fetch
   dw  szero,fetch
   dw  swap,subb
@@ -1089,7 +1083,7 @@ depth:
 
 ; @  ( a-addr -- x )
 
-  header 1,'@'
+  hdr 1,'@'
 fetch:
   pop hl
 fetch1:
@@ -1101,10 +1095,10 @@ fetch1:
 
 ; 2!  ( x1 x2 a-addr -- )
 
-  header 1,'2!'
-tstor:
+  hdr 1,'2!'
+two_store:
   pop hl
-tstor1:
+two_store1:
   pop de
   ld  (hl),e
   inc hl
@@ -1115,7 +1109,7 @@ tstor1:
 
 ; !  ( x a-addr -- )
 
-  header 1,'!'
+  hdr 1,'!'
 store:
   pop hl
 store1:
@@ -1128,8 +1122,8 @@ store2:
 
 ; C@  ( c-addr -- char )
 
-  header 1,'C@'
-cat:
+  hdr 1,'C@'
+c_fetch:
   pop hl
   ld  l,(hl)
   ld  h,0
@@ -1137,7 +1131,7 @@ cat:
 
 ; C!  ( char c-addr -- )
 
-  header 1,'C!'
+  hdr 1,'C!'
 cstor:
   pop hl
   pop de
@@ -1147,7 +1141,7 @@ cstor1:
 
 ; 2@  ( a-addr -- x1 x2 )
 
-  header 1,'2@'
+  hdr 1,'2@'
 tat:
   pop hl
 tat1:
@@ -1164,7 +1158,7 @@ tat1:
 
 ; +!  ( x a-addr -- )
 
-  header 1,'+!'
+  hdr 1,'+!'
 pstor:
   pop hl
   pop de
@@ -1180,7 +1174,7 @@ pstor1:
 
 ; MOVE  ( addr1 addr2 u -- )
 
-  header 1,'MOVE'  ; ANS
+  hdr 1,'MOVE'  ; ANS
 move:
   ld  l,c
   ld  h,b
@@ -1193,7 +1187,7 @@ move:
 
 ; ERASE  ( addr u -- )
 
-  header 1,'ERASE'
+  hdr 1,'ERASE'
 erase:
   ld  e,0
   jp  fill1  ; XXX NEW -- because headers and code share the same zone
@@ -1201,7 +1195,7 @@ erase:
 
 ; FILL  ( c-addr u char -- )
 
-  header 1,'FILL'
+  hdr 1,'FILL'
 fill:
   pop de
 fill1:
@@ -1224,7 +1218,7 @@ fill3:
 
 ; ON  ( addr -- )   -1 swap !
 
-  header 1,'ON'
+  hdr 1,'ON'
 on:
   pop hl
 on1:
@@ -1233,7 +1227,7 @@ on1:
 
 ; OFF  ( addr -- )  0 swap !
 
-  header 1,'OFF'
+  hdr 1,'OFF'
 off:
   pop hl
 off1:
@@ -1243,7 +1237,7 @@ off1:
 ; XXX OLD -- DX-Forth 4.00
 ; TOGGLE  ( c-addr x -- )
 
-  header 1,'TOGGLE'
+  hdr 1,'TOGGLE'
 toggl:
   pop de
   pop hl
@@ -1256,7 +1250,7 @@ toggl1:
 ; XXX NEW -- DX-Forth 4.09
 ; CTOGGLE  ( x c-addr -- )
 
-  header 1,'CTOGGLE'
+  hdr 1,'CTOGGLE'
 ctog:
   pop hl
   pop de
@@ -1272,7 +1266,7 @@ ctog1:
 
 ; AND  ( x1 x2 -- x3 )
 
-  header 1,'AND'
+  hdr 1,'AND'
 and_:
   pop de
   pop hl
@@ -1286,7 +1280,7 @@ and_:
 
 ; OR  ( x1 x2 -- x3 )
 
-  header 1,'OR'
+  hdr 1,'OR'
 or_:
   pop de
   pop hl
@@ -1300,7 +1294,7 @@ or_:
 
 ; XOR  ( x1 x2 -- x3 )
 
-  header 1,'XOR'
+  hdr 1,'XOR'
 xor_:
   pop de
   pop hl
@@ -1364,7 +1358,7 @@ dnegg:
 
 ; INVERT  ( x1 -- x2 )  one's complement
 
-  header 1,'INVERT'
+  hdr 1,'INVERT'
 invert:
   pop hl
   call  negg1
@@ -1372,12 +1366,12 @@ invert:
 
 ; NOT  ( x1 -- x2 )   aka 0= not
 
-  header 1,'NOT',,,zequ    ; F79 NOT
-nott  equ zequ
+  hdr 1,'NOT',,,zero_equals    ; F79 NOT
+nott  equ zero_equals
 
 ; S>D  ( n -- d )
 
-  header 1,'S>D'
+  hdr 1,'S>D'
 stod:
   ld  hl,0
   pop de
@@ -1389,12 +1383,12 @@ stod:
 
 ; D>S  ( d -- n )     aka drop d>s
 
-  header 1,'D>S',,,drop
+  hdr 1,'D>S',,,drop
 dtos  equ drop
 
 ; NEGATE  ( n1 -- n2 )
 
-  header 1,'NEGATE'
+  hdr 1,'NEGATE'
 negat:
   pop hl
   call  negg
@@ -1402,7 +1396,7 @@ negat:
 
 ; ABS  ( n -- +n )
 
-  header 1,'ABS'
+  hdr 1,'ABS'
 abss:
   pop hl
   call  abs
@@ -1410,7 +1404,7 @@ abss:
 
 ; DNEGATE  ( d1 -- d2 )
 
-  header 1,'DNEGATE'
+  hdr 1,'DNEGATE'
 dnegat:
   pop hl
   pop de
@@ -1419,7 +1413,7 @@ dnegat:
 
 ; DABS  ( d -- +d )
 
-  header 1,'DABS'
+  hdr 1,'DABS'
 dabs:
   pop hl
   pop de
@@ -1428,7 +1422,7 @@ dabs:
 
 ; +  ( x1 x2 -- x3 )
 
-  header 1,'+'
+  hdr 1,'+'
 plus:
   pop de
 plus_de:
@@ -1438,7 +1432,7 @@ plus_de:
 
 ; -  ( x1 x2 -- x3 )
 
-  header 1,'-'
+  hdr 1,'-'
 subb:
   pop de
   pop hl
@@ -1447,7 +1441,7 @@ subb:
 
 ; D+  ( xd1 xd2 -- xd3 )
 
-  header 1,'D+'
+  hdr 1,'D+'
 dplus:
   ld  hl,6
   add hl,sp
@@ -1472,23 +1466,23 @@ dplus:
 
 ; D-  ( xd1 xd2 -- xd3 )  dnegate d+
 
-  header 1,'D-'
+  hdr 1,'D-'
 dsub:
-  call  docol
+  call  do_colon
   dw  dnegat,dplus
   dw  exit
 
 ; M+  ( xd1 n -- xd2 )  s>d d+
 
-  header 1,'M+'    ; ANS
+  hdr 1,'M+'    ; ANS
 mplus:
-  call  docol
+  call  do_colon
   dw  stod,dplus
   dw  exit
 
 ; 1+  ( x1 -- x2 )
 
-  header 1,'1+'
+  hdr 1,'1+'
 onep:
   pop hl
   inc hl
@@ -1496,7 +1490,7 @@ onep:
 
 ; 2+  ( x1 -- x2 )
 
-  header 1,'2+'
+  hdr 1,'2+'
 twop:
   pop hl
   inc hl
@@ -1505,7 +1499,7 @@ twop:
 
 ; 1-  ( x1 -- x2 )
 
-  header 1,'1-'
+  hdr 1,'1-'
 onem:
   pop hl
   dec hl
@@ -1513,7 +1507,7 @@ onem:
 
 ; 2-  ( x1 -- x2 )
 
-  header 1,'2-'
+  hdr 1,'2-'
 twom:
   pop hl
   dec hl
@@ -1583,7 +1577,7 @@ mstarr:
 
 ; UM*  ( u1 u2 -- ud )
 
-  header 1,'UM*'
+  hdr 1,'UM*'
 umstr:
   pop de
   pop hl
@@ -1592,7 +1586,7 @@ umstr:
 
 ; M*  ( n1 n2 -- d )  2dup xor >r abs swap abs um* r> ?dnegate
 
-  header 1,'M*'    ; ANS
+  hdr 1,'M*'    ; ANS
 mstar:
   pop de
   pop hl
@@ -1601,7 +1595,7 @@ mstar:
 
 ; *  ( x1 x2 -- x3 )  um* drop
 
-  header 1,'*'
+  hdr 1,'*'
 star:
   pop de
   pop hl
@@ -1678,7 +1672,7 @@ mum:
 
 ; UM/MOD  ( ud u1 -- u2 u3 )
 
-  header 1,'UM/MOD'
+  hdr 1,'UM/MOD'
 umslm:
   ld  l,c
   ld  h,b
@@ -1731,7 +1725,7 @@ msm2:
 
 ; SM/REM  ( d n1 -- n2 n3 )
 
-  header 1,'SM/REM'
+  hdr 1,'SM/REM'
 smrem:
   ld  l,c
   ld  h,b
@@ -1745,7 +1739,7 @@ smrem1:
 
 ; FM/MOD  ( d n1 -- n2 n3 )
 
-  header 1,'FM/MOD'  ; ANS
+  hdr 1,'FM/MOD'  ; ANS
 fmmod:
   ld  l,c
   ld  h,b
@@ -1769,7 +1763,7 @@ fmmod1:
 ; M/MOD  ( d n1 -- n2 n3 )  fm/mod or sm/rem
 
 ; XXX OLD -- DX-Forth 4.00 -- but kept
-  header x,'M/MOD',,,msmod
+  hdr x,'M/MOD',,,msmod
 
    if floord
 msmod equ fmmod
@@ -1780,26 +1774,26 @@ msmod equ smrem
 ; /MOD  ( n1 n2 -- n3 n4 )  >r s>d r> m/mod
 
 ; XXX NEW -- DX-Forth 4.09 -- instead of 'M/MOD'
-  header 1,'/MOD'
+  hdr 1,'/MOD'
 slmod:
-  call  docol
+  call  do_colon
   dw  to_r,stod
   dw  from_r,msmod
   dw  exit
 
 ; /  ( n1 n2 -- n3 )    /mod nip
 
-  header 1,'/'
+  hdr 1,'/'
 slash:
-  call  docol
+  call  do_colon
   dw  slmod,nip
   dw  exit
 
 ; MOD  ( n1 n2 -- n3 )    /mod drop
 
-  header 1,'MOD'
+  hdr 1,'MOD'
 modd:
-  call  docol
+  call  do_colon
   dw  slmod,drop
   dw  exit
 
@@ -1808,7 +1802,7 @@ modd:
 ;;
 ;;  header 1,'*/MOD'
 ;;ssmod:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  to_r,mstar
 ;;  dw  from_r,msmod
 ;;  dw  exit
@@ -1816,18 +1810,18 @@ modd:
 
 ; XXX NEW -- DX-Forth 4.09
 ;  */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> sm/rem
-  header  1,'*/MOD'
+  hdr  1,'*/MOD'
 ssmod:
-  call  docol
+  call  do_colon
   dw  to_r,mstar
   dw  from_r,smrem
   dw  exit
 
 ; */  ( n1 n2 n3 -- n4 )    */mod nip
 
-  header 1,'*/'
+  hdr 1,'*/'
 ssla:
-  call  docol
+  call  do_colon
   dw  ssmod,nip
   dw  exit
 
@@ -1836,17 +1830,17 @@ ssla:
 ;         r@ um/mod -rot r> um/mod nip swap
 ;         rot 0< if dnegate then
 
-  header 1,'M*/'   ; ANS
+  hdr 1,'M*/'   ; ANS
 mssl:
-  call  docol
+  call  do_colon
   dw  abss,to_r
   dw  tdup,xor_
   dw  swap,abss,to_r
   dw  drot,dabs
-  dw  swap,rat,umstr
+  dw  swap,r_fetch,umstr
   dw  rot,from_r,umstr
   dw  rot,zero,dplus
-  dw  rat,umslm
+  dw  r_fetch,umslm
   dw  drot,from_r
   dw  umslm,nip
   dw  swap,rot,zless
@@ -1857,7 +1851,7 @@ mssl1:
 
 ; 2*  ( x1 -- x2 )
 
-  header 1,'2*'    ; ANS
+  hdr 1,'2*'    ; ANS
 tstar:
   pop hl
   add hl,hl
@@ -1865,7 +1859,7 @@ tstar:
 
 ; 2/  ( n1 -- n2 )
 
-  header 1,'2/'
+  hdr 1,'2/'
 twodiv:
   pop hl
   call  sar
@@ -1873,7 +1867,7 @@ twodiv:
 
 ; U2/  ( x1 -- x2 )
 
-  header 1,'U2/'
+  hdr 1,'U2/'
 utdiv:
   pop hl
   or  a
@@ -1883,7 +1877,7 @@ utdiv:
 
 ; D2*  ( xd1 -- xd2 )
 
-  header 1,'D2*'   ; ANS
+  hdr 1,'D2*'   ; ANS
 dtstr:
   pop de
   pop hl
@@ -1899,7 +1893,7 @@ dtstr:
 
 ; D2/  ( d1 -- d2 )
 
-  header 1,'D2/'
+  hdr 1,'D2/'
 dtdiv:
   pop hl
   pop de
@@ -1914,7 +1908,7 @@ dtdiv:
 
 ; LSHIFT  ( x1 u -- x2 )
 
-  header 1,'LSHIFT'    ; ANS
+  hdr 1,'LSHIFT'    ; ANS
 lsh:
   pop de
   pop hl
@@ -1927,7 +1921,7 @@ lsh1:
 
 ; RSHIFT  ( x1 u -- x2 )
 
-  header 1,'RSHIFT'    ; ANS
+  hdr 1,'RSHIFT'    ; ANS
 rsh:
   pop de
   pop hl
@@ -1947,8 +1941,8 @@ rsh1:
 
 ; 0=  ( x -- flag )
 
-  header 1,'0='
-zequ:
+  hdr 1,'0='
+zero_equals:
   pop hl
 zequ1:
   ld  a,l
@@ -1958,10 +1952,9 @@ zequ1:
 
 ; 0<>  ( x -- flag )
 
-  header 1,'0<>'
-zneq:
+  hdr 1,'0<>'
+zero_not_equals:
   pop hl
-zneq1:
   ld  a,l
   or  h
   jp  z,false
@@ -1969,7 +1962,7 @@ zneq1:
 
 ; =  ( x1 x2 -- flag )  - 0=
 
-  header 1,'='
+  hdr 1,'='
 equal:
   pop de
   pop hl
@@ -1980,7 +1973,7 @@ equal1:
 
 ; <>  ( x1 x2 -- flag ) - 0= 0=
 
-  header 1,'<>'
+  hdr 1,'<>'
 nequ:
   pop de
   pop hl
@@ -1990,7 +1983,7 @@ nequ:
 
 ; 0<  ( n -- flag )
 
-  header 1,'0<'
+  hdr 1,'0<'
 zless:
   pop hl
 zless1:
@@ -2001,7 +1994,7 @@ zless2:
 
 ; 0>  ( n -- flag )
 
-  header 1,'0>'
+  hdr 1,'0>'
 zgrea:
   pop de
   ld  hl,0
@@ -2012,7 +2005,7 @@ zgrea1:
 
 ; <  ( n1 n2 -- flag )
 
-  header 1,'<'
+  hdr 1,'<'
 less:
   pop de
   pop hl
@@ -2020,7 +2013,7 @@ less:
 
 ; >  ( n1 n2 -- flag )
 
-  header 1,'>'
+  hdr 1,'>'
 great:
   pop hl
   pop de
@@ -2028,7 +2021,7 @@ great:
 
 ; U<  ( u1 u2 -- flag )
 
-  header 1,'U<'
+  hdr 1,'U<'
 uless:
   pop de
   pop hl
@@ -2039,7 +2032,7 @@ uless1:
 
 ; U>  ( u1 u2 -- flag )
 
-  header 1,'U>'
+  hdr 1,'U>'
 ugrea:
   pop hl
 ugrea1:
@@ -2048,14 +2041,14 @@ ugrea1:
 
 ; 0max  ( n1 -- n2 )  0 max
 
-  header x,'0MAX'
+  hdr x,'0MAX'
 zero_max:
   ld  de,0
   jp max_de
 
 ; MAX  ( n1 n2 -- n1 | n2 )  2dup < if swap then drop
 
-  header 1,'MAX'
+  hdr 1,'MAX'
 max:
   pop de
 max_de:
@@ -2070,7 +2063,7 @@ max2:
 
 ; MIN  ( n1 n2 -- n1 | n2 )  2dup > if swap then drop
 
-  header 1,'MIN'
+  hdr 1,'MIN'
 min:
   pop de
   pop hl
@@ -2079,7 +2072,7 @@ min:
 
 ; UMAX  ( u1 u2 -- u1 | u2 )  2dup u< if swap then drop
 
-  header 1,'UMAX'
+  hdr 1,'UMAX'
 umax:
   pop de
   pop hl
@@ -2088,7 +2081,7 @@ umax:
 
 ; UMIN  ( u1 u2 -- u1 | u2 )  2dup u> if swap then drop
 
-  header 1,'UMIN'
+  hdr 1,'UMIN'
 umin:
   pop de
   pop hl
@@ -2097,7 +2090,7 @@ umin:
 
 ; WITHIN  ( n1|u1 n2|u2 n3|u3 -- flag )  over - >r - r> u<
 
-  header 1,'WITHIN'  ; ANS
+  hdr 1,'WITHIN'  ; ANS
 within:
   pop hl
   pop de
@@ -2108,7 +2101,7 @@ within:
 
 ; BETWEEN  ( n1|u1 n2|u2 n3|u3 -- flag )  over - -rot - u< 0=
 
-  header 1,'BETWEEN'
+  hdr 1,'BETWEEN'
 betw:
   pop hl
   pop de
@@ -2122,15 +2115,15 @@ betw:
 
 ; D0=  ( d -- flag )  or 0=
 
-  header 1,'D0='
+  hdr 1,'D0='
 dzequ:
-  call  docol
-  dw  or_,zequ
+  call  do_colon
+  dw  or_,zero_equals
   dw  exit
 
 ; D=  ( d1 d2 -- flag )
 
-  header 1,'D='
+  hdr 1,'D='
 dequ:
   pop de
   pop hl
@@ -2143,7 +2136,7 @@ dequ:
 
 ; D0<  ( d -- flag )  swap drop 0<
 
-  header 1,'D0<'   ; ANS
+  hdr 1,'D0<'   ; ANS
 dzle:
   pop hl
   pop de
@@ -2151,7 +2144,7 @@ dzle:
 
 ; D<  ( d1 d2 -- flag ) rot 2dup = if 2drop u< exit then 2nip >
 
-  header 1,'D<'
+  hdr 1,'D<'
 dless:
   pop de
   pop hl
@@ -2167,7 +2160,7 @@ dless:
 ; DU<  ( ud1 ud2 -- flag )  rot swap 2dup u< if 2drop 2drop -1 exit
 ;         then - if 2drop 0 exit then u<
 
-  header 1,'DU<'
+  hdr 1,'DU<'
 dules:
   pop de
   pop hl
@@ -2181,11 +2174,11 @@ dules:
 
 ; DMIN  ( d1 d2 -- d1 | d2 )  2over 2over d< 0= if 2swap then 2drop
 
-  header 1,'DMIN'
+  hdr 1,'DMIN'
 dmin:
-  call  docol
+  call  do_colon
   dw  tover,tover
-  dw  dless,zequ
+  dw  dless,zero_equals
 dmin1:
   dw  zbran,dmin2
   dw  tswap
@@ -2195,9 +2188,9 @@ dmin2:
 
 ; DMAX  ( d1 d2 -- d1 | d2 )  2over 2over d< if 2swap then 2drop
 
-  header 1,'DMAX'
+  hdr 1,'DMAX'
 dmax:
-  call  docol
+  call  do_colon
   dw  tover,tover
   dw  dless
   dw  branch,dmin1
@@ -2209,9 +2202,9 @@ dmax:
 
 ;  DECIMAL  ( -- )    10 base !
 
-  header  1,'DECIMAL'
+  hdr  1,'DECIMAL'
 decimal:
-  call  docol
+  call  do_colon
   dw  clit
   db  10
   dw  base,store
@@ -2219,9 +2212,9 @@ decimal:
 
 ;  HEX  ( -- )    16 base !
 
-  header  1,'HEX'
+  hdr  1,'HEX'
 hex:
-  call  docol
+  call  do_colon
   dw  clit
   db  16
   dw  base,store
@@ -2229,12 +2222,12 @@ hex:
 
 ;  digit  ( char base -- u -1 | 0 )
 
-  header  x,'DIGIT'
+  hdr  x,'DIGIT'
 digit:
   pop  hl
   pop  de
   ld  a,e
-  call  upc    ; make uppercase
+  call  uppercase_a
   sub  '0'
   jp  m,false
   cp  10
@@ -2254,13 +2247,13 @@ digit1:
 ;        >r 2swap r> swap base @ um* drop rot base @
 ;        um* d+ 2swap 1 /string 1 dpl +! repeat then
 
-  header  1,'>NUMBER'
+  hdr  1,'>NUMBER'
 tonum:
-  call  docol
+  call  do_colon
 tonum1:
-  dw  dupp    ; begin
+  dw  dup    ; begin
   dw  zbran,tonum2  ; while
-  dw  over,cat
+  dw  over,c_fetch
   dw  base,fetch
   dw  digit
   dw  zbran,tonum2  ; while
@@ -2288,19 +2281,19 @@ tonum2:
 ;        then r> 2drop 2drop false else drop r> if
 ;        dnegate then true then
 
-  header  1,'NUMBER?'
+  hdr  1,'NUMBER?'
 numq:
-  call  docol    ; convert string to double number
-  dw  over,cat
+  call  do_colon    ; convert string to double number
+  dw  over,c_fetch
   dw  clit
   db  '-'
   dw  equal
   dw  over,zgrea
   dw  and_
-  dw  dupp,to_r
+  dw  dup,to_r
   dw  one,and_
   dw  sstr
-  dw  over,cat
+  dw  over,c_fetch
   dw  clit
   db  '.'
   dw  great,and_
@@ -2310,10 +2303,10 @@ numq:
   dw  zbran,numq2
   dw  tonum
   dw  dpl,on
-  dw  dupp
+  dw  dup
   dw  zbran,numq1
   dw  onem
-  dw  over,cat
+  dw  over,c_fetch
   dw  clit
   db  '.'
   dw  subb,or_
@@ -2337,18 +2330,18 @@ numq5:
 
 ;  <#  ( -- )    pad hld !
 
-  header  1,'<#'
+  hdr  1,'<#'
 bdigs:
-  call  docol
+  call  do_colon
   dw  pad
   dw  hld,store
   dw  exit
 
 ;  #>  ( d -- c-addr u )  2drop hld @ pad over -
 
-  header  1,'#>'
+  hdr  1,'#>'
 edigs:
-  call  docol
+  call  do_colon
   dw  two_drop
   dw  hld,fetch
   dw  pad
@@ -2359,30 +2352,30 @@ edigs:
 ;  +hld  ( +n -- c-addr )  negate hld +! hld @ dup dp @ u<
 ;        abort" HOLD buffer overflow"
 
-  header  x,'+HLD'
+  hdr  x,'+HLD'
 phld:
-  call  docol
+  call  do_colon
   dw  negat,hld,pstor
-  dw  hld,fetch,dupp
+  dw  hld,fetch,dup
   dw  dpp,fetch,uless
-  dw  pabq
+  dw  paren_abort_quote
   dcs  'HOLD buffer overflow'
   dw  exit
 
 ;  HOLD  ( char -- )  1 +hld c!
 
-  header  1,'HOLD'
+  hdr  1,'HOLD'
 hold:
-  call  docol
+  call  do_colon
   dw  one,phld
   dw  cstor
   dw  exit
 
 ;  SIGN  ( n -- )    0< if [char] - hold then
 
-  header  1,'SIGN'
+  hdr  1,'SIGN'
 sign:
-  call  docol
+  call  do_colon
   dw  zless
   dw  zbran,sign1
   dw  clit
@@ -2394,9 +2387,9 @@ sign1:
 ;  #  ( ud1 -- ud2 )  0 base @ um/mod >r base @ um/mod r>
 ;        rot 9 over < if 7 + then [char] 0 + hold
 
-  header  1,'#'
+  hdr  1,'#'
 dig:
-  call  docol
+  call  do_colon
   dw  zero
   dw  base,fetch
   dw  umslm
@@ -2421,9 +2414,9 @@ dig1:
 
 ;  #S  ( +d -- 0 0 )  begin # 2dup d0= until
 
-  header  1,'#S'
+  hdr  1,'#S'
 digs:
-  call  docol
+  call  do_colon
 digs1:
   dw  dig
   dw  tdup,dzequ
@@ -2432,27 +2425,27 @@ digs1:
 
 ;  SHOLD  ( c-addr u -- )  dup +hld swap move
 
-  header  1,'SHOLD'  ; hold string
+  hdr  1,'SHOLD'  ; hold string
 shold:
-  call  docol
-  dw  dupp,phld
+  call  do_colon
+  dw  dup,phld
   dw  swap,move
   dw  exit
 
 ;  NHOLD  ( n char -- )  over +hld -rot fill
 
-  header  1,'NHOLD'  ; hold n characters
+  hdr  1,'NHOLD'  ; hold n characters
 nhold:
-  call  docol
+  call  do_colon
   dw  over,phld
   dw  drot,fill
   dw  exit
 
 ;  decimal? ( -- flag )  base @ 10 =
 
-  header  x,'DECIMAL?'
+  hdr  x,'DECIMAL?'
 dcmq:
-  call  docol
+  call  do_colon
   dw  base,fetch    ; decimal base?
   dw  clit
   db  10
@@ -2464,7 +2457,7 @@ dcmq:
 
 ; CMOVE  ( c-addr1 c-addr2 u -- )
 
-  header 1,'CMOVE'
+  hdr 1,'CMOVE'
 cmove:
   ld  l,c
   ld  h,b
@@ -2478,7 +2471,7 @@ cmove1:
 
 ; CMOVE>  ( c-addr1 c-addr2 u -- )
 
-  header 1,'CMOVE>'
+  hdr 1,'CMOVE>'
 cmovu:
   ld  l,c
   ld  h,b
@@ -2492,14 +2485,14 @@ cmovu1:
 
 ; BLANK  ( c-addr u -- )  bl fill
 
-  header 1,'BLANK'
+  hdr 1,'BLANK'
 blank:
   ld  e,' '
   jp  fill1
 
 ; COUNT  ( c-addr1 -- c-addr2 u )  dup 1+ swap c@
 
-  header 1,'COUNT'
+  hdr 1,'COUNT'
 count:
   pop de
 ;;count1: ; XXX OLD
@@ -2511,7 +2504,7 @@ count:
 ;  PACKED  ( c-addr1 u c-addr2 -- c-addr2 )
 ;            2dup 2>r 1+ swap move 2r> tuck c!
 
-  header  1,'PACKED'
+  hdr  1,'PACKED'
 packd:
   ld  l,c
   ld  h,b
@@ -2530,9 +2523,9 @@ packd:
 
 ;  PLACE  ( c-addr1 u c-addr2 -- )  packed drop
 
-  header  1,'PLACE'
+  hdr  1,'PLACE'
 place:
-  call  docol
+  call  do_colon
   dw  packd,drop
   dw  exit
 
@@ -2541,12 +2534,12 @@ place:
 ;;
 ;;  header 1,'PLACE'
 ;;place:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  tdup
-;;  dw  ttor
+;;  dw  two_to_r
 ;;  dw  onep,swap
 ;;  dw  move
-;;  dw  tfrom
+;;  dw  two_from_r
 ;;  dw  cstor
 ;;  dw  exit
 
@@ -2554,9 +2547,9 @@ place:
 
   ; append char to counted string
   ; count unchanged
-  header x,'AFFIX'
+  hdr x,'AFFIX'
 affix:
-  call  docol
+  call  do_colon
   dw  over
   dw  count,plus
   dw  cstor
@@ -2564,7 +2557,7 @@ affix:
 
 ; SCAN  ( c-addr1 u1 char -- c-addr2 u2 )
 
-  header 1,'SCAN'
+  hdr 1,'SCAN'
 scan:
   pop de
   ld  l,c
@@ -2592,7 +2585,7 @@ scan3:
 
 ; SKIP  ( c-addr1 u1 char -- c-addr2 u2 )
 
-  header 1,'SKIP'
+  hdr 1,'SKIP'
 skip:
   pop de
   ld  l,c
@@ -2612,7 +2605,7 @@ skip1:
 
 ; -TRAILING  ( c-addr u1 -- c-addr u2 )
 
-  header 1,'-TRAILING'
+  hdr 1,'-TRAILING'
 dtrai:
   pop de
   pop hl
@@ -2632,7 +2625,7 @@ dtrai1:
 
 ; /STRING  ( c-addr1 u1 n -- c-addr2 u2 )   rot over + -rot -
 
-  header 1,'/STRING' ; ANS
+  hdr 1,'/STRING' ; ANS
 sstr:
   pop de
   pop hl
@@ -2644,7 +2637,7 @@ sstr:
 
 ; CAPS  ( -- )    enable caps COMPARE/SEARCH
 
-  header 1,'CAPS'
+  hdr 1,'CAPS'
 caps:
   ld  a,1
   jp  dcaps1 ; XXX NEW -- because headers and code share the same zone
@@ -2652,7 +2645,7 @@ caps:
 
 ; -caps  ( -- )   disable caps COMPARE/SEARCH
 
-  header x,'-CAPS'
+  hdr x,'-CAPS'
 dcaps:
   xor a
 dcaps1:
@@ -2669,10 +2662,10 @@ cmpnc:
   ret z
   push  bc
   ld  a,(bc)
-  call  upc
+  call  uppercase_a
   ld  c,a
   ld  a,(hl)
-  call  upc
+  call  uppercase_a
   cp  c
   pop bc
   ret nz
@@ -2702,7 +2695,7 @@ cmpsb:
 
 ; COMPARE  ( c-addr1 u1 c-addr2 u2 -- -1 | 0 | 1 )
 
-  header 1,'COMPARE' ; ANS
+  hdr 1,'COMPARE' ; ANS
 cmpp:
   pop de
   pop hl
@@ -2738,9 +2731,9 @@ cmpp4:
 
 ; SEARCH  ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 -1 | c-addr1 u1 0 )
 
-  header 1,'SEARCH'
+  hdr 1,'SEARCH'
 search:
-  call  docol
+  call  do_colon
   dw  $+2
   pop hl
   ld  (string_2_len),hl
@@ -2802,7 +2795,7 @@ string_1_addr equ $+1
 ;;
 ;;  header 1,'+STRING'
 ;;pstr:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  tswap,swap
 ;;  dw  tover,plus
 ;;  dw  two,pick
@@ -2814,7 +2807,7 @@ string_1_addr equ $+1
 ;  +STRING  ( c-addr1 u1 c-addr2 u2 -- c-addr2 u3)
 ;          2swap swap 2over + 2 pick cmove +
 
-  header  1,'+STRING'  ; uses temps 1-3
+  hdr  1,'+STRING'  ; uses temps 1-3
 pstr:
   ld  l,c
   ld  h,b
@@ -2843,20 +2836,102 @@ t3: ds cw
 ; XXX NEW -- DX-Forth 4.09
 ;  S.R  ( c-addr n1 n2 -- )  over - spaces type
 
-  header  1,'S.R'    ; type string right-justified
+  hdr  1,'S.R'    ; type string right-justified
 sdotr:
-  call  docol
+  call  do_colon
   dw  over,subb
   dw  spacs
   dw  typee
   dw  exit
+
+; UPCASE  ( char1 -- char2 )
+
+  hdr 1,'UPCASE'  ; make char uppercase
+upcas:
+  pop hl
+  ld  a,l
+  call  uppercase_a
+  jp  apush
+
+; UPPER  ( c-addr u -- )
+
+  hdr 1,'UPPER' ; make string uppercase
+upper:
+  pop de
+  pop hl
+upper1:
+  ld  a,d
+  or  e
+  jp  z,next
+  ld  a,(hl)
+  call  uppercase_a
+  ld  (hl),a
+  inc hl
+  dec de
+  jp  upper1
+
+; XXX NEW -- after Gforth
+; TOUPPER  ( c1 -- c2 )
+
+  hdr 1,'TOUPPER' ; make char uppercase
+
+toupper:
+  pop hl
+  ld a,l
+  call uppercase_a
+  jp next
+
+uppercase_a:
+  cp  'a'
+  ret c
+  cp  'z'+1
+  ret nc
+  xor 0x20
+  ret
+
+; XXX NEW -- after UPPER
+; LOWER  ( c-addr u -- )
+
+  hdr 1,'LOWER' ; make string lowercase
+lower:
+  pop de
+  pop hl
+lower1:
+  ld  a,d
+  or  e
+  jp  z,next
+  ld  a,(hl)
+  call  lowercase_a
+  ld  (hl),a
+  inc hl
+  dec de
+  jp  lower1
+
+; XXX NEW -- after TOUPPER
+; TOLOWER  ( c1 -- c2 )
+
+  hdr 1,'TOLOWER' ; make char lowercase
+
+tolower:
+  pop hl
+  ld a,l
+  call lowercase_a
+  jp next
+
+lowercase_a:
+  cp  'A'
+  ret c
+  cp  'Z'+1
+  ret nc
+  xor 0x20
+  ret
 
 ; }}} **********************************************************
 ; Control structures {{{
 
 ; (of)  ( n1 n2 -- )
 
-  header x,'(OF)'
+  hdr x,'(OF)'
 pof:
   pop hl
   pop de
@@ -2869,7 +2944,7 @@ pof:
 
 ; branch  ( -- )
 
-  header x,'BRANCH'
+  hdr x,'BRANCH'
 branch:
   ld  h,b
   ld  l,c
@@ -2880,7 +2955,7 @@ branch:
 
 ; ?branch  ( flag -- )
 
-  header x,'?BRANCH'
+  hdr x,'?BRANCH'
 zbran:
   pop hl
   ld  a,l
@@ -2893,7 +2968,7 @@ zbran1:
 
 ; (loop)  ( -- )
 
-  header x,'(LOOP)'
+  hdr x,'(LOOP)'
 xloop:
   ld  hl,(rpp)
   inc (hl)
@@ -2908,7 +2983,7 @@ xloop1:
 
 ; UNLOOP  ( -- )
 
-  header 1,'UNLOOP'  ; ANS
+  hdr 1,'UNLOOP'  ; ANS
 unloo:
   ld  hl,(rpp)  ; discard loop parameters
   ld  de,cw*2
@@ -2918,7 +2993,7 @@ unloo:
 
 ; (+loop)  ( n -- )
 
-  header x,'(+LOOP)'
+  hdr x,'(+LOOP)'
 xploo:
   ld  hl,(rpp)
   ld  e,(hl)
@@ -2945,7 +3020,7 @@ xploo2:
 
 ; (leave)  ( -- )
 
-  header x,'(LEAVE)'
+  hdr x,'(LEAVE)'
 pleav:
   ld  a,(bc)
   ld  l,a
@@ -2959,9 +3034,9 @@ pleav:
 
 ; (?do)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (xdo1)
 
-  header x,'(?DO)'
+  hdr x,'(?DO)'
 xqdo:
-  call  docol
+  call  do_colon
   dw  tdup,equal
   dw  zbran,xdo1
   dw  two_drop
@@ -2970,28 +3045,28 @@ xqdo:
 
 ; (do)  ( n1 n2 -- )    over - r> cell+ -rot 2>r >r
 
-  header x,'(DO)'
+  hdr x,'(DO)'
 xdo:
-  call  docol
+  call  do_colon
 xdo1:
   dw  over,subb
   dw  from_r,cellp
   dw  drot
-  dw  ttor
+  dw  two_to_r
   dw  to_r
   dw  exit
 
 ; bal  ( -- addr )
 
-  header x,'BAL',,1
+  hdr x,'BAL',,1
 bal:
-  call  docre
+  call  do_create
 bal1:
   ds  2
 
 ; +BAL  ( -- )      1 bal +!
 
-  header 1,'+BAL',,1
+  hdr 1,'+BAL',,1
 pbal:
   ld  de,1
 pbal1:
@@ -3000,7 +3075,7 @@ pbal1:
 
 ; -BAL  ( -- )      -1 bal +!
 
-  header 1,'-BAL',,1
+  hdr 1,'-BAL',,1
 dbal:
   ld  de,-1
   jp  pbal1
@@ -3008,51 +3083,51 @@ dbal:
 ; ?BAL  ( flag -- )   checking @ 0<> and
 ;         abort" definition unbalanced"
 
-  header 1,'?BAL',,1
+  hdr 1,'?BAL',,1
 qbal:
-  call  docol
+  call  do_colon
   dw  check,fetch
-  dw  zneq,and_
-  dw  pabq
+  dw  zero_not_equals,and_
+  dw  paren_abort_quote
   dcs 'definition unbalanced'
   dw  exit
 
 ; ?depth  ( x -- x )    ?comp depth 0= ?bal
 
-  header x,'?DEPTH',,1
+  hdr x,'?DEPTH',,1
 qdep:
-  call  docol
+  call  do_colon
   dw  qcomp
-  dw  depth,zequ
+  dw  depth,zero_equals
   dw  qbal
   dw  exit
 
 ; ?orig  ( orig -- orig )   ?depth dup @ ?bal
 
-  header x,'?ORIG',,1
+  hdr x,'?ORIG',,1
 qorig:
-  call  docol
+  call  do_colon
   dw  qdep
-  dw  dupp,fetch
+  dw  dup,fetch
   dw  qbal
   dw  exit
 
 ; ?dest  ( dest -- dest )   ?depth dup @ 0= ?bal
 
-  header x,'?DEST',,1
+  hdr x,'?DEST',,1
 qdest:
-  call  docol
+  call  do_colon
   dw  qdep
-  dw  dupp,fetch
-  dw  zequ
+  dw  dup,fetch
+  dw  zero_equals
   dw  qbal
   dw  exit
 
 ; BEGIN  ( -- dest )    ?comp here +bal ;immediate
 
-  header 1,'BEGIN',1,1
+  hdr 1,'BEGIN',1,1
 begin:
-  call  docol
+  call  do_colon
   dw  qcomp
   dw  here
   dw  pbal
@@ -3060,9 +3135,9 @@ begin:
 
 ; >MARK  ( -- orig )    postpone begin 0 ,
 
-  header 1,'>MARK',,1
+  hdr 1,'>MARK',,1
 fmark:
-  call  docol
+  call  do_colon
   dw  begin
   dw  zero
   dw  comma
@@ -3070,9 +3145,9 @@ fmark:
 
 ; <RESOLVE  ( dest -- )   ?dest , -bal
 
-  header 1,'<RESOLVE',,1
+  hdr 1,'<RESOLVE',,1
 bresol:
-  call  docol
+  call  do_colon
   dw  qdest
   dw  comma
   dw  dbal
@@ -3080,9 +3155,9 @@ bresol:
 
 ; THEN  ( orig -- )   ?orig here swap ! -bal ;immediate
 
-  header 1,'THEN',1,1
+  hdr 1,'THEN',1,1
 then:
-  call  docol
+  call  do_colon
   dw  qorig
   dw  here
   dw  swap,store
@@ -3092,9 +3167,9 @@ then:
 ; IF  ( -- orig )     postpone ?branch >mark
 ;         ;immediate
 
-  header 1,'IF',1,1
+  hdr 1,'IF',1,1
 iff:
-  call  docol
+  call  do_colon
   dw  comp,zbran
   dw  fmark
   dw  exit
@@ -3102,9 +3177,9 @@ iff:
 ; AHEAD  ( -- orig )    postpone branch >mark
 ;         ;immediate
 
-  header 1,'AHEAD',1,1
+  hdr 1,'AHEAD',1,1
 ahead:
-  call  docol
+  call  do_colon
   dw  comp,branch
   dw  fmark
   dw  exit
@@ -3112,9 +3187,9 @@ ahead:
 ; ELSE  ( orig1 -- orig2 )  ?orig postpone ahead swap postpone
 ;         then ;immediate
 
-  header 1,'ELSE',1,1
+  hdr 1,'ELSE',1,1
 elsee:
-  call  docol
+  call  do_colon
   dw  qorig
   dw  ahead
   dw  swap
@@ -3124,28 +3199,28 @@ elsee:
 ; UNTIL  ( dest -- )    postpone ?branch <resolve
 ;         ;immediate
 
-  header 1,'UNTIL',1,1
+  hdr 1,'UNTIL',1,1
 until:
   ld  hl,zbran
 until1:
   push  hl
-  call  docol
+  call  do_colon
   dw  comxt
   dw  bresol
   dw  exit
 
 ; AGAIN  ( dest -- )    postpone branch <resolve ;immediate
 
-  header 1,'AGAIN',1,1
+  hdr 1,'AGAIN',1,1
 again:
   ld  hl,branch
   jp  until1
 
 ; WHILE  ( x -- orig x )    ?depth postpone if swap ;immediate
 
-  header 1,'WHILE',1,1
+  hdr 1,'WHILE',1,1
 whilee:
-  call  docol
+  call  do_colon
   dw  qdep
   dw  iff
   dw  swap
@@ -3154,32 +3229,32 @@ whilee:
 ; REPEAT  ( orig dest -- )  postpone again postpone then
 ;         ;immediate
 
-  header 1,'REPEAT',1,1
-repeatt:call  docol
+  hdr 1,'REPEAT',1,1
+repeatt:call  do_colon
   dw  again
   dw  then
   dw  exit
 
 ; lv  ( -- addr )     0 value lv
 
-  header x,'LV',,1
+  hdr x,'LV',,1
 lvv:
-  call  doval
+  call  do_value
   dw  0
 
 ; DO  ( -- orig dest )    postpone (do) lv >mark dup to lv
 ;         postpone begin ;immediate
 
-  header 1,'DO',1,1
+  hdr 1,'DO',1,1
 do:
   ld  hl,xdo
 do1:
   push  hl
-  call  docol
+  call  do_colon
   dw  comxt
   dw  lvv
   dw  fmark
-  dw  dupp
+  dw  dup
   dw  pto,lvv
   dw  begin
   dw  exit
@@ -3187,14 +3262,14 @@ do1:
 ; ?DO  ( -- orig dest )   postpone (?do) lv >mark dup to lv
 ;         postpone begin ;immediate
 
-  header 1,'?DO',1,1
+  hdr 1,'?DO',1,1
 qdo:
   ld  hl,xqdo
   jp  do1
 
 ; I  ( -- x )
 
-  header 1,'I'
+  hdr 1,'I'
 ido:
   ld  hl,(rpp)
 ido1:
@@ -3214,7 +3289,7 @@ ido2:
 
 ; I'  ( -- x )
 
-  header 1,"I'"
+  hdr 1,"I'"
 idot:
   ld  hl,(rpp)
   inc hl
@@ -3225,7 +3300,7 @@ idot:
 
 ; J  ( -- x )
 
-  header 1,'J'
+  hdr 1,'J'
 jdo:
   ld  hl,(rpp)
   ld  de,cw*2
@@ -3235,9 +3310,9 @@ jdo:
 ; LEAVE  ( -- )     postpone (leave) lv ?orig ,
 ;         ;immediate
 
-  header 1,'LEAVE',1,1
+  hdr 1,'LEAVE',1,1
 leavee:
-  call  docol
+  call  do_colon
   dw  comp,pleav
   dw  lvv
   dw  qorig
@@ -3247,12 +3322,12 @@ leavee:
 ; LOOP  ( addr1 addr2 -- )  postpone (loop) <resolve
 ;         postpone then to lv ;immediate
 
-  header 1,'LOOP',1,1
+  hdr 1,'LOOP',1,1
 loopp:
   ld  hl,xloop
 loopp1:
   push  hl
-  call  docol
+  call  do_colon
   dw  comxt
   dw  bresol
   dw  then
@@ -3262,7 +3337,7 @@ loopp1:
 ; +LOOP  ( addr1 addr2 -- ) postpone (+loop) <resolve
 ;         postpone then to lv ;immediate
 
-  header 1,'+LOOP',1,1
+  hdr 1,'+LOOP',1,1
 ploop:
   ld  hl,xploo
   jp  loopp1
@@ -3271,36 +3346,36 @@ ploop:
 
 ; CS-PICK       pick +bal
 
-  header 1,'CS-PICK',,1
+  hdr 1,'CS-PICK',,1
 cspic:
-  call  docol
+  call  do_colon
   dw  pick
   dw  pbal
   dw  exit
 
 ; CS-ROLL       aka roll cs-roll
 
-  header 1,'CS-ROLL',,,roll
+  hdr 1,'CS-ROLL',,,roll
 csrol equ roll
 
 ; CS-DROP       drop -bal
 
-  header 1,'CS-DROP',,1
+  hdr 1,'CS-DROP',,1
 csdro:
   pop hl
   jp  dbal
 
 ; cf0       control flow stack base
 
-  header x,'CF0',,1
+  hdr x,'CF0',,1
 cfz:
-  call  docre
+  call  do_create
 cfz1:
   ds  2
 
 ; #cs  ( -- cells )   sp@ cf0 @ - negate 2/ 1- 0 max
 
-  header x,'#CS',,1
+  hdr x,'#CS',,1
 ncs:
   ld  hl,(cfz1)
   call  negg
@@ -3313,25 +3388,25 @@ ncs:
 
 ; CS-PUSH       #cs -roll
 
-  header 1,'CS-PUSH',,1
+  hdr 1,'CS-PUSH',,1
 cspush:
-  call  docol
+  call  do_colon
   dw  ncs
   dw  droll
   dw  exit
 
 ; CS-POP        #cs roll
 
-  header 1,'CS-POP',,1
+  hdr 1,'CS-POP',,1
 cspop:
-  call  docol
+  call  do_colon
   dw  ncs
   dw  roll
   dw  exit
 
 ; CS-MARK       0 +bal
 
-  header 1,'CS-MARK',,1
+  hdr 1,'CS-MARK',,1
 csm:
   ld  hl,0
   push  hl
@@ -3339,19 +3414,19 @@ csm:
 
 ; CS-TEST       ?depth dup 0<>
 
-  header 1,'CS-TEST',,1
+  hdr 1,'CS-TEST',,1
 cstes:
-  call  docol
+  call  do_colon
   dw  qdep
-  dw  dupp
-  dw  zneq
+  dw  dup
+  dw  zero_not_equals
   dw  exit
 
 ; COND        ?comp cs-mark immediate
 
-  header 1,'COND',1,1
+  hdr 1,'COND',1,1
 cond:
-  call  docol
+  call  do_colon
   dw  qcomp
   dw  csm
   dw  exit
@@ -3359,9 +3434,9 @@ cond:
 ; THENS       ?comp begin cs-test while postpone
 ;         then repeat cs-drop ;immediate
 
-  header 1,'THENS',1,1
+  hdr 1,'THENS',1,1
 thens:
-  call  docol
+  call  do_colon
   dw  qcomp
 thens1:
   dw  cstes
@@ -3376,9 +3451,9 @@ thens2:
 
 ; COND        ?comp 0 +bal ;immediate
 
-  header 1,'COND',1,1
+  hdr 1,'COND',1,1
 cond:
-  call  docol
+  call  do_colon
   dw  qcomp
   dw  zero
   dw  pbal
@@ -3387,9 +3462,9 @@ cond:
 ; THENS       ?comp begin ?depth ?dup while
 ;         postpone then repeat -bal ;immediate
 
-  header 1,'THENS',1,1
+  hdr 1,'THENS',1,1
 thens:
-  call  docol
+  call  do_colon
   dw  qcomp
 thens1  dw  qdep
   dw  qdup
@@ -3407,29 +3482,29 @@ thens2  dw  dbal
 
 ; OF  ( -- addr )     postpone (of) >mark ;immediate
 
-  header 1,'OF',1,1
+  hdr 1,'OF',1,1
 of:
-  call  docol
+  call  do_colon
   dw  comp,pof
   dw  fmark
   dw  exit
 
 ; ENDOF  ( addr1 -- addr2 ) aka else endof
 
-  header 1,'ENDOF',1,,elsee
+  hdr 1,'ENDOF',1,,elsee
 endof equ elsee
 
 ; CASE  ( -- sys )    aka cond case
 
-  header 1,'CASE',1,,cond
+  hdr 1,'CASE',1,,cond
 casee equ cond
 
 ; ENDCASE  ( sys -- )   postpone drop postpone thens
 ;         ;immediate
 
-  header 1,'ENDCASE',1,1
+  hdr 1,'ENDCASE',1,1
 endc:
-  call  docol
+  call  do_colon
   dw  comp,drop
   dw  thens
   dw  exit
@@ -3441,16 +3516,16 @@ endc:
 ;       else 2drop refill and then ?dup 0= until
 ;       ;immediate
 
-  header 1,'[ELSE]',1,1
+  hdr 1,'[ELSE]',1,1
 pels:
-  call  docol
+  call  do_colon
   dw  one
 pels1:
   dw  token
    if ucase
   dw  tdup,upper
    endif
-  dw  dupp
+  dw  dup
   dw  zbran,pels6
   dw  tdup
   dw  psqot
@@ -3464,11 +3539,11 @@ pels1:
   dw  zbran,pels2
   dw  psqot
   dcs '[THEN]'
-  dw  cmpp,zequ
+  dw  cmpp,zero_equals
   dw  branch,pels3
 pels2:
   dw  two_drop
-  dw  dupp,one,equal
+  dw  dup,one,equal
 pels3:
   dw  branch,pels5
 pels4:
@@ -3480,13 +3555,13 @@ pels6:
   dw  two_drop
   dw  refil,and_
 pels7:
-  dw  qdup,zequ
+  dw  qdup,zero_equals
   dw  zbran,pels1
   dw  exit
 
 ; [IF]  ( flag -- ) 0= if [compile] [else] then ;immediate
 
-  header 1,'[IF]',1,1  ; ANS
+  hdr 1,'[IF]',1,1  ; ANS
 pif:
   pop hl
   ld  a,l
@@ -3496,25 +3571,25 @@ pif:
 
 ; [THEN]  ( -- )    aka noop [then] immediate
 
-  header 1,'[THEN]',1,,noop
+  hdr 1,'[THEN]',1,,noop
 pthen equ next
 
 ; }}} **********************************************************
 ; XXX {{{
 
-docre equ next ; XXX this is repeated (and thus commented out) in <compile.z80s>
-doval equ fetch
-docon equ fetch
-docco equ cat
+do_create equ next ; XXX this was repeated (and thus commented out) in <compile.z80s>
+do_value equ fetch
+do_constant equ fetch
+do_byte_constant equ c_fetch
 
 ; }}} **********************************************************
 ; Numeric output {{{
 
 ; (D.)  ( d -- c-addr u )  tuck dabs <# #s rot sign #>
 
-  header 1,'(D.)'
+  hdr 1,'(D.)'
 pddot:
-  call  docol
+  call  do_colon
   dw  tuck
   dw  dabs
   dw  bdigs
@@ -3525,7 +3600,7 @@ pddot:
 
 ; U.R  ( u1 u2 -- ) 0 swap d.r
 
-  header 1,'U.R'
+  hdr 1,'U.R'
 udotr:
   ld  hl,0
   ex  (sp),hl
@@ -3537,7 +3612,7 @@ udotr:
 ;;
 ;;  header 1,'D.R'
 ;;ddotr:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  to_r
 ;;  dw  pddot
 ;;ddotr1:
@@ -3550,9 +3625,9 @@ udotr:
 ; XXX NEW -- DX-Forth 4.09
 ; D.R  ( d n -- )   >r (d.) r> s.r
 
-  header 1,'D.R'
+  hdr 1,'D.R'
 ddotr:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  pddot
 ddotr1:
@@ -3562,9 +3637,9 @@ ddotr1:
 
 ; .R  ( n u -- )    >r s>d r> d.r
 
-  header 1,'.R'
+  hdr 1,'.R'
 dotr:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  stod
   dw  from_r,ddotr
@@ -3572,7 +3647,7 @@ dotr:
 
 ; U.  ( u -- )    0 d.
 
-  header 1,'U.'
+  hdr 1,'U.'
 udot:
   ld  hl,0
   push  hl
@@ -3580,9 +3655,9 @@ udot:
 
 ; D.  ( d -- )    0 d.r space
 
-  header 1,'D.'
+  hdr 1,'D.'
 ddot:
-  call  docol
+  call  do_colon
   dw  zero,ddotr
   dw  space
   dw  exit
@@ -3592,14 +3667,14 @@ ddot:
 ;;
 ;;  header 1,'?'
 ;;ques:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  fetch,dot
 ;;  dw  exit
 
 ; XXX NEW -- DX-Forth 4.09
 ; ?  ( addr -- )
 
-  header 1,'?'
+  hdr 1,'?'
 ques:
   pop hl
   ld  e,(hl)
@@ -3613,16 +3688,16 @@ ques:
 ;;
 ;;  header 1,'.'
 ;;dot:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  stod,ddot
 ;;  dw  exit
 
 ; XXX NEW -- DX-Forth 4.09
 ; .  ( n -- )   decimal? if s>d d. exit then u.
 
-  header 1,'.'
+  hdr 1,'.'
 dot:
-  call  docol
+  call  do_colon
 ;  dw  dcmq ; XXX FIXME -- undefined
   dw  zbran,dot1
   dw  stod,ddot
@@ -3636,7 +3711,7 @@ dot1:
 
 ;  DOSVER  ( -- minor major )
 
-  header  1,'DOSVER'
+  hdr  1,'DOSVER'
 dosver:
   ld  hl,(dosv)
 dosver1:ld  e,h
@@ -3647,7 +3722,7 @@ dosver1:ld  e,h
 
 ;  FDOS  ( DE u -- HL A )
 
-  header  1,'FDOS'
+  hdr  1,'FDOS'
 fdos:
   pop  hl
   ld  a,l
@@ -3658,9 +3733,9 @@ fdos:
 
 ;  BDOS  ( DE u -- A )
 
-  header  1,'BDOS'
+  hdr  1,'BDOS'
 bdos:
-  call  docol
+  call  do_colon
   dw  fdos,nip
   dw  exit
 
@@ -3677,7 +3752,7 @@ biosj:
   jp  c,biosj2
 biosj1:
   ld  a,(dosv)
-  cp  30h
+  cp  0x30
   jp  c,biosj2
   ld  de,biospb
   ld  c,50    ; CP/M 3 BDOS 50
@@ -3698,7 +3773,7 @@ biosj2:
 
 ;  BIOS  ( BC u -- A )
 
-  header  1,'BIOS'
+  hdr  1,'BIOS'
 bios:
   pop  de
   ld  a,e
@@ -3712,7 +3787,7 @@ bios:
 
 ;  BIOSHL  ( DE BC u -- HL )
 
-  header  1,'BIOSHL'
+  hdr  1,'BIOSHL'
 biosh:
   pop  de
   ld  a,e
@@ -3730,7 +3805,7 @@ biosh:
 
 ;  PC@  ( p-addr -- x )
 
-  header  1,'PC@'    ; FIG P@
+  hdr  1,'PC@'    ; FIG P@
 pcat:
   pop  hl
   ld  a,l
@@ -3741,7 +3816,7 @@ pcat1  equ  $-1
 
 ;  PC!  ( x p-addr -- )
 
-  header  1,'PC!'    ; FIG P!
+  hdr  1,'PC!'    ; FIG P!
 pcsto:
   pop  hl
   pop  de
@@ -3754,9 +3829,9 @@ pcsto1  equ  $-1
 
 ;  ?terminal  ( -- flag )  0 2 bios
 
-  header  x,'?TERMINAL'
+  hdr  x,'?TERMINAL'
 qterm:
-  call  docol
+  call  do_colon
   dw  zero,two
   dw  bios
   dw  exit
@@ -3764,9 +3839,9 @@ qterm:
 ;  conin  ( -- char )  begin key? until 0 3 bios
 ;        (iofn+cw) @ over = if 0 bdos then
 
-  header  x,'CONIN'
+  hdr  x,'CONIN'
 conin:
-  call  docol    ; console input
+  call  do_colon    ; console input
 conin1:
 ; XXX TODO
 ;;  dw  keyq
@@ -3784,13 +3859,13 @@ conin2:
 ;   cseg ; XXX OLD
 
 dcono:
-  call  docol
+  call  do_colon
   dw  two
   dw  bdos,drop
   dw  exit
 
 bcono:
-  call  docol
+  call  do_colon
   dw  clit
   db  4
   dw  bios,drop
@@ -3798,7 +3873,7 @@ bcono:
 
 ;  conout  ( char -- )
 
-  header  x,'CONOUT'
+  hdr  x,'CONOUT'
 conout:
 ; XXX TODO
 ;;  pop  de
@@ -3812,9 +3887,9 @@ conout:
 
 ;  lstout  ( char -- )
 
-  header  x,'LSTOUT'
+  hdr  x,'LSTOUT'
 lstout:
-  call  docol
+  call  do_colon
   dw  clit
   db  5
   dw  bios,drop
@@ -3834,7 +3909,7 @@ lstout:
 
 ; (MS)  ( ms -- )
 
-  header  x,'(MS)'
+  hdr  x,'(MS)'
 ms0:
   pop  de
 ms01:
@@ -3862,9 +3937,9 @@ ms02:
 
 ;  (BEEP)  ( -- )    7 emit 75 ms
 
-  header  x,'(BEEP)'
+  hdr  x,'(BEEP)'
 beep0:
-  call  docol
+  call  do_colon
   dw  clit
   db  7
   dw  emit
@@ -3875,22 +3950,22 @@ beep0:
 
 ;  MS  ( ms -- )
 
-  header  1,'MS'
+  hdr  1,'MS'
 ms:
-  call  aexec
+  call  fetch_execute
   dw  ms0
 
 ;  SOUND  ( freq ms -- )
 ;
 ;  header  1,'SOUND'
-;sound:  call  aexec
+;sound:  call  fetch_execute
 ;  dw  sound0
 
 ;  BEEP  ( -- )
 
-  header  1,'BEEP'
+  hdr  1,'BEEP'
 beep:
-  call  aexec
+  call  fetch_execute
   dw  beep0
 
 ;   cseg ; XXX OLD
@@ -3899,7 +3974,7 @@ cpbuf:
 
 ;  AT-XY  ( u1 u2 -- )  position cursor at col u1, row u2
 
-  header  1,'AT-XY'
+  hdr  1,'AT-XY'
 atxy:
   ; XXX TODO
   jp  next ; XXX TMP
@@ -3932,10 +4007,10 @@ atxy:
 ;;  push  de
 ;;  push  hl
 ;;atxy2:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  count,tuck
 ;;  dw  typee    ; send string
-;;  dw  zneq
+;;  dw  zero_not_equals
 ;;  dw  swap,fetch
 ;;  dw  and_,ms    ; delay only if string not empty
 ;;  dw  exit
@@ -3980,25 +4055,29 @@ atxy:
 ;;atxy8:
 ;;  db  100,10,1
 
-;  cls  ( -- )    home cursor and clear-screen sequence
-;  XXX TODO -- make it a word and call it from 'PAGE'
-
-;   cseg ; XXX OLD
+; XXX NEW
+;  CLS  ( -- )
+  hdr  1,'CLS'
+;  XXX TODO -- call it from 'PAGE'
 
 cls:
-  call  docol
-; XXX TODO
+  call rom_cl_all
+  ld a,2
+  call rom_chan_open
+  jp next
+; XXX OLD
+;;  call  do_colon
 ;;  dw  lit,tceold
 ;;  dw  lit,thome
 ;;  dw  atxy2
 ;;  dw  lit,tclsd
 ;;  dw  lit,tcls
 ;;  dw  atxy2
-  dw  exit
+;;  dw  exit
 
 ;  NORMAL  ( -- )
 
-  header  1,'NORMAL'
+  hdr  1,'NORMAL'
 vnorm:
 ; XXX TODO
   jp next
@@ -4009,7 +4088,7 @@ vnorm:
 
 ;  HIGHLIGHT  ( -- )
 
-  header  1,'HIGHLIGHT'
+  hdr  1,'HIGHLIGHT'
 hilit:
 ; XXX TODO
   jp next
@@ -4018,7 +4097,7 @@ hilit:
 
 ;  CLEAR-LINE  ( -- )
 
-  header  1,'CLEAR-LINE'
+  hdr  1,'CLEAR-LINE'
 cleol:
 ; XXX TODO
   jp next
@@ -4027,7 +4106,7 @@ cleol:
 
 ;  INSERT-LINE  ( -- )
 
-  header  1,'INSERT-LINE'
+  hdr  1,'INSERT-LINE'
 insln:
 ; XXX TODO
   jp next
@@ -4038,7 +4117,7 @@ insln:
 
 ;  DELETE-LINE  ( -- )
 
-  header  1,'DELETE-LINE'
+  hdr  1,'DELETE-LINE'
 delln:
 ; XXX TODO
   jp next
@@ -4063,58 +4142,64 @@ delln:
 
 ; PAUSE  ( -- )
 
-  header 1,'PAUSE' ; multitasking support
+  hdr 1,'PAUSE' ; multitasking support
 pause:
-  call  aexec
-pause1:
+  call  fetch_execute
+pause1: ; XXX TODO rename this label
   dw  0   ; patched by COLD
 
 ; KEY?  ( -- flag )
 
-  header 1,'KEY?'
+  hdr 1,'KEY?'
 keyq:
-  call  docol
+  call  do_colon
   dw  lit,vkeyq   ; (vkeyq)
-  dw  aexec       ; @execute
+  dw  fetch_execute       ; @execute
   dw  pause       ; pause
   dw  exit
 
 ; KEY  ( -- char )  (vkey) @execute pause
 
-  header 1,'KEY'
+  hdr 1,'KEY'
 key:
-  call  docol
+  call  do_colon
   dw  lit,vkey
-  dw  aexec
+  dw  fetch_execute
   dw  pause
   dw  exit
 
 ; SPACE  ( -- )   bl emit
 
-  header 1,'SPACE'
+  hdr 1,'SPACE'
 space:
   ld  l,32
-emit_l:
   push  hl
   jp  emit ; XXX NEW -- because headers and code share the same zone
 
 ; EMIT  ( char -- ) (vemit) @execute 1 out +! pause
 
-  header 1,'EMIT'
+  hdr 1,'EMIT'
 emit:
-  call  docol
-  dw  lit,vemit
-  dw  aexec
-  dw  one,outt,pstor
-  dw  pause
-  dw  exit
+  pop hl
+emit_l:
+  ld a,l
+emit_a:
+  rst 0x10
+  jp next
+; XXX OLD
+;;  call  do_colon
+;;  dw  lit,vemit
+;;  dw  fetch_execute
+;;  dw  one,outt,pstor
+;;  dw  pause
+;;  dw  exit
 
 ; TYPE  ( c-addr u -- )
 ; 0max 0 ?do count emit loop drop
-
-  header 1,'TYPE'
+; XXX TODO use ROM call instead
+  hdr 1,'TYPE'
 typee:
-  call  docol
+  call  do_colon
   dw  zero_max,zero
   dw  xqdo,typee2
 typee1:
@@ -4126,9 +4211,9 @@ typee2:
 
 ; SPACES  ( +n -- ) 0max 0 ?do space loop
 
-  header 1,'SPACES'
+  hdr 1,'SPACES'
 spacs:
-  call  docol
+  call  do_colon
   dw  zero_max,zero
   dw  xqdo,spacs2
 spacs1:
@@ -4139,12 +4224,12 @@ spacs2:
 
 ; CR  ( -- )
 
-  header 1,'CR'
+  hdr 1,'CR'
 crr:
   ; XXX TODO
   jp  next
 ; XXX OLD
-;;  call  docol
+;;  call  do_colon
 ;;  dw  clit
 ;;  db  cr_char
 ;;  dw  emit
@@ -4157,7 +4242,7 @@ crr:
 ;  PAGE  ( -- )
 ;  12 emit
 
-  header  1,'PAGE'
+  hdr  1,'PAGE'
 page:
   ; XXX FIXME -- this is only for printer
   ld  l,ff_char ; formfeed char
@@ -4165,7 +4250,7 @@ page:
 
 ; CONSOLE  ( -- )   (vcon) @ (vemit) !
 
-  header 1,'CONSOLE' ; set EMIT to terminal
+  hdr 1,'CONSOLE' ; set EMIT to terminal
 console:
   ; XXX TODO
 ; XXX OLD
@@ -4175,7 +4260,7 @@ console:
 
 ; PRINTER  ( -- )   (vlst) @ (vemit) !
 
-  header 1,'PRINTER' ; set EMIT to printer
+  hdr 1,'PRINTER' ; set EMIT to printer
 printer:
   ; XXX TODO
 ; XXX OLD
@@ -4183,46 +4268,15 @@ printer:
 ;;  ld  (vemit),hl
   jp  next
 
-; end
-
-; }}} **********************************************************
-; XXX
-
-; UPCASE  ( char1 -- char2 )
-
-  header 1,'UPCASE'  ; make char uppercase
-upcas:
-  pop hl
-  ld  a,l
-  call  upc
-  jp  apush
-
-; UPPER  ( c-addr u -- )
-
-  header 1,'UPPER' ; make string uppercase
-upper:
-  pop de
-  pop hl
-upper1:
-  ld  a,d
-  or  e
-  jp  z,next
-  ld  a,(hl)
-  call  upc
-  ld  (hl),a
-  inc hl
-  dec de
-  jp  upper1
-
 ; }}} **********************************************************
 ; Compiler functions {{{
 
 
 ; wfind  ( c-addr wid -- 0 | xt nfa -1 | xt nfa 1 )
 
-  header x,'WFIND',,1
+  hdr x,'WFIND',,1
 wfind:
-  call  docol   ; save IP
+  call  do_colon   ; save IP
   dw  $+2
   pop hl
   ld  a,l
@@ -4246,11 +4300,11 @@ wfind3:
   push  hl    ; save nfa
   ld  c,(hl)
   ld  a,c
-  and 1fh
+  and 0x1f
   ld  b,a   ; dict name length
   ld  a,(de)    ; string length
   xor c   ; check lengths/smudge bit
-  and 3fh
+  and 0x3f
   jp  z,wfind5
   inc hl    ; to link
 wfind4:
@@ -4268,12 +4322,12 @@ wfind5:
   inc de
   ld  a,(de)
    if ucase
-  call  upc
+  call  uppercase_a
    endif
   ld  c,a
   ld  a,(hl)
    if ucase
-  call  upc
+  call  uppercase_a
    endif
   xor c
   jp  nz,wfind4 ; no match
@@ -4290,7 +4344,7 @@ wfind5:
   push  de
   push  hl
   ld  a,(hl)
-  and 40h   ; immediate?
+  and 0x40   ; immediate?
   ld  hl,-1
   jp  z,wfind6
   inc hl
@@ -4303,9 +4357,9 @@ wfind6:
 ;       0 3 0 do over i cells context + @
 ;       wfind ?dup if nip 2nip leave then loop
 
-  header x,'(FIND)',,1 ; searches CONTEXT CURRENT FORTH
+  hdr x,'(FIND)',,1 ; searches CONTEXT CURRENT FORTH
 pfind:
-  call  docol
+  call  do_colon
   dw  zero
   dw  three
   dw  zero
@@ -4325,9 +4379,9 @@ pfind3:
 
 ; FIND  ( c-addr -- c-addr 0 | xt -1 | xt 1 )
 
-  header 1,'FIND',,1
+  hdr 1,'FIND',,1
 find:
-  call  aexec
+  call  fetch_execute
   dw  pfind
 
    if 0
@@ -4335,14 +4389,14 @@ find:
 ; SEARCH-WORDLIST  ( c-addr u wid -- 0 | xt -1 | xt 1 )
 ;       >r wpack r> wfind dup if nip then
 
-  header 1,'SEARCH-WORDLIST',,1
+  hdr 1,'SEARCH-WORDLIST',,1
 swlis:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  wpack
   dw  from_r
   dw  wfind
-  dw  dupp
+  dw  dup
   dw  zbran,swlis1
   dw  nip
 swlis1  dw  exit
@@ -4353,24 +4407,24 @@ swlis1  dw  exit
 
 ; -?  ( -- )    warning @ 0fffe and warning !
 
-  header 1,'-?',,1 ; disable warnings for next definition only
+  hdr 1,'-?',,1 ; disable warnings for next definition only
 dques:
   ld  hl,warnn1
   ld  a,(hl)
-  and 0feh    ; clear bit 0
+  and 0xfe    ; clear bit 0
   ld  (hl),a
   jp next
 
 ; warning?  ( -- 0|1 )  warning @ dup if dup 1 and tuck if -1
 ;       else $7fff and 1 then or warning ! then
 
-  header x,'WARNING?',,1 ; get warning flag and apply mask
+  hdr x,'WARNING?',,1 ; get warning flag and apply mask
 qwarn:
-  call  docol
+  call  do_colon
   dw  warnn,fetch
-  dw  dupp
+  dw  dup
   dw  zbran,qwarn3
-  dw  dupp,one,and_ ; test bit 0
+  dw  dup,one,and_ ; test bit 0
   dw  tuck
   dw  zbran,qwarn1
   dw  true    ; enable all warnings
@@ -4389,16 +4443,16 @@ qwarn3:
 
 ; IMMEDIATE  ( -- ) $40 xnfa
 
-  header 1,'IMMEDIATE',,1
+  hdr 1,'IMMEDIATE',,1
 immed:
-  ld  e,40h
+  ld  e,0x40
   jp  smudg1
 
 ; SMUDGE  ( -- )    $20 xnfa
 
-  header 1,'SMUDGE',,1 ; FIG
+  hdr 1,'SMUDGE',,1 ; FIG
 smudg:
-  ld  e,20h
+  ld  e,0x20
 smudg1:
   push  de
 ; jp  xnfa
@@ -4418,30 +4472,30 @@ xnfa:
 ;       dup get-current ! rot r> ?dup 0= if here
 ;       then dup rot ! over last 2! swap cmove
 
-  header x,'HEADER',,1
-headr:
-  call  docol
+  hdr x,'HEADER',,1
+header:
+  call  do_colon
    if wopt
   dw  qwarn
    else
   dw  warnn,fetch
    endif
-  dw  ttor
+  dw  two_to_r
   dw  blword
-  dw  dupp,cat
+  dw  dup,c_fetch
   dw  clit
   db  32
   dw  one,within
-  dw  pabq
+  dw  paren_abort_quote
   dcs 'invalid name'
-  dw  dupp,find,nip
+  dw  dup,find,nip
   dw  from_r,and_
-  dw  zbran,headr1
-  dw  dupp,count,typee
-  dw  pdotq
+  dw  zbran,header1
+  dw  dup,count,typee
+  dw  paren_dot_quote
   dcs ' is redefined '
-headr1:
-  dw  dupp,count
+header1:
+  dw  dup,count
   dw  tuck
   dw  plus
   dw  getcur,wtnam
@@ -4452,45 +4506,45 @@ headr1:
   dw  plus
   dw  dph,fetch
   dw  over,dph,pstor
-  dw  dupp
+  dw  dup
   dw  getcur
   dw  store   ; CP/M version
   dw  rot
-  dw  from_r,qdup,zequ
-  dw  zbran,headr2
+  dw  from_r,qdup,zero_equals
+  dw  zbran,header2
   dw  here
-headr2:
-  dw  dupp,rot,store
-  dw  over,last,tstor
+header2:
+  dw  dup,rot,store
+  dw  over,last,two_store
   dw  swap,cmove
   dw  exit
 
 ; ,call  ( addr -- )  $CD c, ,
 
-  header x,',CALL',,1
-comcall:call  docol
+  hdr x,',CALL',,1
+comcall:call  do_colon
   dw  clit
-  db  0CDh    ; 'call' opcode
+  db  0xcd    ; 'call' opcode
   dw  ccomm
   dw  comma
   dw  exit
 
 ; BUILD  ( xt "name" -- )  0 header ,call
 
-  header 1,'BUILD',,1
+  hdr 1,'BUILD',,1
 build:
-  call  docol
-  dw  zero,headr
+  call  do_colon
+  dw  zero,header
   dw  comcall
   dw  exit
 
-; :  ( -- )   (docol) build smudge bal off !csp
+; :  ( -- )   (do_colon) build smudge bal off !csp
 ;       sp@ cf0 ! ]
 
-  header 1,':',,1
+  hdr 1,':',,1
 colon:
-  call  docol
-  dw  lit,docol
+  call  do_colon
+  dw  lit,do_colon
   dw  build
   dw  smudg
 colon1:
@@ -4505,18 +4559,18 @@ colon1:
 
 ; EXIT  ( -- )    postpone (exit) immediate
 
-  header 1,'EXIT',1,1
+  hdr 1,'EXIT',1,1
 exitt:
-  call  docol
+  call  do_colon
   dw  comp,exit
   dw  exit
 
 ; ;  ( -- )   postpone exit bal @ ?bal ?csp smudge
 ;       postpone [ ;immediate
 
-  header 1,';',1,1
+  hdr 1,';',1,1
 semic:
-  call  docol
+  call  do_colon
   dw  exitt
   dw  bal,fetch
   dw  qbal
@@ -4526,25 +4580,25 @@ semic:
   dw  exit
 
 ; :NONAME  ( -- xt )  warning? drop here dup (dnfa) last 2!
-;       (docol) ,call bal off !csp sp@ cf0 ! ]
+;       (do_colon) ,call bal off !csp sp@ cf0 ! ]
 
-  header 1,':NONAME',,1
+  hdr 1,':NONAME',,1
 nonam:
-  call  docol
+  call  do_colon
    if wopt
   dw  qwarn,drop  ; allow -?
    endif
   dw  here
-  dw  dupp    ; allow RECURSE etc
+  dw  dup    ; allow RECURSE etc
   dw  lit,dnfa  ; allow IMMEDIATE etc
-  dw  last,tstor
-  dw  lit,docol
+  dw  last,two_store
+  dw  lit,do_colon
   dw  comcall
   dw  branch,colon1
 
 ; (;CODE)     r> last cell+ @ 1+ !
 
-  header 1,'(;CODE)',,1
+  hdr 1,'(;CODE)',,1
 pscod:
   ld  hl,(last2)
   inc hl
@@ -4553,64 +4607,64 @@ pscod:
   ld  (hl),b
   jp  exit
 
-; DOES>     postpone (;code) (docol) ,call ;immediate
+; DOES>     postpone (;code) (do_colon) ,call ;immediate
 
-  header 1,'DOES>',1,1
+  hdr 1,'DOES>',1,1
 does:
-  call  docol
+  call  do_colon
   dw  comp,pscod
-  dw  lit,docol
+  dw  lit,do_colon
   dw  comcall
   dw  exit
 
 ; CREATE  ( -- addr ) 'next build
 
-  header 1,'CREATE',,1
+  hdr 1,'CREATE',,1
 creat:
   ld  hl,next
   push  hl
   jp  build
 
-; docre equ next ; XXX OLD repeated
+; do_create equ next ; XXX OLD repeated
 
 ; VARIABLE  ( -- addr ) create 2 allot
 
-  header 1,'VARIABLE',,1
+  hdr 1,'VARIABLE',,1
 var:
-  call  docol
+  call  do_colon
   dw  creat
   dw  two,allot
   dw  exit
 
 ; VALUE  ( -- x )   (dotcon) build ,
 
-  header 1,'VALUE',,1
+  hdr 1,'VALUE',,1
 value:
-  call  docol
+  call  do_colon
 value1:
-  dw  lit,doval
+  dw  lit,do_value
   dw  build
   dw  comma
   dw  exit
 
-; CONSTANT  ( -- x )  char? if (docco) build c,
+; CONSTANT  ( -- x )  char? if (do_byte_constant) build c,
 ;       else value then
 
-  header 1,'CONSTANT',,1
+  hdr 1,'CONSTANT',,1
 con:
-  call  docol
+  call  do_colon
   dw  charq
   dw  zbran,value1
-  dw  lit,docco
+  dw  lit,do_byte_constant
   dw  build
   dw  ccomm
   dw  exit
 
 ; 2VARIABLE  ( -- addr )  create 4 allot
 
-  header 1,'2VARIABLE',,1
+  hdr 1,'2VARIABLE',,1
 tvar:
-  call  docol
+  call  do_colon
   dw  creat
   dw  clit
   db  4
@@ -4621,9 +4675,9 @@ dotvar  equ next
 
 ; 2CONSTANT  ( -- x2 x1 )  (dotcon) build , ,
 
-  header 1,'2CONSTANT',,1
+  hdr 1,'2CONSTANT',,1
 tcon:
-  call  docol
+  call  do_colon
   dw  lit,dotcon
   dw  build
   dw  comma,comma
@@ -4633,9 +4687,9 @@ dotcon  equ tat   ; 2@
 
 ; USER  ( -- addr ) (douse) build ,
 
-  header 1,'USER',,1 ; FIG
+  hdr 1,'USER',,1 ; FIG
 user:
-  call  docol
+  call  do_colon
   dw  lit,douse
   dw  build
   dw  comma
@@ -4644,9 +4698,9 @@ user:
 ; ADDR  ( -- addr ) ' >body state @ if postpone literal then
 ;       ;immediate
 
-  header 1,'ADDR',1,1  ; state-smart
+  hdr 1,'ADDR',1,1  ; state-smart
 addr:
-  call  docol
+  call  do_colon
   dw  tick,tbody
   dw  stateq
   dw  zbran,addr1
@@ -4656,7 +4710,7 @@ addr1:
 
 ; (to)  ( x -- )    r> dup cell+ >r @ >body !
 
-  header x,'(TO)'
+  hdr x,'(TO)'
 pto:
   ld  a,(bc)
   ld  l,a
@@ -4672,9 +4726,9 @@ pto:
 ; TO      ' state? if postpone (to) , else >body !
 ;       then ;immediate
 
-  header 1,'TO',1,1  ; state-smart
+  hdr 1,'TO',1,1  ; state-smart
 to:
-  call  docol
+  call  do_colon
   dw  tick
   dw  stateq
   dw  zbran,to1
@@ -4689,17 +4743,17 @@ to2:
 ;   cseg ; XXX OLD
 
 undef:
-  call  docol
+  call  do_colon
   dw  one
-  dw  pabq
+  dw  paren_abort_quote
   dcs 'uninitiated DEFER'
 
 ; DEFER  ( -- )   ['] @execute build (undef) ,
 
-  header 1,'DEFER',,1
+  hdr 1,'DEFER',,1
 defer:
-  call  docol
-  dw  lit,aexec
+  call  do_colon
+  dw  lit,fetch_execute
   dw  build
   dw  lit,undef
   dw  comma
@@ -4707,7 +4761,7 @@ defer:
 
 ; IS      aka to is
 
-  header 1,'IS',1,,to  ; state-smart
+  hdr 1,'IS',1,,to  ; state-smart
 is  equ to
 
 pis equ pto
@@ -4715,14 +4769,14 @@ pis equ pto
 ; AKA  ( "oldname" "newname" -- )  defined tuck ?defined (header)
 ;         $80 xnfa 0> if immediate then
 ; XXX TODO ' alias' too
-  header 1,'AKA',,1
+  hdr 1,'AKA',,1
 aka:
-  call  docol
+  call  do_colon
   dw  defined_
   dw  tuck,qdef
-  dw  headr   ; equivalent of
+  dw  header   ; equivalent of
   dw  clit    ; ALIAS ( xt "newname" -- )
-  db  80h   ;
+  db  0x80   ;
   dw  xnfa    ;
   dw  zgrea
   dw  zbran,aka1
@@ -4736,68 +4790,68 @@ aka1:
 
 ; TRUE
 
-  header 1,'TRUE'
+  hdr 1,'TRUE'
 true:
   ld  hl,-1
   jp  push_hl
 
 ; FALSE
 
-  header 1,'FALSE'
+  hdr 1,'FALSE'
 false:
   ld  hl,0
   jp  push_hl
 
 ; -1  ( -- -1 )   aka true -1
 
-  header 1,'-1',,,true
+  hdr 1,'-1',,,true
 
 ; 0  ( -- 0 )   aka false 0
 
-  header 1,'0',,,false
+  hdr 1,'0',,,false
 zero  equ false
 
 ; 1  ( -- 1 )
 
-  header 1,'1'
+  hdr 1,'1'
 one:
-  call  docco
+  call  do_byte_constant
   db  1
 
 ; 2  ( -- 2 )
 
-  header 1,'2'
+  hdr 1,'2'
 two:
-  call  docco
+  call  do_byte_constant
   db  2
 
 ; 3  ( -- 3 )
 
-  header 1,'3'
+  hdr 1,'3'
 three:
-  call  docco
+  call  do_byte_constant
   db  3
 
 ; BL  ( -- 32 )   ascii value for space character
 
-  header 1,'BL'
-bll:
-  call  docco
-  db  32
+  hdr 1,'BL'
+bl:
+  call  do_byte_constant
+  db  sp_char
 
 ; B/BUF  ( -- u )  bytes per screen buffer
 
-  header 1,'B/BUF',,1  ; FIG
+  hdr 1,'B/BUF',,1  ; FIG
 bbuf:
-  call  doval
+  call  do_value
 bbuf1:
   dw 128*8 ; default
 
 ; C/L  ( -- u )    chars per screen line
 
-  header 1,'C/L',,1  ; FIG
+  hdr 1,'C/L',,1  ; FIG
 csll:
-  call  doval
+  call  do_value
   dw  64 ; default
 
 ; For applications, LIMIT is the upper limit of available memory.
@@ -4806,33 +4860,33 @@ csll:
 
 ; LIMIT  ( -- addr )
 
-  header 1,'LIMIT' ; FIG
+  hdr 1,'LIMIT' ; FIG
 limit:
-  call  doval   ; application word - used by BUF
+  call  do_value   ; application word - used by BUF
 limit1:
   ds  cw    ; patched by COLD
 
 ; hbuf  ( -- addr ) handle r/w buffer
 
-  header x,'HBUF'
+  hdr x,'HBUF'
 hbuf:
-  call  doval
+  call  do_value
 hbuf1:
   ds  cw    ; patched by COLD
 
 ; 'NEXT  ( -- addr )  address of NEXT
 
-  header 1,"'NEXT"
+  hdr 1,"'NEXT"
 tnext:
-  call  docon
+  call  do_constant
 tnext1:
   dw  next
 
 ; #FCB  ( -- u )    number of file handles
 
-  header 1,'#FCB'
+  hdr 1,'#FCB'
 nfcb:
-  call  doval
+  call  do_value
 nfcb1:
   dw  fhno
 
@@ -4841,9 +4895,9 @@ nfcb1:
 ; XXX -- This word is not used in DX-Forth.
 ; It appears only in <misc.fs>, but commented out.
 
-  header 1,'SYS-VEC'
+  hdr 1,'SYS-VEC'
 sysvec:
-  call  docre
+  call  do_create
 
 vkeyq:
   dw  qterm   ;  0 KEY?
@@ -4872,35 +4926,35 @@ nrts:
 nus:
   dw  us    ; 24 user area (bytes)
 npno:
-  dw  pno   ; 26 HOLD buffer size (bytes)
-;nmscon:
-  dw  -2386   ; 28 MS timing constant
-;ntmode:
-  dw  3   ; 30 Timer 0 mode
+  dw  pictured_numeric_buffer_size   ; 26 HOLD buffer size (bytes)
+;nmscon: ; XXX OLD
+;  dw  -2386   ; 28 MS timing constant 
+;ntmode: ; XXX OLD
+;  dw  3   ; 30 Timer 0 mode
 
 ; }}} **********************************************************
 ; Variables {{{
 
 ; UP  ( -- addr )   user area pointer
 
-  header 1,'UP'
+  hdr 1,'UP'
 up:
-  call  docon
+  call  do_constant
   dw  upp
 
 ; FSP  ( -- addr )  fp stack pointer
 
-  header 1,'FSP'
+  hdr 1,'FSP'
 fsp:
-  call  docre
+  call  do_create
 fspp:
   ds  cw
 
 ; boot  ( -- addr ) boot word (holds forth/application xt)
 
-  header x,'BOOT'
+  hdr x,'BOOT'
 boot:
-  call  docre
+  call  do_create
 boot1:
   dw  0   ; xt
 boot2:
@@ -4908,17 +4962,17 @@ boot2:
 
 ; SYS  ( -- addr )  compile system or application
 
-  header 1,'SYS'
+  hdr 1,'SYS'
 sys:
-  call  docre   ; application word - used by HERE, UNUSED
+  call  do_create   ; application word - used by HERE, UNUSED
 sys1:
   dw  0
 
 ; last  ( -- addr ) occupies 2 cells
 
-  header x,'LAST',,1
+  hdr x,'LAST',,1
 last:
-  call  docre
+  call  do_create
 last1:
   dw  top_nfa    ; latest nfa
 last2:
@@ -4926,79 +4980,79 @@ last2:
 
 ; BLK
 
-  header 1,'BLK',,1
+  hdr 1,'BLK',,1
 blk:
-  call  docre
+  call  do_create
 blk1:
   ds  cw
 
 ; >IN
 
-  header 1,'>IN',,1
+  hdr 1,'>IN',,1
 inn:
-  call  docre
+  call  do_create
 inn1:
   ds  cw
 
 ; SCR     occupies 2 cells
 
-  header 1,'SCR',,1
+  hdr 1,'SCR',,1
 scr:
-  call  docre
+  call  do_create
   ds  2*cw
 
 ; STATE
 
-  header 1,'STATE',,1
+  hdr 1,'STATE',,1
 state:
-  call  docre
+  call  do_create
 state1:
   ds  cw
 
 ; 'SOURCE     occupies 2 cells
 
-  header 1,"'SOURCE",,1
+  hdr 1,"'SOURCE",,1
 tsourc:
-  call  docre
+  call  do_create
 tsour1:
   ds  2*cw
 
 ; WARNING
 
-  header 1,'WARNING',,1  ; FIG
+  hdr 1,'WARNING',,1  ; FIG
 warnn:
-  call  docre
+  call  do_create
 warnn1:
   ds  cw
 
 ; CSP
 
-  header 1,'CSP',,1  ; FIG
+  hdr 1,'CSP',,1  ; FIG
 cspp:
-  call  docre
+  call  do_create
 cspp1:
   ds  cw
 
 ; CHECKING
 
-  header 1,'CHECKING',,1
+  hdr 1,'CHECKING',,1
 check:
-  call  docre
+  call  do_create
 check1:
   ds  cw
 
 ; errmsg  ( -- addr ) message holder for abort"
 
-  header x,'ERRMSG'
+  hdr x,'ERRMSG'
 errmsg:
-  call  docre
+  call  do_create
 errmsg1:ds  2*cw
 
 ; CONTEXT  ( -- addr )
 
-  header 1,'CONTEXT',,1
+  hdr 1,'CONTEXT',,1
 cont:
-  call  docre
+  call  do_create
 acont:
   ds  cw    ; context
 acurr:
@@ -5007,30 +5061,30 @@ acurr:
 
 ; get-context  ( -- wid )
 
-  header x,'GET-CONTEXT',,1
+  hdr x,'GET-CONTEXT',,1
 getcon:
   ld  hl,(acont)
   jp  push_hl
 
 ; GET-CURRENT  ( -- wid )
 
-  header 1,'GET-CURRENT',,1
+  hdr 1,'GET-CURRENT',,1
 getcur:
   ld  hl,(acurr)
   jp  push_hl
 
 ; SET-CURRENT  ( wid -- )
 
-  header 1,'SET-CURRENT',,1
+  hdr 1,'SET-CURRENT',,1
 setcur:
   ld  hl,acurr
   jp  store1
 
 ; zbuf  ( -- addr ) filename buffer pointers
 
-  header x,'ZBUF'
+  hdr x,'ZBUF'
 zbuf:
-  call  docre
+  call  do_create
 zbuf1:
   dw  zb1 ; next buffer
   dw  zb2 ; last buffer
@@ -5042,42 +5096,42 @@ zbuf1:
 
 ; S0
 
-  header 1,'S0'    ; FIG
+  hdr 1,'S0'    ; FIG
 szero:
   call  douse
   dw  6
 
 ; R0
 
-  header 1,'R0'    ; FIG
+  hdr 1,'R0'    ; FIG
 rzero:
   call  douse
   dw  8
 
 ; DP      application dictionary pointer
 
-  header 1,'DP'    ; FIG
+  hdr 1,'DP'    ; FIG
 dpp:
   call  douse
   dw  10
 
 ; dph     system dictionary pointer
 
-  header x,'DPH',,1  ; must follow DP
+  hdr x,'DPH',,1  ; must follow DP
 dph:
   call  douse
   dw  12
 
 ; VOC-LINK
 
-  header 1,'VOC-LINK',,1 ; FIG
+  hdr 1,'VOC-LINK',,1 ; FIG
 vocl:
   call  douse
   dw  14
 
 ; FS0
 
-  header 1,'FS0'
+  hdr 1,'FS0'
 fszero:
   call  douse
   dw  16
@@ -5088,21 +5142,21 @@ fszero:
 
 ; DPL
 
-  header 1,'DPL'   ; FIG
+  hdr 1,'DPL'   ; FIG
 dpl:
   call  douse
   dw  20
 
 ; hld
 
-  header x,'HLD'   ; FIG
+  hdr x,'HLD'   ; FIG
 hld:
   call  douse
   dw  22
 
 ; BASE
 
-  header 1,'BASE'
+  hdr 1,'BASE'
 base:
   call  douse
   dw  24
@@ -5111,7 +5165,7 @@ base:
 
 ; OUT
 
-  header 1,'OUT'   ; FIG
+  hdr 1,'OUT'   ; FIG
 outt:
   call  douse
   dw  28
@@ -5120,7 +5174,7 @@ outt:
 
 ; CATCHER
 
-  header 1,'CATCHER'
+  hdr 1,'CATCHER'
 catchr:
   call  douse
   dw  34
@@ -5134,47 +5188,48 @@ catchr:
 
 ; sys?  ( -- flag ) sys@ 0<>
 
-  header x,'SYS?'
+  hdr x,'SYS?'
 sysq:
   ld  hl,sys1
 sysq1:
+  ; XXX TODO -- maybe faster: use A, OR and write PUSH_A
   ld  e,(hl)
   inc hl
   ld  d,(hl)
   push  de
-  jp  zneq
+  jp  zero_not_equals
 
 ; state?  ( -- flag ) state @ 0<>
 
-  header x,'STATE?',,1
+  hdr x,'STATE?',,1
 stateq:
   ld  hl,state1
   jp  sysq1
 
 ; check?  ( -- flag ) checking @ 0<>
 
-  header x,'CHECK?',,1
+  hdr x,'CHECK?',,1
 chkq:
   ld  hl,check1
   jp  sysq1
 
 ; APPLICATION  ( -- ) sys off
 
-  header 1,'APPLICATION',,1
+  hdr 1,'APPLICATION',,1
 app:
   ld  hl,sys1
   jp  off1
 
 ; SYSTEM  ( -- )    sys on
 
-  header 1,'SYSTEM',,1
+  hdr 1,'SYSTEM',,1
 system:
   ld  hl,sys1
   jp  on1
 
 ; h  ( -- addr )    sys@ if dph else dp then
 
-  header x,'H'
+  hdr x,'H'
 hh:
   ld  hl,(sys1)
   ld  a,l
@@ -5185,13 +5240,13 @@ hh:
 ; ALLOT  ( n -- )   here over 0max dup unused u>
 ;       abort" no data space" erase h +!
 
-  header 1,'ALLOT'
+  hdr 1,'ALLOT'
 allot:
-  call  docol
+  call  do_colon
   dw  here,over
-  dw  zero_max,dupp
+  dw  zero_max,dup
   dw  unus,ugrea
-  dw  pabq
+  dw  paren_abort_quote
   dcs 'no data space'
   dw  erase
   dw  hh,pstor
@@ -5199,17 +5254,17 @@ allot:
 
 ; HERE  ( -- addr ) h @
 
-  header 1,'HERE'
+  hdr 1,'HERE'
 here:
-  call  docol
+  call  do_colon
   dw  hh,fetch
   dw  exit
 
 ; C,  ( char -- )   here 1 allot c!
 
-  header 1,'C,',,1
+  hdr 1,'C,',,1
 ccomm:
-  call  docol
+  call  do_colon
   dw  here
   dw  one,allot
   dw  cstor
@@ -5217,9 +5272,9 @@ ccomm:
 
 ; ,  ( n -- )   here 2 allot !
 
-  header 1,',',,1
+  hdr 1,',',,1
 comma:
-  call  docol
+  call  do_colon
   dw  here
   dw  two,allot
   dw  store
@@ -5227,7 +5282,7 @@ comma:
 
 ; >BODY  ( xt -- addr ) 3 +
 
-  header 1,'>BODY'
+  hdr 1,'>BODY'
 tbody:
   ld  de,3
   jp  plus_de
@@ -5235,7 +5290,7 @@ tbody:
 ; BODY>  ( addr -- xt ) 3 -
 ;
 ; XXX -- this word was commented out in DX-Forth, why?
-  header x,'BODY>'
+  hdr x,'BODY>'
 fbody:
   ld  de,-3
   jp  plus_de
@@ -5243,7 +5298,7 @@ fbody:
 ; XXX NEW -- DX-Forth 4.09
 ;  n>count  ( nfa -- h-addr len )  aka (name) n>count
 
-  header  x,'N>COUNT',,,pname
+  hdr  x,'N>COUNT',,,pname
 ncnt  equ  pname
 
 ; XXX OLD -- DX-Forth 4.00
@@ -5263,36 +5318,36 @@ ncnt  equ  pname
 ; XXX NEW -- DX-Forth 4.09
 ;  n>link  ( nfa -- lfa )    n>count +
 
-  header  x,'N>LINK',,1
+  hdr  x,'N>LINK',,1
 nlnk:
-  call  docol
+  call  do_colon
   dw  ncnt,plus
   dw  exit
 
 ; N>NAME  ( nfa1 -- nfa2 | 0 )
 
-  header 1,'N>NAME',,1
+  hdr 1,'N>NAME',,1
 ntnam:
-  call  docol
+  call  do_colon
   dw  nlnk,fetch  ; n>link @
   dw  exit
 
 ; name>  ( nfa -- xt )
 
-  header x,'NAME>',,1
+  hdr x,'NAME>',,1
 namef:
-  call  docol
+  call  do_colon
   dw  nlnk,cellp,fetch ; n>link cell+ @
   dw  exit
 
 ; W>NAME  ( wid -- nfa | 0 )  aka @ w>name
 
-  header 1,'W>NAME',,,fetch
+  hdr 1,'W>NAME',,,fetch
 wtnam equ fetch
 
 ; -alias  ( nfa -- nfa flag )  dup c@ $80 <
 
-  header x,'-ALIAS',,1 ; false if alias
+  hdr x,'-ALIAS',,1 ; false if alias
 dalias:
   pop hl
   push  hl
@@ -5309,11 +5364,11 @@ dalias:
 ;;
 ;;  header x,'>NAME',,1
 ;;to_name:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  vocl
 ;;to_name1:
 ;;  dw  fetch
-;;  dw  dupp
+;;  dw  dup
 ;;  dw  zbran,to_name5
 ;;  dw  tuck
 ;;  dw  twom
@@ -5345,13 +5400,13 @@ dalias:
 ;        -rot 2drop exit then then n>name repeat swap
 ;        repeat nip
 
-  header  x,'>NAME',,1
+  hdr  x,'>NAME',,1
 to_name:
-  call  docol
+  call  do_colon
   dw  vocl
 to_name1:
   dw  fetch
-  dw  dupp
+  dw  dup
   dw  zbran,to_name5
   dw  tuck
   dw  cellm
@@ -5381,7 +5436,7 @@ to_name5:
 ;;
 ;;  header 1,'(NAME)',,1
 ;;pname:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  count
 ;;  dw  clit
 ;;  db  31
@@ -5391,12 +5446,12 @@ to_name5:
 ; XXX NEW -- DX-Forth 4.09
 ;  (NAME)  ( nfa -- c-addr u )  count 31 and
 
-  header  1,'(NAME)',,1
+  hdr  1,'(NAME)',,1
 pname:
   pop  de
   ld  a,(de)
   inc  de
-  and  1fh
+  and  0x1f
   ld  l,a
   ld  h,0
   jp  push_de
@@ -5404,39 +5459,39 @@ pname:
 ; .ID  ( nfa | 0 -- )   ?dup if (name) type exit then
 ;         ." [noname]"
 
-  header 1,'.ID',,1
+  hdr 1,'.ID',,1
 dotid:
-  call  docol
+  call  do_colon
   dw  qdup
   dw  zbran,dotid1
   dw  pname
   dw  typee
   dw  exit
 dotid1:
-  dw  pdotq
+  dw  paren_dot_quote
   dcs '[noname]'
   dw  exit
 
 ; .NAME  ( xt -- )  >name .id
 
-  header 1,'.NAME',,1
+  hdr 1,'.NAME',,1
 dotnam:
-  call  docol
+  call  do_colon
   dw  to_name,dotid
   dw  exit
 
 ; .WID  ( wid -- )  cell+ cell+ @ .id
 ; XXX Renamed to '.VOC' in DX-Forth 4.09
-  header 1,'.WID',,1
+  hdr 1,'.WID',,1
 dotwid:
-  call  docol
+  call  do_colon
   dw  cellp,cellp
   dw  fetch,dotid
   dw  exit
 
 ; !CSP  ( -- )    sp@ csp !
 
-  header 1,'!CSP',,1 ; FIG
+  hdr 1,'!CSP',,1 ; FIG
 scsp:
   ld  hl,0
   add hl,sp
@@ -5445,9 +5500,9 @@ scsp:
 
 ; ?CSP  ( -- )    sp@ csp @ - ?bal
 
-  header 1,'?CSP',,1 ; FIG
+  hdr 1,'?CSP',,1 ; FIG
 qcsp:
-  call  docol
+  call  do_colon
   dw  sp_fetch
   dw  cspp,fetch
   dw  subb
@@ -5456,22 +5511,22 @@ qcsp:
 
 ; ?COMP  ( -- )   state? 0= abort" compilation only'
 
-  header 1,'?COMP',,1  ; FIG
+  hdr 1,'?COMP',,1  ; FIG
 qcomp:
-  call  docol
+  call  do_colon
   dw  state,fetch
-  dw  zequ
-  dw  pabq
+  dw  zero_equals
+  dw  paren_abort_quote
   dcs 'compilation only'
   dw  exit
 
 ; ?EXEC  ( -- )   state? abort" execution only'
 
-  header 1,'?EXEC',,1  ; FIG
+  hdr 1,'?EXEC',,1  ; FIG
 qexec:
-  call  docol
+  call  do_colon
   dw  stateq
-  dw  pabq
+  dw  paren_abort_quote
   dcs 'execution only'
   dw  exit
 
@@ -5480,9 +5535,9 @@ qexec:
 ;       or abort" r-stack?" fs0 @ fsp @ u< fsp @
 ;       fs0 @ (nfpm) @ - u< or abort" f-stack?"
 
-  header 1,'?STACK',,1 ; FIG
+  hdr 1,'?STACK',,1 ; FIG
 qstac:
-  call  docol
+  call  do_colon
   dw  sp_fetch
   dw  szero,fetch
   dw  over,uless
@@ -5490,16 +5545,16 @@ qstac:
   dw  pad
   dw  uless
   dw  or_
-  dw  pabq
+  dw  paren_abort_quote
   dcs 'stack?'
   dw  rzero,fetch
-  dw  rpat
+  dw  rp_fetch
   dw  uless
-  dw  rpat
+  dw  rp_fetch
   dw  fszero    ; = S0 if no float
   dw  fetch
   dw  uless,or_
-  dw  pabq
+  dw  paren_abort_quote
   dcs 'r-stack?'
 ; dw  fszero,fetch
 ; dw  fsp,fetch
@@ -5511,30 +5566,30 @@ qstac:
 ; dw  subb
 ; dw  uless
 ; dw  or_
-; dw  pabq
+; dw  paren_abort_quote
 ; dcs 'f-stack?'
   dw  exit
 
 ; ?defined  ( flag -- ) 0= abort" is undefined"
 
-  header x,'?DEFINED',,1
+  hdr x,'?DEFINED',,1
 qdef:
-  call  docol
-  dw  zequ
-  dw  pabq
+  call  do_colon
+  dw  zero_equals
+  dw  paren_abort_quote
   dcs 'is undefined'
   dw  exit
 
 ; [       state off ;immediate
 
-  header 1,'[',1,1
+  hdr 1,'[',1,1
 lbrac:
   ld  hl,state1
   jp  off1
 
 ; ]     state on
 
-  header 1,']',,1
+  hdr 1,']',,1
 rbrac:
   ld  hl,state1 ; must be -1 for INTERPRET to work
   jp  on1
@@ -5542,22 +5597,22 @@ rbrac:
 ; COMPILE,  ( xt -- ) warning @ 0< if dup limit u< sys? d0=
 ;       if dup .name ."  is system " then then ,
 
-  header 1,'COMPILE,',,1
+  hdr 1,'COMPILE,',,1
 comxt:
-  call  docol
+  call  do_colon
   dw  warnn,fetch
    if wopt
   dw  zless
    endif
   dw  zbran,comxt1
-  dw  dupp,limit
+  dw  dup,limit
   dw  uless
   dw  sysq
   dw  dzequ
   dw  zbran,comxt1
-  dw  dupp
+  dw  dup
   dw  dotnam
-  dw  pdotq
+  dw  paren_dot_quote
   dcs ' is system '
 comxt1:
   dw  comma
@@ -5565,12 +5620,12 @@ comxt1:
 
 ; COMPILE  ( -- )   ?comp r> dup cell+ >r @ compile,
 
-  header 1,'COMPILE',,1
+  hdr 1,'COMPILE',,1
 comp:
-  call  docol
+  call  do_colon
   dw  qcomp   ; prevent crash if interpreting
   dw  from_r
-  dw  dupp,cellp
+  dw  dup,cellp
   dw  to_r
   dw  fetch
   dw  comxt
@@ -5579,11 +5634,11 @@ comp:
 ; POSTPONE    defined dup ?defined 0< if compile
 ;       compile then compile, ;immediate
 
-  header 1,'POSTPONE',1,1
+  hdr 1,'POSTPONE',1,1
 postp:
-  call  docol
+  call  do_colon
   dw  defined_
-  dw  dupp,qdef
+  dw  dup,qdef
   dw  zless
   dw  zbran,postp1
   dw  comp,comp
@@ -5602,19 +5657,19 @@ postp1:
 ;;
 ;;  header x,'(ACCEPT)'
 ;;pacce:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  zero
 ;;pacce1:
 ;;  dw  key
-;;  dw  dupp,to_r
-;;  dw  dupp,bll  ; only accept chars between 32 and 126
+;;  dw  dup,to_r
+;;  dw  dup,bl  ; only accept chars between 32 and 126
 ;;  dw  clit
 ;;  db  127
 ;;  dw  within
 ;;  dw  tover,subb
 ;;  dw  and_
 ;;  dw  zbran,pacce2
-;;  dw  dupp,emit
+;;  dw  dup,emit
 ;;  dw  over
 ;;  dw  clit
 ;;  db  4
@@ -5625,17 +5680,17 @@ postp1:
 ;;  dw  branch,pacce6
 ;;pacce2:
 ;;  dw  tdup
-;;  dw  dupp
+;;  dw  dup
 ;;  dw  clit
 ;;  db  bs_char    ; backspace?
 ;;  dw  equal,swap
 ;;  dw  clit
-;;  db  escape    ; escape?
+;;  db  esc_char    ; escape?
 ;;  dw  equal,or_
 ;;  dw  and_
 ;;  dw  zbran,pacce5
 ;;  dw  clit
-;;  db  escape    ; escape?
+;;  db  esc_char    ; escape?
 ;;  dw  equal
 ;;  dw  zbran,pacce3
 ;;  dw  zero,swap
@@ -5645,10 +5700,10 @@ postp1:
 ;;pacce4:
 ;;  dw  clit
 ;;  db  bs_char
-;;  dw  dupp,emit
+;;  dw  dup,emit
 ;;  dw  space,emit
 ;;  dw  onem
-;;  dw  dupp,zequ
+;;  dw  dup,zero_equals
 ;;  dw  zbran,pacce4
 ;;pacce5:
 ;;  dw  drop
@@ -5670,21 +5725,21 @@ postp1:
 ;        emit 1- dup 0= until then drop then r> 13 =
 ;        until -rot 2drop
 
-  header  x,'(ACCEPT)'
+  hdr  x,'(ACCEPT)'
 pacce:
-  call  docol
+  call  do_colon
   dw  zero
 pacce1:
   dw  key
-  dw  dupp,to_r
-  dw  dupp,bll  ; only accept chars between 32 and 126
+  dw  dup,to_r
+  dw  dup,bl  ; only accept chars between 32 and 126
   dw  clit
   db  127
   dw  within
   dw  tover,subb
   dw  and_
   dw  zbran,pacce2
-  dw  dupp,emit
+  dw  dup,emit
   dw  over
   dw  clit
   db  4
@@ -5695,16 +5750,16 @@ pacce1:
   dw  branch,pacce6
 pacce2:
   dw  tdup
-  dw  dupp
+  dw  dup
   dw  lit,bs_char,equal
   dw  swap
   dw  clit
-  db  escape    ; escape?
+  db  esc_char    ; escape?
   dw  equal,or_
   dw  and_
   dw  zbran,pacce5
   dw  clit
-  db  escape    ; escape?
+  db  esc_char    ; escape?
   dw  equal
   dw  zbran,pacce3
   dw  zero,swap
@@ -5714,10 +5769,10 @@ pacce3:
 pacce4:
   dw  clit
   db  bs_char
-  dw  dupp,emit
+  dw  dup,emit
   dw  space,emit
   dw  onem
-  dw  dupp,zequ
+  dw  dup,zero_equals
   dw  zbran,pacce4
 pacce5:
   dw  drop
@@ -5733,16 +5788,16 @@ pacce6:
 
 ; ACCEPT  ( c-addr +n1 -- +n2)
 
-  header 1,'ACCEPT'
+  hdr 1,'ACCEPT'
 accept:
-  call  aexec
+  call  fetch_execute
   dw  pacce
 
 ; PAD  ( -- addr )  dp @ (npno) @ +
 
-  header 1,'PAD'
+  hdr 1,'PAD'
 pad:
-  call  docol
+  call  do_colon
   dw  dpp,fetch
   dw  lit,npno
   dw  fetch
@@ -5751,14 +5806,14 @@ pad:
 
 ; SOURCE  ( -- c-addr u )   'source 2@
 
-  header 1,'SOURCE',,1
+  hdr 1,'SOURCE',,1
 source:
   ld  hl,tsour1
   jp  tat1
 
 ; PARSE  ( char -- c-addr u ) 0 (parse)
 
-  header 1,'PARSE',,1
+  hdr 1,'PARSE',,1
 parse:
   ld  hl,0
   push  hl
@@ -5768,16 +5823,16 @@ parse:
 ;         r@ skip over - >in +! then 2dup r>
 ;         scan nip tuck - dup rot 0<> - >in +!
 
-  header 0,'(PARSE)',,1
+  hdr 0,'(PARSE)',,1
 ppars:
-  call  docol
-  dw  ttor
+  call  do_colon
+  dw  two_to_r
   dw  source
   dw  inn,fetch,sstr
   dw  from_r
   dw  zbran,ppars1
   dw  tuck
-  dw  rat,skip
+  dw  r_fetch,skip
   dw  rot,over,subb
   dw  inn,pstor
 ppars1:
@@ -5785,21 +5840,21 @@ ppars1:
   dw  from_r
   dw  scan,nip
   dw  tuck
-  dw  subb,dupp
-  dw  rot,zneq
+  dw  subb,dup
+  dw  rot,zero_not_equals
   dw  subb
   dw  inn,pstor
   dw  exit
 
-; +psb  ( a1 n1 n2 -- n3 )  >r (pssiz) r@ - umin r> 2dup + >r
+; +psb  ( a1 n1 n2 -- n3 )  >r (parsed_string_buffer_size) r@ - umin r> 2dup + >r
 ;         (psb) + swap cmove r>
 
-  header x,'+PSB',,1
+  hdr x,'+PSB',,1
 ppsb:
-  call  docol
+  call  do_colon
   dw  to_r
-  dw  lit,pssiz
-  dw  rat,subb
+  dw  lit,parsed_string_buffer_size
+  dw  r_fetch,subb
   dw  umin
   dw  from_r
   dw  tdup,plus
@@ -5816,25 +5871,25 @@ ppsb:
 ;         while 1 dup >in +! r> +psb repeat
 ;         then 2drop (psb) r>
 
-  header 1,'PARSE$',,1
+  hdr 1,'PARSE$',,1
 parss:
-  call  docol
+  call  do_colon
   dw  zero
 parss1:
   dw  to_r
-  dw  dupp,parse
+  dw  dup,parse
   dw  tdup
   dw  from_r,ppsb
   dw  to_r
   dw  onep,plus
-  dw  dupp
+  dw  dup
   dw  source,plus
   dw  uless
   dw  zbran,parss2
-  dw  tdup,cat
+  dw  tdup,c_fetch
   dw  equal
   dw  zbran,parss2
-  dw  one,dupp
+  dw  one,dup
   dw  inn,pstor
   dw  from_r,ppsb
   dw  branch,parss1
@@ -5846,9 +5901,9 @@ parss2:
 
 ; pwa  ( -- adr )   parsed word address
 
-  header x,'PWA',,1
+  hdr x,'PWA',,1
 pwa:
-  call  doval
+  call  do_value
   ds  cw
 
 ; XXX OLD -- DX-Forth 4.00
@@ -5858,7 +5913,7 @@ pwa:
 ;;
 ;;  header x,'>WBUF',,1  ; uses WORD's buffer
 ;;twbuf:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  clit
 ;;  db  255
 ;;  dw  min
@@ -5868,11 +5923,11 @@ pwa:
 ;;  dw  lit,hm-5
 ;;  dw  over,subb
 ;;   endif
-;;  dw  dupp
+;;  dw  dup
 ;;  dw  pto,pwa
 ;;  dw  place
 ;;  dw  pwa
-;;  dw  bll   ; trailing blank
+;;  dw  bl   ; trailing blank
 ;;  dw  affix
 ;;  dw  exit
 ;;
@@ -5880,7 +5935,7 @@ pwa:
 ;;
 ;;  header 1,'WORD',,1
 ;;wordd:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  true,ppars
 ;;  dw  twbuf
 ;;  dw  exit
@@ -5889,8 +5944,8 @@ pwa:
 ;;
 ;;  header x,'BL-WORD',,1
 ;;blword:
-;;  call  docol
-;;  dw  bll,wordd
+;;  call  do_colon
+;;  dw  bl,wordd
 ;;  dw  exit
 
 ; XXX NEW -- DX-Forth 4.09
@@ -5898,9 +5953,9 @@ pwa:
 ;        255 min (hm-5) over - dup to pwa packed
 ;        bl affix
 
-  header  x,'WPACK',,1  ; pack string in WORD's buffer
+  hdr  x,'WPACK',,1  ; pack string in WORD's buffer
 wpack:
-  call  docol
+  call  do_colon
   dw  clit
   db  255
   dw  min
@@ -5910,77 +5965,77 @@ wpack:
   dw  lit,hm-5
   dw  over,subb
    endif
-  dw  dupp
+  dw  dup
   dw  pto,pwa
   dw  packd
-  dw  bll,affix  ; trailing blank
+  dw  bl,affix  ; trailing blank
   dw  exit
 
 ;  WORD  ( char -- c-addr )  true (parse) wpack
 
-  header  1,'WORD',,1
+  hdr  1,'WORD',,1
 wordd:
-  call  docol
+  call  do_colon
   dw  true,ppars
   dw  wpack
   dw  exit
 
 ;  bl-word  ( -- c-addr )  bl word
 
-  header  x,'BL-WORD',,1
+  hdr  x,'BL-WORD',,1
 blword:
-  ld  hl,20h
+  ld  hl,0x20
   push  hl
   jp  wordd
 
 
 ; token  ( -- c-addr u )  bl-word count
 
-  header 1,'TOKEN',,1
+  hdr 1,'TOKEN',,1
 token:
-  call  docol
+  call  do_colon
   dw  blword,count
   dw  exit
 
 ; defined  ( -- c-addr 0 | xt -1 | xt 1 ) bl-word find
 
-  header x,'DEFINED',,1
-defined_:call  docol
+  hdr x,'DEFINED',,1
+defined_:call  do_colon
   dw  blword,find
   dw  exit
 
 ; '  ( -- addr )    defined ?defined
 
-  header 1,"'",,1
+  hdr 1,"'",,1
 tick:
-  call  docol
+  call  do_colon
   dw  defined_
   dw  qdef
   dw  exit
 
 ; [UNDEFINED]  ( -- flag )  defined nip 0= ;immediate
 
-  header 1,'[UNDEFINED]',1,1
+  hdr 1,'[UNDEFINED]',1,1
 budef:
-  call  docol
+  call  do_colon
   dw  defined_
   dw  nip
-  dw  zequ
+  dw  zero_equals
   dw  exit
 
 ; [DEFINED]  ( -- flag )  postpone [undefined] 0= ;immediate
 
-  header 1,'[DEFINED]',1,1
+  hdr 1,'[DEFINED]',1,1
 bdef:
-  call  docol
-  dw  budef,zequ
+  call  do_colon
+  dw  budef,zero_equals
   dw  exit
 
 ; (  ( "ccc<delim>" ) [char] ) parse 2drop ;immediate
 
-  header 1,'(',1,1
+  hdr 1,'(',1,1
 paren:
-  call  docol
+  call  do_colon
   dw  clit
   db  ')'
   dw  parse,two_drop
@@ -5988,9 +6043,9 @@ paren:
 
 ; .(  ( "ccc<delim>" )  [char] ) parse$ type ;immediate
 
-  header 1,'.(',1,1
+  hdr 1,'.(',1,1
 dotp:
-  call  docol
+  call  do_colon
   dw  clit
   db  ')'
   dw  parss,typee
@@ -5999,9 +6054,9 @@ dotp:
 ; \  ( "ccc" -- )   source nip blk @ if c/l >in @ over / 1+ *
 ;       min then >in ! ;immediate
 
-  header 1,'\',1,1
+  hdr 1,'\',1,1
 bslas:
-  call  docol
+  call  do_colon
   dw  source,nip
   dw  blk,fetch
   dw  zbran,bslas1
@@ -6016,9 +6071,9 @@ bslas1:
 
 ; \\  ( "ccc" -- )  source nip >in ! ;immediate
 
-  header 1,'\\',1,1
+  hdr 1,'\\',1,1
 bslss:
-  call  docol
+  call  do_colon
   dw  source,nip
   dw  inn,store
   dw  exit
@@ -6026,9 +6081,9 @@ bslss:
 ; XXX NEW -- DX-Forth 4.09
 ;  LINK,  ( a -- )    here over @ , swap !
 
-  header  1,'LINK,',,1
+  hdr  1,'LINK,',,1
 linkc:
-  call  docol
+  call  do_colon
   dw  here
   dw  over,fetch
   dw  comma
@@ -6041,14 +6096,14 @@ linkc:
 ;;
 ;;  header 0,'WORDLIST',,1 ; nameless wordlists not supported
 ;;wlist:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  lit,0x2001
 ;;  dw  comma
 ;;  dw  here
 ;;  dw  zero    ; nfa of top word in vocabulary
 ;;  dw  comma
 ;;  dw  here,vocl
-;;  dw  dupp,fetch   ; link to previous vocabulary
+;;  dw  dup,fetch   ; link to previous vocabulary
 ;;  dw  comma
 ;;  dw  store
 ;;  dw  zero,comma  ; null name
@@ -6057,9 +6112,9 @@ linkc:
 ; XXX NEW -- DX-Forth 4.09
 ;  WORDLIST  ( -- wid )  $2001 , here 0 , voc-link link, 0 ,
 
-  header  x,'WORDLIST',,1
+  hdr  x,'WORDLIST',,1
 wlist:
-  call  docol
+  call  do_colon
   dw  lit,2001h
   dw  comma
   dw  here
@@ -6077,14 +6132,14 @@ wlist:
 ;       last @
 ;       swap cell+ cell+ ! sys ! does> @ context !
 
-  header 1,'VOCABULARY',,1
+  hdr 1,'VOCABULARY',,1
 vocab:
-  call  docol
+  call  do_colon
   dw  sysq
   dw  system
   dw  wlist
-;;  dw  creat,dupp,comma ; XXX OLD -- DX-Forth 4.00
-  dw dupp,value ; XXX NEW -- DX-Forth 4.09
+;;  dw  creat,dup,comma ; XXX OLD -- DX-Forth 4.00
+  dw dup,value ; XXX NEW -- DX-Forth 4.09
   dw  last,fetch   ; set name field in wordlist struct
   dw  swap
   dw  cellp,cellp
@@ -6092,16 +6147,16 @@ vocab:
   dw  sys,store
   dw  pscod
 dovoc:
-  call  docol
+  call  do_colon
   dw  fetch
   dw  cont,store
   dw  exit
 
 ; DEFINITIONS  ( -- ) get-context set-current
 
-  header 1,'DEFINITIONS',,1
+  hdr 1,'DEFINITIONS',,1
 defin:
-  call  docol
+  call  do_colon
   dw  getcon
   dw  setcur
   dw  exit
@@ -6120,7 +6175,7 @@ forth2:
 
 ; FORTH     vocabulary forth
 
-  header 1,'FORTH',,1
+  hdr 1,'FORTH',,1
 forth:
   call  dovoc
   dw  forth1
@@ -6130,9 +6185,9 @@ forth3  defl  previous_nfa
 ; UNUSED  ( -- u )  sys? if (esm) @ else sp@ then here
 ;       255 + 2dup u> -rot - and
 
-  header 1,'UNUSED'
+  hdr 1,'UNUSED'
 unus:
-  call  docol
+  call  do_colon
   dw  sysq
   dw  zbran,unus1
   dw  lit,esm
@@ -6163,12 +6218,12 @@ unus2:
 ;       fnumber then r> base ! ?defined then ?stack
 ;       repeat drop
 
-  header 1,'INTERPRET',,1
+  hdr 1,'INTERPRET',,1
 inte:
-  call  docol
+  call  do_colon
 inte1:
   dw  blword
-  dw  dupp,cat
+  dw  dup,c_fetch
   dw  zbran,inte15  ; while not end of input stream
   dw  find
   dw  qdup
@@ -6185,7 +6240,7 @@ inte3:
 inte4:
   dw  count
   dw  base,fetch,to_r
-  dw  over,cat
+  dw  over,c_fetch
   dw  clit
   db  '$'
   dw  pof,inte5
@@ -6238,28 +6293,28 @@ inte15:
 ;         'source 2! >in off interpret 2r>
 ;         'source 2! 2r> >in ! blk !
 
-  header x,'(EVAL)',,1   ; does not restore block contents
+  hdr x,'(EVAL)',,1   ; does not restore block contents
 peval:
-  call  docol
+  call  do_colon
   dw  blk,fetch
   dw  inn,fetch
-  dw  ttor
-  dw  source,ttor
+  dw  two_to_r
+  dw  source,two_to_r
   dw  blk,store
-  dw  tsourc,tstor
+  dw  tsourc,two_store
   dw  inn,off     ; reset >IN
   dw  inte
-  dw  tfrom,tsourc,tstor
-  dw  tfrom
+  dw  two_from_r,tsourc,two_store
+  dw  two_from_r
   dw  inn,store
   dw  blk,store
   dw  exit
 
 ; ?BLOCK   ( -- )     blk @ ?dup if block drop then
 
-  header x,'?BLOCK',,1   ; reload block
+  hdr x,'?BLOCK',,1   ; reload block
 qblock:
-  call  docol
+  call  do_colon
   dw  blk,fetch,qdup
   dw  zbran,qblock1
   dw  block,drop
@@ -6267,9 +6322,9 @@ qblock1:dw  exit
 
 ; EVALUATE  ( c-addr u -- ) 0 (eval) ?block
 
-  header 1,'EVALUATE',,1
+  hdr 1,'EVALUATE',,1
 eval:
-  call  docol
+  call  do_colon
   dw  zero,peval
   dw  qblock
   dw  exit
@@ -6279,45 +6334,45 @@ eval:
 ;       dup 80 accept space then 'source 2! >in
 ;       off true then
 
-  header x,'(REFILL)',,1   ; doesn't correctly handle source
+  hdr x,'(REFILL)',,1   ; doesn't correctly handle source
 prefil:
-  call  docol     ; from EVALUATE
+  call  do_colon     ; from EVALUATE
    if debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs '(REFILL) '
    endif
   dw  blk,fetch,qdup
   dw  zbran,prefil1
-  dw  onep,dupp
+  dw  onep,dup
   dw  nscr,uless
-  dw  and_,dupp
+  dw  and_,dup
   dw  zbran,prefil3
-  dw  dupp,blk,store
+  dw  dup,blk,store
   dw  block,bbuf
   dw  branch,prefil2
 prefil1:dw  lit,tib
-  dw  dupp
+  dw  dup
   dw  clit
   db  80
   dw  accept
   dw  space
-prefil2:dw  tsourc,tstor
+prefil2:dw  tsourc,two_store
   dw  inn,off
   dw  true
 prefil3:dw  exit
 
 ; REFILL  ( -- flag )
 
-  header 1,'REFILL',,1
+  hdr 1,'REFILL',,1
 refil:
-  call  aexec
+  call  fetch_execute
   dw  prefil
 
 ; reset  ( -- )   catcher off -caps console
 
-  header x,'RESET'
+  hdr x,'RESET'
 reset:
-  call  docol
+  call  do_colon
   dw  catchr,off  ; reset error handler
   dw  dcaps   ; reset COMPARE/SEARCH caps
   dw  console    ; set EMIT vector
@@ -6325,7 +6380,7 @@ reset:
 
 ; /interpret  ( -- )  blk off >in off postpone [
 
-  header x,'/INTERPRET',,1
+  hdr x,'/INTERPRET',,1
 sinte:
   ld  hl,0
   ld  (blk1),hl
@@ -6334,21 +6389,21 @@ sinte:
 
 ; forth-reset  ( -- )
 ;       0 set-limit empty warning on checking
-;       on (fdbs) (fdsiz*nfd) erase empty-buffers
+;       on (fdbs) (file_descriptor_size*nfd) erase empty-buffers
 ;       /interpret 'source off bl-word drop
 
-  header x,'FORTH-RESET',,1
+  hdr x,'FORTH-RESET',,1
 forth_reset:
-  call  docol
+  call  do_colon
   dw  zero
   dw  setlim
   dw  empty   ; reset vocabulary pointers
   dw  warnn,on  ; enable warnings
   dw  check,on  ; enable checking
   dw  lit,fdbs  ; clear files
-  dw  lit,fdsiz*nfd ;
+  dw  lit,file_descriptor_size*nfd ;
   dw  erase   ;
-  dw  mtbuf   ; mark screen buffer as empty
+  dw  empty_buffers   ; mark screen buffer as empty
   dw  sinte   ; reset interpreter
   dw  tsourc,off  ; clear parsed word buffer
   dw  blword,drop ;
@@ -6358,17 +6413,17 @@ forth_reset:
 ;       cr (refill) drop interpret state? 0= if
 ;       ."  ok" then again
 
-  header 1,'QUIT',,1
+  hdr 1,'QUIT',,1
 quit:
-  call  docol
+  call  do_colon
 quit1:
   dw  rzero,fetch
-  dw  rpsto
+  dw  rp_store
   dw  reset
 ;** dw  vnorm ; XXX OLD
   dw  sinte
    if debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs 'QUIT '
    endif
 quit2:
@@ -6376,22 +6431,22 @@ quit2:
   dw  prefil,drop
   dw  inte
   dw  stateq
-  dw  zequ
+  dw  zero_equals
   dw  zbran,quit3
-  dw  pdotq
+  dw  paren_dot_quote
   dcs ' ok'
 quit3:
   dw  branch,quit2
 
 ; RETURN  ( x -- )  exit to DOS with return code x
 
-  header 1,'RETURN'
+  hdr 1,'RETURN'
 return:
   ; XXX TODO
-  pop hl  ; XXX TMP drop
-  jp  next
+  pop bc
+  ret
 ; XXX OLD
-;;  call  docol
+;;  call  do_colon
 ;;  dw  console
 ;;  dw  crr
 ;;  dw  $+2
@@ -6434,19 +6489,30 @@ return:
 
 ; BYE  ( -- )   close-all exit-video 0 return
 
-  header 1,'BYE',,1
+  hdr 1,'BYE',,1
 bye:
-  ; XXX TODO
+if 0
+  ; XXX TODO -- Code from Benschop's ZX Spectrum Forth-83
+  ld sp,(sys_err_sp) 
+  pop bc
+  ld bc,0x1303 
+  push bc
+  im 1
+  ld (IY+31),2 ; update sys_e_line
+  rst 0x08     ; error
+  db 0xff      ; error code
+endif
   jp  next
 ; XXX OLD
-;;  call  docol
+;;  call  do_colon
 ;;  dw  closa
 ;;  dw  exvid   ; terminal exit sequence
 ;;  dw  zero,return
 
 ; boot?  ( -- bootword )  (iboot) @
 
-  header x,'BOOT?'
+  ; XXX TODO -- convert this into a variable that holds an xt
+  hdr x,'BOOT?'
 bootq:
   ld  hl,(iboot)
   jp  push_hl
@@ -6454,11 +6520,11 @@ bootq:
 ; (abort)  ( -- )   s0 @ sp! fs0 @ fsp ! boot? if 1 return then
 ;       quit
 
-  header x,'(ABORT)'
+  hdr x,'(ABORT)'
 pabor:
-  call  docol
+  call  do_colon
   dw  szero,fetch
-  dw  spsto
+  dw  sp_store
   dw  fszero,fetch
   dw  fsp,store
   dw  bootq
@@ -6466,7 +6532,7 @@ pabor:
   dw  zbran,pabor1
   dw  one
   dw  return
-pabor1  dw  pdotq
+pabor1  dw  paren_dot_quote
   dcs ' (ABORT) '
   dw  quit
    else
@@ -6481,9 +6547,9 @@ pabor1  dw  pdotq
 ;       u. c/l / ." Line " . cr then then ." Error: "
 ;       [char] " dup emit pwa count 31 min type emit
 
-  header x,'.ERROR',,1
+  hdr x,'.ERROR',,1
 doterr:
-  call  docol
+  call  do_colon
   dw  crr
   dw  blk,fetch
   dw  qdup
@@ -6497,21 +6563,21 @@ doterr:
   dw  zero_max
   dw  blk,fetch
   dw  tdup    ; set error block, offset
-  dw  scr,tstor
-  dw  pdotq
+  dw  scr,two_store
+  dw  paren_dot_quote
   dcs ' Screen '
   dw  udot
   dw  csll
   dw  slash
-  dw  pdotq
+  dw  paren_dot_quote
   dcs 'Line '
   dw  dot
   dw  crr
-doterr1:dw  pdotq
+doterr1:dw  paren_dot_quote
   dcs 'Error: '
   dw  clit
   db  '"'
-  dw  dupp,emit
+  dw  dup,emit
   dw  pwa,count
   dw  clit
   db  31
@@ -6526,9 +6592,9 @@ doterr1:dw  pdotq
 ;       if .error then space errmsg 2@ type (abort) then
 ;       ."  exception = " . (abort)
 
-  header x,'ERROR'
+  hdr x,'ERROR'
 error:
-  call  docol
+  call  do_colon
   dw  true    ; -1
   dw  pof,error1
   dw  pabor
@@ -6536,7 +6602,7 @@ error1:
   dw  lit,-2
   dw  pof,error3
   dw  boot,cellp,fetch
-  dw  zequ
+  dw  zero_equals
   dw  zbran,error2
   dw  doterr    ; skipped by applications
 error2:
@@ -6545,7 +6611,7 @@ error2:
   dw  typee
   dw  pabor
 error3:
-  dw  pdotq
+  dw  paren_dot_quote
   dcs ' exception = '
   dw  dot
   dw  pabor
@@ -6554,17 +6620,17 @@ error3:
 ; CATCH  ( xt -- n | 0 )  sp@ >r fsp @ >r catcher @ >r rp@ catcher
 ;       ! execute r> catcher ! 2r> 2drop 0
 
-  header 1,'CATCH'
+  hdr 1,'CATCH'
 catch:
-  call  docol
+  call  do_colon
   dw  sp_fetch,to_r
   dw  fsp,fetch
   dw  to_r
   dw  catchr,fetch,to_r
-  dw  rpat,catchr,store
+  dw  rp_fetch,catchr,store
   dw  execute
   dw  from_r,catchr,store
-  dw  tfrom,two_drop
+  dw  two_from_r,two_drop
   dw  zero
   dw  exit
 
@@ -6572,36 +6638,36 @@ catch:
 ;       r> catcher ! r> fsp ! r> swap >r sp! drop
 ;       r> then
 
-  header 1,'THROW'
+  hdr 1,'THROW'
 throw:
-  call  docol
+  call  do_colon
   dw  qdup
   dw  zbran,throw2
   dw  catchr,fetch
    if debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs ' THROW:'
   dw  over,dot
-  dw  pdotq
+  dw  paren_dot_quote
   dcs 'CATCHER:'
-  dw  dupp,udot,space,space
+  dw  dup,udot,space,space
    endif
-  dw  qdup,zequ
+  dw  qdup,zero_equals
   dw  zbran,throw1
   dw  error
 throw1:
-  dw  rpsto
+  dw  rp_store
   dw  from_r,catchr,store
   dw  from_r,fsp,store
   dw  from_r,swap,to_r
-  dw  spsto
+  dw  sp_store
   dw  drop,from_r
 throw2:
   dw  exit
 
 ; ABORT  ( -- )   -1 throw
 
-  header 1,'ABORT'
+  hdr 1,'ABORT'
 abort:
   ld  hl,-1
 abort1:
@@ -6611,26 +6677,26 @@ abort1:
 ; (abort")  ( n -- )  r> count rot if errmsg 2! -2 throw then +
 ;       >r
 
-  header x,'(ABORT")'
-pabq:
-  call  docol
+  hdr x,'(ABORT")'
+paren_abort_quote:
+  call  do_colon
   dw  from_r,count
   dw  rot
-  dw  zbran,pabq1
+  dw  zbran,paren_abort_quote_1
   dw  errmsg
-  dw  tstor
+  dw  two_store
   dw  lit,-2
   dw  throw
-pabq1:
+paren_abort_quote_1:
   dw  plus,to_r
   dw  exit
 
 ; ABORT"      postpone (abort") ," ;immediate
 
-  header 1,'ABORT"',1,1
-aborq:
-  call  docol
-  dw  comp,pabq
+  hdr 1,'ABORT"',1,1
+abort_quote:
+  call  do_colon
+  dw  comp,paren_abort_quote
   dw  comq
   dw  exit
 
@@ -6644,12 +6710,12 @@ aborq:
 ; XXX NEW -- DX-Forth 4.09
 ;  CMDTAIL  ( -- c-addr u )  (dosbuf) count bl skip -trailing
 
-  header  1,'CMDTAIL'
-cmdtail:call  docol
+  hdr  1,'CMDTAIL'
+cmdtail:call  do_colon
   dw  clit
   db  dosbuf
   dw  count
-  dw  bll,skip
+  dw  bl,skip
   dw  dtrai
   dw  exit
 
@@ -6749,46 +6815,60 @@ cold_boot:
 ;;cldd7:
 ;;  dw  movpat      ; later patched to 'cold'
 
+; BOOTMESSAGE  ( -- )
+; XXX NEW -- after Gforth
+; XXX TODO -- defered
+
+bootmessage:
+  call do_colon
+  dw paren_dot_quote
+  dcs 'DZX-Forth'
+;  dw paren_dot_quote
+;  version
+  jp next
+
 ; COLD  ( -- )
 
-  header 1,'COLD'    ; FIG
+  hdr 1,'COLD'    ; FIG
 cold:
-  ld  sp,tmpstk
-  ld  hl,(limit1)   ; get LIMIT
-  ld  de,-recsiz    ; file r/w buffer size
-  add hl,de
-  ld  (hbuf1),hl    ; patch HBUF
-  push  hl
-  ld  hl,(nfcb1)    ; #fcb
-  ld  de,-fhsiz    ; handle size
-  call  umstrr
-  pop hl
-  add hl,de
-  ex  de,hl
-  ld  hl,(nus)    ; user area size
-  call  subd
-  ld  (upp),hl    ; patch UP
-  ld  (ir0),hl    ; patch R0
-  ld  (rpp),hl    ; patch RP
-  ex  de,hl
-  ld  hl,(nrts)   ; return stack size
-  call  subd
-  ld  (fspp),hl   ; init fp stack
-  ld  (ifs0),hl   ; patch FS0
-; XXX These lines were commented out in the original source:
-; ex  de,hl
-; ld  hl,(nfps)   ; fp stack size
-; call  subd
-  ld  sp,hl     ; set cpu stack pointer
-  ld  (is0),hl    ; patch S0
-   if cfs
-  ld  (cfz1),hl   ; init CF0 with safe value
-   endif
-  ld  hl,(upp)    ; init boot up variables
-  ex  de,hl
-  ld  hl,initu
-  ld  bc,initu2-initu
-  call  bmovu
+; XXX TODO
+; XXX OLD
+;;  ld  sp,tmpstk
+;;  ld  hl,(limit1)   ; get LIMIT
+;;  ld  de,-recsiz    ; file r/w buffer size
+;;  add hl,de
+;;  ld  (hbuf1),hl    ; patch HBUF
+;;  push  hl
+;;  ld  hl,(nfcb1)    ; #fcb
+;;  ld  de,-file_handle_size    ; handle size
+;;  call  umstrr
+;;  pop hl
+;;  add hl,de
+;;  ex  de,hl
+;;  ld  hl,(nus)    ; user area size
+;;  call  subd
+;;  ld  (upp),hl    ; patch UP
+;;  ld  (ir0),hl    ; patch R0
+;;  ld  (rpp),hl    ; patch RP
+;;  ex  de,hl
+;;  ld  hl,(nrts)   ; return stack size
+;;  call  subd
+;;  ld  (fspp),hl   ; init fp stack
+;;  ld  (ifs0),hl   ; patch FS0
+;;; XXX These lines were commented out in the original source:
+;;; ex  de,hl
+;;; ld  hl,(nfps)   ; fp stack size
+;;; call  subd
+;;  ld  sp,hl     ; set cpu stack pointer
+;;  ld  (is0),hl    ; patch S0
+;;   if cfs
+;;  ld  (cfz1),hl   ; init CF0 with safe value
+;;   endif
+;;  ld  hl,(upp)    ; init boot up variables
+;;  ex  de,hl
+;;  ld  hl,initu
+;;  ld  bc,initu2-initu
+;;  call  bmovu
 
   ld  hl,0      ; patch PAUSE
   ld  (pause1),hl
@@ -6798,83 +6878,89 @@ cold:
 ;;  ld  c,26
 ;;  call  0x0005
 
-  call  docol
-  dw  zfh     ; reset handles
-  dw  sys,off     ; default is APPLICATION
-  dw  decimal     ; default base
-  dw  reset     ; general reset
+  call  do_colon
+;;  dw  zfh     ; reset handles
+;;  dw  sys,off     ; default is APPLICATION
+
+;  dw  decimal     ; default base
+
+  ; XXX NEW
+;  dw cls
+;  dw bootmessage
+forever:
+  dw branch,forever ; XXX INFORMER
+
+;;  dw  reset     ; general reset
 cold1:
-  dw  forth_reset      ; forth reset
+;;  dw  forth_reset
 cold2:
-  dw  init      ; run INIT eg. for float
-  dw  bootq
-  dw  dupp,boot,store     ; restore BOOT
-  dw  qdup
-  dw  zbran,cold3
-  dw  execute      ; run application
+;;  dw  init      ; run INIT eg. for float
+;;  dw  bootq
+;;  dw  dup,boot,store     ; restore BOOT
+;;  dw  qdup
+;;  dw  zbran,cold3
+;;  dw  execute      ; run application
   dw  zero,return  ; exit to DOS
 
 ;   aseg        ; run forth interpreter ; XXX OLD
 
 cold3:
-  dw  cmdtail     ; process command-line
-  dw  lit,cmdf
-  dw  cat,and_
-  dw  tuck
-  dw  lit,tib     ; copy to tib
-  dw  zero,pstr
-  dw  tsourc,tstor
-  dw  zbran,cold5
-  dw  zero
-  dw  lit,cmdf    ; disable
-  dw  cstor
-  dw  blword      ; parse first word
-  dw  fetch
-  dw  lit
-  db  1,'-'     ; skips file open
-  dw  subb
-  dw  zbran,cold4
-  dw  inn,off
-  dw  getfn,popen
-cold4:
-  dw  inte      ; interpret
-cold5:
-;;  dw  invid     ; terminal init sequence ; XXX OLD
-  dw  crr,page
-  dw  pdotq
-  db  cold8-$-1
-cold6:
-  db  'DX-Forth '
-  version
-  db  '  '
-cold7:
-  db  '  '
-cold8:
-;;  dw  lit,termn   ; show terminal name ; XXX OLD
-;;  dw  count,typee
-  dw  pdotq
-  db  cold9-$-1
-  db  cr_char,lf_char
+;;  dw  cmdtail     ; process command-line
+;;  dw  lit,cmdf
+;;  dw  c_fetch,and_
+;;  dw  tuck
+;;  dw  lit,tib     ; copy to tib
+;;  dw  zero,pstr
+;;  dw  tsourc,two_store
+;;  dw  zbran,cold5
+;;  dw  zero
+;;  dw  lit,cmdf    ; disable
+;;  dw  cstor
+;;  dw  blword      ; parse first word
+;;  dw  fetch
+;;  dw  lit
+;;  db  1,'-'     ; skips file open
+;;  dw  subb
+;;  dw  zbran,cold4
+;;  dw  inn,off
+;;  dw  getfilename,popen
+;;cold4:
+;;  dw  inte      ; interpret
+;;cold5:
+;;;;  dw  invid     ; terminal init sequence ; XXX OLD
+;;  dw  crr,page
+;;  dw  paren_dot_quote
+;;  db  cold8-$-1
+;;cold6:
+;;  db  'DZX-Forth '
+;;  version
+;;cold7:
+;;cold8:
+;;;;  dw  lit,termn   ; show terminal name ; XXX OLD
+;;;;  dw  count,typee
+;;  dw  paren_dot_quote
+;;  db  cold9-$-1
+;;  db  cr_char,lf_char
 cold9:
-  dw  ident     ; run IDENTIFY
-  dw  crr
-  dw  fileq
-  dw  zbran,cold10
-  dw  crr
-  dw  pdotq
-  dcs 'Using '
-  dw  loadf,typee
-  dw  crr
-cold10:
-  dw  quit      ; jump to interpreter
+;;  dw  ident     ; run IDENTIFY
+;;  dw  crr
+;;  dw  fileq
+;;  dw  zbran,cold10
+;;  dw  crr
+;;  dw  paren_dot_quote
+;;  dcs 'Using '
+;;  dw  loadf,typee
+;;  dw  crr
+;;cold10:
+;;  dw  quit      ; jump to interpreter
 
 ; SET-LIMIT  ( addr -- )  $fff0 and (ulimit) !
 
-  header  1,'SET-LIMIT',,1
+  hdr  1,'SET-LIMIT',,1
 setlim:
   pop hl
   ld  a,l
-  and 0f0h
+  and 0x00f0
   ld  l,a
   ld  (ulimit),hl
   jp  next
@@ -6884,9 +6970,9 @@ setlim:
 
 ;  FREEZE  ( -- )    up @ (initu) (initu2-initu) cmove
 
-  header  1,'FREEZE',,1
+  hdr  1,'FREEZE',,1
 freez:
-  call  docol
+  call  do_colon
   dw  up,fetch
   dw  lit,initu
   dw  lit,initu2-initu
@@ -6895,23 +6981,23 @@ freez:
 
 ;  'prune      variable 'prune  'prune off
 
-  header  x,"'PRUNE",,1
+  hdr  x,"'PRUNE",,1
 tprun:
-  call  docre
+  call  do_create
   dw  toppru    ; 0=end
 
 ;  REMEMBER  ( xt -- )  'prune link, ,
 
-  header  1,'REMEMBER',,1  ; add xt to prunes
+  hdr  1,'REMEMBER',,1  ; add xt to prunes
 remem:
-  call  docol
+  call  do_colon
   dw  tprun,linkc
   dw  comma
   dw  exit
 
 ;  xdp  ( adr -- adr xdp )  dup limit u< if dp else dph then
 
-  header  x,'XDP',,1
+  hdr  x,'XDP',,1
 xdp:
   pop  de
   push  de
@@ -6924,16 +7010,16 @@ xdp:
 ;  prunes  ( -- )    begin 'prune @ dup while dup xdp @ u< 0=
 ;        while 2@ 'prune ! execute repeat then drop
 
-  header  x,'PRUNES',,1
+  hdr  x,'PRUNES',,1
 pruns:
-  call  docol
+  call  do_colon
 pruns1:
   dw  tprun,fetch
-  dw  dupp
+  dw  dup
   dw  zbran,pruns2
-  dw  dupp
+  dw  dup
   dw  xdp,fetch
-  dw  uless,zequ
+  dw  uless,zero_equals
   dw  zbran,pruns2
   dw  tat
   dw  tprun,store
@@ -6946,23 +7032,23 @@ pruns2:
 ;  ?protected ( h-addr -- h-addr )  (idph) @ over u> check? and
 ;          abort" is protected"
 
-  header  x,'?PROTECTED',,1
+  hdr  x,'?PROTECTED',,1
 qprot:
-  call  docol
+  call  do_colon
   dw  lit,idph
   dw  fetch
   dw  over,ugrea
   dw  chkq,and_
-  dw  pabq
+  dw  paren_abort_quote
   dcs  'is protected'
   dw  exit
 
 ;  name? ( "name" -- xt nfa )  bl-word get-context wfind ?defined
 ;          ?protected
 
-  header  x,'NAME?',,1  ; find name in context wordlist
+  hdr  x,'NAME?',,1  ; find name in context wordlist
 nameq:
-  call  docol
+  call  do_colon
   dw  blword
   dw  getcon
   dw  wfind,qdef
@@ -6972,15 +7058,15 @@ nameq:
 ;  lfind  ( wid nfa -- lfa |0 )  swap begin 2dup @ - while @
 ;          dup while n>link repeat then nip
 
-  header  x,'LFIND',,1  ; find link field containing nfa, 0=none
+  hdr  x,'LFIND',,1  ; find link field containing nfa, 0=none
 lfind:
-  call  docol
+  call  do_colon
   dw  swap
 lfind1:
   dw  tdup,fetch
   dw  subb
   dw  zbran,lfind2
-  dw  fetch,dupp
+  dw  fetch,dup
   dw  zbran,lfind2
   dw  nlnk
   dw  branch,lfind1
@@ -6991,9 +7077,9 @@ lfind2:
 ;  BEHEAD  ( "name1" "name2" -- )  name? nip name? nip 2dup u< if swap
 ;          then n>name get-context rot lfind !
 
-  header  1,'BEHEAD',,1  ; unlink word heads
+  hdr  1,'BEHEAD',,1  ; unlink word heads
 behead:
-  call  docol
+  call  do_colon
   dw  nameq,nip
   dw  nameq,nip
   dw  tdup,uless
@@ -7007,10 +7093,10 @@ behead1:dw  ntnam
 
 ;  ?voc  ( flag -- )    abort" invalid vocabulary"
 
-  header  x,'?VOC',,1
+  hdr  x,'?VOC',,1
 qvoc:
-  call  docol
-        dw  pabq
+  call  do_colon
+        dw  paren_abort_quote
         dcs  'invalid vocabulary'
         dw  exit
 
@@ -7019,9 +7105,9 @@ qvoc:
 ;          2dup lfind ?voc swap 0 lfind
 ;          ?protected 2dup u> ?voc !
 
-  header  1,'CHAIN',,1
+  hdr  1,'CHAIN',,1
 chain:
-  call  docol
+  call  do_colon
   dw  getcur
   dw  addr,fetch
   dw  tdup,equal  ; same wordlist
@@ -7047,29 +7133,29 @@ chain:
 ;        repeat swap ! @ ?dup 0= until r> dup dp
 ;        cell+ ! (idph) @ u< if freeze then prunes
 
-  header  x,'(FORGET)',,1
+  hdr  x,'(FORGET)',,1
 pforg:
-  call  docol
+  call  do_colon
   dw  dpp,store  ; starting maximums
   dw  to_r
   dw  vocl    ; trim vocs > nfa
 pforg1:
   dw  fetch
-  dw  dupp,cellp,fetch
-  dw  rat,uless
+  dw  dup,cellp,fetch
+  dw  r_fetch,uless
   dw  zbran,pforg1
-  dw  dupp,vocl,store
+  dw  dup,vocl,store
 pforg2:
-  dw  dupp,cellm  ; scan remaining vocs
-  dw  dupp
+  dw  dup,cellm  ; scan remaining vocs
+  dw  dup
   dw  fetch
 pforg3:
-  dw  dupp,rat  ; for each word >= nfa
-  dw  uless,zequ
+  dw  dup,r_fetch  ; for each word >= nfa
+  dw  uless,zero_equals
   dw  zbran,pforg5
   dw  dalias    ; not an alias
   dw  zbran,pforg4
-  dw  dupp,namef  ; get its xt
+  dw  dup,namef  ; get its xt
   dw  dpp,fetch
   dw  umin,dpp,store  ; trim dict
 pforg4:
@@ -7078,10 +7164,10 @@ pforg4:
 pforg5:
   dw  swap,store
   dw  fetch
-  dw  qdup,zequ
+  dw  qdup,zero_equals
   dw  zbran,pforg2  ; until all vocs done
   dw  from_r
-  dw  dupp,dpp
+  dw  dup,dpp
   dw  cellp,store
   dw  lit,idph  ; below fence?
   dw  fetch,uless
@@ -7093,9 +7179,9 @@ pforg6:
 
 ;  EMPTY  ( -- )    forth definitions (idp) 2@ (forget)
 
-  header  1,'EMPTY',,1
+  hdr  1,'EMPTY',,1
 empty:
-  call  docol
+  call  do_colon
   dw  forth,defin  ; switch to a safe vocabulary
   dw  lit,idp
   dw  tat
@@ -7106,14 +7192,14 @@ empty:
 ;        abort" is alias" swap limit over u> if
 ;        drop dp @ then (forget)
 
-  header  1,'FORGET',,1
+  hdr  1,'FORGET',,1
 forg:
-  call  docol
+  call  do_colon
   dw  getcur
   dw  cont,store
   dw  nameq
-  dw  dalias,zequ  ; alias?
-  dw  pabq
+  dw  dalias,zero_equals  ; alias?
+  dw  paren_abort_quote
   dcs  'is alias'
   dw  swap
   dw  limit
@@ -7127,9 +7213,9 @@ forg1:
 
 ;  MARKER  ( "name" -- )  sys? system create sys !
 
-  header  1,'MARKER',,1
+  hdr  1,'MARKER',,1
 marker:
-  call  docol
+  call  do_colon
   dw  sysq
   dw  system
   dw  creat
@@ -7142,9 +7228,9 @@ marker:
 ; S,  ( c-addr u -- )
 ; 255 min 0max here over 1+ allot place
 
-  header x,'S,',,1
+  hdr x,'S,',,1
 scomm:
-  call  docol
+  call  do_colon
   dw  clit
   db  255
   dw  min
@@ -7156,9 +7242,9 @@ scomm:
 
 ; ,"  ( "ccc" -- )  [char] " parse$ s,
 
-  header 1,',"',,1
+  hdr 1,',"',,1
 comq:
-  call  docol
+  call  do_colon
   dw  clit
   db  '"'
   dw  parss
@@ -7170,7 +7256,7 @@ comq:
 ;;
 ;;  header x,'(S")'
 ;;psqot:
-;;  call  docol
+;;  call  do_colon
 ;;  dw  from_r,count
 ;;  dw  tdup,plus,to_r
 ;;  dw  exit
@@ -7178,7 +7264,7 @@ comq:
 ; XXX NEW -- DX-Forth 4.09
 ; (s")  ( -- c-addr u ) r> count 2dup + >r
 
-  header  x,'(S")'
+  hdr  x,'(S")'
 psqot:
   ld  a,(bc)
   ld  l,a
@@ -7193,9 +7279,9 @@ psqot:
 
 ; SLITERAL  ( c-addr u -- )  postpone (s") s, ;immediate
 
-  header 1,'SLITERAL',1,1
+  hdr 1,'SLITERAL',1,1
 slite:
-  call  docol
+  call  do_colon
   dw  comp,psqot
   dw  scomm
   dw  exit
@@ -7203,9 +7289,9 @@ slite:
 ; S"  ( -- c-addr u ) [char] " parse$ state? if postpone sliteral
 ;       then ;immediate
 
-  header 1,'S"',1,1  ; state-smart
+  hdr 1,'S"',1,1  ; state-smart
 squot:
-  call  docol
+  call  do_colon
   dw  clit
   db  '"'
   dw  parss
@@ -7219,8 +7305,8 @@ squot1:
 ;;; (.")      r> count 2dup + >r type
 ;;
 ;;  header x,'(.")'
-;;pdotq:
-;;  call  docol
+;;paren_dot_quote:
+;;  call  do_colon
 ;;  dw  from_r,count
 ;;  dw  tdup,plus,to_r
 ;;  dw  typee
@@ -7229,8 +7315,8 @@ squot1:
 ; XXX NEW -- DX-Forth 4.09
 ; (.")      r> count 2dup + >r type
 
-  header  x,'(.")'
-pdotq:
+  hdr  x,'(.")'
+paren_dot_quote:
   ld  a,(bc)
   ld  l,a
   ld  h,0
@@ -7244,16 +7330,16 @@ pdotq:
 
 ; ."      compile (.") ," ;immediate
 
-  header 1,'."',1,1
-dotq:
-  call  docol
-  dw  comp,pdotq
+  hdr 1,'."',1,1
+dot_quote:
+  call  do_colon
+  dw  comp,paren_dot_quote
   dw  comq
   dw  exit
 
 ; CHAR?  ( x -- x flag )
 
-  header x,'CHAR?',,1
+  hdr x,'CHAR?',,1
 charq:
   pop hl
   push  hl
@@ -7263,9 +7349,9 @@ charq:
 ; LITERAL  ( n -- ) char? if postpone clit c, exit then
 ;       postpone lit , ;immediate
 
-  header 1,'LITERAL',1,1
+  hdr 1,'LITERAL',1,1
 liter:
-  call  docol
+  call  do_colon
   dw  charq
   dw  zbran,liter1
   dw  comp,clit
@@ -7278,34 +7364,34 @@ liter1:
 
 ; 2LITERAL  ( d -- )  postpone 2lit , , ;immediate
 
-  header 1,'2LITERAL',1,1
+  hdr 1,'2LITERAL',1,1
 tlite:
-  call  docol
+  call  do_colon
   dw  comp,tlit
   dw  comma,comma
   dw  exit
 
 ; [']     ' [compile] literal  ;immediate
 
-  header 1,"[']",1,1
+  hdr 1,"[']",1,1
 btick:
-  call  docol
+  call  do_colon
   dw  tick
   dw  liter
   dw  exit
 
 ; [COMPILE]   ' compile,  ;immediate
 
-  header 1,'[COMPILE]',1,1
+  hdr 1,'[COMPILE]',1,1
 bcomp:
-  call  docol
+  call  do_colon
   dw  tick
   dw  comxt
   dw  exit
 
 ; RECURSE  ( -- )   last cell+ @ compile, ;immediate
 
-  header 1,'RECURSE',1,1
+  hdr 1,'RECURSE',1,1
 recurs:
   ld  hl,(last2)
   push  hl
@@ -7313,18 +7399,18 @@ recurs:
 
 ; CHAR  ( -- char ) bl word 1+ c@
 
-  header 1,'CHAR',,1
+  hdr 1,'CHAR',,1
 char:
-  call  docol
-  dw  bll,wordd
-  dw  onep,cat
+  call  do_colon
+  dw  bl,wordd
+  dw  onep,c_fetch
   dw  exit
 
 ; [CHAR]  ( -- char ) char [compile] literal
 
-  header 1,'[CHAR]',1,1
+  hdr 1,'[CHAR]',1,1
 pchar:
-  call  docol
+  call  do_colon
   dw  char
   dw  liter
   dw  exit
@@ -7332,15 +7418,15 @@ pchar:
 ; Y/N  ( -- flag )  ." (y/n) N\bs" key upcase [char] Y = dup
 ;       if [char] Y else [char] N then emit space
 
-  header 1,'Y/N'
+  hdr 1,'Y/N'
 yn:
-  call  docol
-  dw  pdotq
+  call  do_colon
+  dw  paren_dot_quote
   dcs '(y/n) N',bs_char
   dw  key,upcas
   dw  clit
   db  'Y'
-  dw  equal,dupp
+  dw  equal,dup
   dw  zbran,yn1
   dw  clit
   db  'Y'
@@ -7354,42 +7440,42 @@ yn2:
 
 ; CHAR+  ( c-addr1 -- c-addr2 ) aka 1+ char+
 
-  header 1,'CHAR+',,,onep
+  hdr 1,'CHAR+',,,onep
 charp equ onep
 
 ; CHARS  ( n1 -- n2 )   aka noop chars immediate
 
-  header 1,'CHARS',1,,noop
+  hdr 1,'CHARS',1,,noop
 chars equ next
 
 ; CELL+  ( addr1 -- addr2 ) aka 2+ cell+
 
-  header 1,'CELL+',,,twop
+  hdr 1,'CELL+',,,twop
 cellp equ twop
 
 ; CELL-  ( addr1 -- addr2 ) aka 2- cell-
 
-  header 1,'CELL-',,,twom
+  hdr 1,'CELL-',,,twom
 cellm equ twom
 
 ; CELLS  ( n1 -- n2 )   aka 2* cells
 
-  header 1,'CELLS',,,tstar
+  hdr 1,'CELLS',,,tstar
 cells equ tstar
 
 ; ALIGN  ( -- )     aka noop align immediate
 
-  header 1,'ALIGN',1,,noop
+  hdr 1,'ALIGN',1,,noop
 alignn  equ next
 
 ; ALIGNED  ( addr -- a-addr ) aka noop aligned immediate
 
-  header 1,'ALIGNED',1,,noop
+  hdr 1,'ALIGNED',1,,noop
 alignd  equ next
 
 ; DZX-FORTH  ( -- minor major )
 
-  header 1,'DZX-FORTH'
+  hdr 1,'DZX-FORTH'
 dxf:
 ; XXX OLD
 ;;  ld  hl,(dxver)
@@ -7402,7 +7488,7 @@ dxf:
 
 ;  RESET-DISKS  ( -- )
 
-  header  1,'RESET-DISKS'
+  hdr  1,'RESET-DISKS'
 rstdsk:
   ld  a,25
   call  bdoss
@@ -7417,7 +7503,7 @@ rstdsk:
 
 ;  >DRIVE  ( u1 -- u2 )  ?dup if 1- else 0 25 bdos then
 
-  header  1,'>DRIVE'
+  hdr  1,'>DRIVE'
 tdrv:
   pop  de
   ld  a,e
@@ -7429,9 +7515,9 @@ tdrv:
 ;        255 32 bdos 0 <# [char] : hold #s rot >drive
 ;        [char] A + hold #> 0
 
-  header  1,'PATH'  ; uses numeric buffer
+  hdr  1,'PATH'  ; uses numeric buffer
 path:
-  call  docol
+  call  do_colon
   dw  clit
   db  255
   dw  clit
@@ -7454,13 +7540,13 @@ path:
 ;        2dup [char] : scan dup if 1 /string 2swap
 ;        then 2drop
 
-  header  1,'-PATH'
+  hdr  1,'-PATH'
 dpath:
-  call  docol
+  call  do_colon
   dw  tdup
   dw  clit
   db  ':'
-  dw  scan,dupp
+  dw  scan,dup
   dw  zbran,dpath1
   dw  one,sstr
   dw  tswap
@@ -7470,9 +7556,9 @@ dpath1:
 
 ;  filetype?  ( addr1 u1 -- u2 )  -path [char] . scan nip
 
-  header  x,'FILETYPE?'  ; get filetype length
+  hdr  x,'FILETYPE?'  ; get filetype length
 ftype:
-  call  docol
+  call  do_colon
   dw  dpath
   dw  clit
   db  '.'
@@ -7481,12 +7567,12 @@ ftype:
 
 ;  +EXT  ( addr1 u1 addr2 u2 -- addr3 u3 )
 ;        2over filetype? if 2drop exit then 3 min
-;        s" ." 2rot -trailing (pfsiz-5) min zbuf
+;        s" ." 2rot -trailing (filename_size-5) min zbuf
 ;        @ 1+ 0 +string +string +string
 
-  header  1,'+EXT'  ; uses filename buffer
+  hdr  1,'+EXT'  ; uses filename buffer
 pext:
-  call  docol
+  call  do_colon
   dw  tover,ftype
   dw  zbran,pext1
   dw  two_drop,exit
@@ -7497,7 +7583,7 @@ pext1:
   dw  trot
   dw  dtrai    ; trim trailing blanks
   dw  clit
-  db  pfsiz-5
+  db  filename_size-5
   dw  min
   dw  zbuf,fetch    ; unused
   dw  onep
@@ -7509,16 +7595,16 @@ pext1:
 
 ;  -EXT  ( addr1 u1 -- addr2 u2 )  2dup filetype? -
 
-  header  1,'-EXT'
+  hdr  1,'-EXT'
 dext:
-  call  docol
+  call  do_colon
   dw  tdup,ftype
   dw  subb
   dw  exit
 
 ;  SETFCB  ( addr u fcb-addr -- user# )
 
-  header  1,'SETFCB'
+  hdr  1,'SETFCB'
 sfcb:
   call  gusr    ; current user
   ld  (sfcb10+1),a
@@ -7626,7 +7712,7 @@ sfcb12:
   ld  a,c
   ret  z
   ld  a,(de)
-  call  upc
+  call  uppercase_a
   and  a
   ret
 
@@ -7687,14 +7773,14 @@ oldusr:
 
 ;  GETUSR  ( -- u )  get user
 
-  header  1,'GETUSR'
+  hdr  1,'GETUSR'
 getusr:
   call  gusr
   jp  apush
 
 ;  SETUSR  ( u -- )  set user
 
-  header  1,'SETUSR'
+  hdr  1,'SETUSR'
 setusr:
   call  gusr
   ld  (oldusr),a  ; save current user
@@ -7706,14 +7792,14 @@ setusr1:cp  255
 
 ;  RSTUSR  ( -- )    restore user
 
-  header  1,'RSTUSR'
+  hdr  1,'RSTUSR'
 rstusr:
   ld  a,(oldusr)
   jp  setusr1
 
 ;  REC@  ( addr -- +d )  dup >r @ r> 2+ c@ 7 0 do d2* loop
 
-  header  1,'REC@'
+  hdr  1,'REC@'
 rrat:
   pop  hl
   inc  hl
@@ -7738,7 +7824,7 @@ rrat:
 
 ;  REC!  ( +d addr -- )  >r 7 0 do d2/ loop r@ 2+ c! r> !
 
-  header  1,'REC!'
+  hdr  1,'REC!'
 rrsto:
   pop  de
   ld  l,c
@@ -7762,37 +7848,37 @@ rrsto:
   pop  bc
   jp  next
 
-;  >FNAME  ( addr1 u -- addr2 )  (pfsiz-1) min zbuf @ packed 0 affix
+;  >FNAME  ( addr1 u -- addr2 )  (filename_size-1) min zbuf @ packed 0 affix
 ;          zbuf 2@ swap zbuf 2!
 
-  header  1,'>FNAME'
+  hdr  1,'>FNAME'
 tfnam:
-  call  docol
+  call  do_colon
   dw  clit
-  db  pfsiz-1
+  db  filename_size-1
   dw  min
   dw  zbuf,fetch
   dw  packd
   dw  zero,affix  ; trailing null
   dw  zbuf,tat
   dw  swap
-  dw  zbuf,tstor
+  dw  zbuf,two_store
   dw  exit
 
 ;  fh  ( -- addr )
 
-  header  x,'FH'
+  hdr  x,'FH'
 fh:
-  call  doval    ; current file handle
+  call  do_value    ; current file handle
 fh1:
   dw  0
 
-;  /fh  ( -- )    #fcb (fhsiz) * hbuf over - swap erase
+;  /fh  ( -- )    #fcb (file_handle_size) * hbuf over - swap erase
 
-  header  x,'/FH'
+  hdr  x,'/FH'
 zfh:
   ld  hl,(nfcb1)
-  ld  de,fhsiz
+  ld  de,file_handle_size
   call  umstrr
   ld  hl,(hbuf1)
   call  ssub
@@ -7800,12 +7886,12 @@ zfh:
   push  de
   jp  erase
 
-;  use  ( -- addr )  fh (fhsiz) negate * hbuf +
+;  use  ( -- addr )  fh (file_handle_size) negate * hbuf +
 
-  header  x,'USE'
+  hdr  x,'USE'
 use:
   ld  hl,(fh1)
-  ld  de,-fhsiz
+  ld  de,-file_handle_size
   call  umstrr
   ld  hl,(hbuf1)
   add  hl,de
@@ -7813,17 +7899,17 @@ use:
 
 ;  uid  ( -- addr )  use 1+
 
-  header  x,'UID'
+  hdr  x,'UID'
 uid:
-  call  docol    ; user number
+  call  do_colon    ; user number
   dw  use,onep
   dw  exit
 
 ;  fcb  ( -- a )    use 6 +
 
-  header  x,'FCB'
+  hdr  x,'FCB'
 fcb:
-  call  docol    ; FCB address
+  call  do_colon    ; FCB address
   dw  use
   dw  clit
   db  6
@@ -7832,39 +7918,39 @@ fcb:
 
 ;  rwp@  ( -- ud )    use 2+ 2@
 
-  header  x,'RWP@'
+  hdr  x,'RWP@'
 rwpat:
-  call  docol
+  call  do_colon
   dw  use,twop
   dw  tat
   dw  exit
 
 ;  rwp!  ( ud -- )    use 2+ 2! ;
 
-  header  x,'RWP!'
+  hdr  x,'RWP!'
 rwpst:
-  call  docol
+  call  do_colon
   dw  use,twop
-  dw  tstor
+  dw  two_store
   dw  exit
 
 ;  >IOR  ( err# -- ior )  dup if $fe00 or then
 
-  header  1,'>IOR'
+  hdr  1,'>IOR'
 ior:
   pop  hl
   ld  a,h
   or  l
   jp  z,ior1
-  ld  h,0feh
+  ld  h,0xfe
 ior1:
   jp  push_hl
 
 ;  ?ior  ( flag err# -- ior )  and ior ;
 
-  header  x,'?IOR'
+  hdr  x,'?IOR'
 qior:
-  call  docol
+  call  do_colon
   dw  and_
   dw  ior
   dw  exit
@@ -7872,19 +7958,19 @@ qior:
 ;  getfh  ( -- fid | 0 )  #fcb 1+ begin 1- dup while dup to fh
 ;        use c@ 0= until then
 
-  header  x,'GETFH'
+  hdr  x,'GETFH'
 gtfh:
-  call  docol    ; get free handle, 0 if none
+  call  do_colon    ; get free handle, 0 if none
   dw  nfcb
   dw  onep
 gtfh1:
   dw  onem
-  dw  dupp
+  dw  dup
   dw  zbran,gtfh2
-  dw  dupp
+  dw  dup
   dw  pto,fh
-  dw  use,cat
-  dw  zequ
+  dw  use,c_fetch
+  dw  zero_equals
   dw  zbran,gtfh1
 gtfh2:
   dw  exit
@@ -7893,18 +7979,18 @@ gtfh2:
 ;          use c@ and 0= 5 and exit then 2drop
 ;          6
 
-  header  x,'SETFH'
+  hdr  x,'SETFH'
 stfh:
-  call  docol    ; select/check handle
+  call  do_colon    ; select/check handle
   dw  swap    ; mode mask: 1=read 2=write 3=r/w
-  dw  dupp,onem
+  dw  dup,onem
   dw  zero
   dw  nfcb
   dw  within
   dw  zbran,stfh1
   dw  pto,fh
-  dw  use,cat
-  dw  and_,zequ
+  dw  use,c_fetch
+  dw  and_,zero_equals
   dw  clit
   db  5
   dw  and_
@@ -7917,9 +8003,9 @@ stfh1:
 
 ;  FILE-POSITION  ( fideid -- ud ior )  3 setfh rwp@ rot ior
 
-  header  1,'FILE-POSITION'
+  hdr  1,'FILE-POSITION'
 fpos:
-  call  docol
+  call  do_colon
   dw  three,stfh
   dw  rwpat
   dw  rot
@@ -7929,11 +8015,11 @@ fpos:
 ;  REPOSITION-FILE  ( ud fid -- ior )  3 setfh dup >r if 2drop else
 ;              rwp! then r> ior
 
-  header  1,'REPOSITION-FILE'
+  hdr  1,'REPOSITION-FILE'
 reposf:
-  call  docol
+  call  do_colon
   dw  three,stfh
-  dw  dupp,to_r
+  dw  dup,to_r
   dw  zbran,reposf1
   dw  two_drop
   dw  branch,reposf2
@@ -7944,11 +8030,11 @@ reposf2:dw  from_r
 
 ;  xf5  ( -- )    $80 fcb 5 + ctoggle
 
-  header  x,'XF5'
+  hdr  x,'XF5'
 xff:
-  call  docol
+  call  do_colon
   dw  clit
-  db  80h
+  db  0x80
   dw  fcb
   dw  clit
   db  5
@@ -7961,13 +8047,13 @@ xff:
 ;          bdos drop rstusr then fcb 33 +
 ;          rec@ rot ior
 
-  header  1,'FILE-SIZE'
+  hdr  1,'FILE-SIZE'
 fsiz:
-  call  docol
+  call  do_colon
   dw  three,stfh
-  dw  dupp,zequ
+  dw  dup,zero_equals
   dw  zbran,fsiz1
-  dw  uid,cat
+  dw  uid,c_fetch
   dw  setusr
   dw  xff
   dw  fcb
@@ -7994,17 +8080,17 @@ fsiz1:
 ;          uid c@ setusr fcb 16 bdos rstusr 255
 ;          = 2 ?ior
 
-  header  1,'CLOSE-FILE'
+  hdr  1,'CLOSE-FILE'
 closf:
-  call  docol
+  call  do_colon
   dw  three,stfh
-  dw  dupp
+  dw  dup
   dw  zbran,closf1
   dw  ior
   dw  exit
 closf1:
   dw  use,cstor
-  dw  uid,cat
+  dw  uid,c_fetch
   dw  setusr
   dw  fcb
   dw  clit
@@ -8021,22 +8107,22 @@ closf2:
 
 ;  R/O  ( -- fam )      aka 0 r/o
 
-  header  1,'R/O',,,zero
+  hdr  1,'R/O',,,zero
 rso  equ  zero
 
 ;  W/O  ( -- fam )      aka 1 w/o
 
-  header  1,'W/O',,,one
+  hdr  1,'W/O',,,one
 wso  equ  one
 
 ;  R/W  ( -- fam )      aka 2 r/w
 
-  header  1,'R/W',,,two
+  hdr  1,'R/W',,,two
 rsw  equ  two
 
 ;  BIN  ( fam1 -- fam2 )    aka noop bin immediate
 
-  header  1,'BIN',1,,noop
+  hdr  1,'BIN',1,,noop
 binn  equ  next
 
 ;  open1  ( addr u fam -- | x ior )
@@ -8044,17 +8130,17 @@ binn  equ  next
 ;          then 1+ use c! >fname count fcb
 ;          setfcb dup uid c! setusr 0 0 rwp!
 
-  header  x,'OPEN1'
+  hdr  x,'OPEN1'
 open1:
-  call  docol
-  dw  gtfh,zequ
+  call  do_colon
+  dw  gtfh,zero_equals
   dw  zbran,open11
   dw  two_drop
   dw  clit
   db  4
   dw  ior
    if  debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'UNNEST_OPEN1'
    endif
   dw  unnest
@@ -8065,7 +8151,7 @@ open11:
   dw  tfnam,count
   dw  fcb
   dw  sfcb
-  dw  dupp
+  dw  dup
   dw  uid,cstor
   dw  setusr
   dw  zero,zero
@@ -8074,9 +8160,9 @@ open11:
 
 ;  open2  ( fn# -- fid flag )  fh fcb rot bdos 255 = rstusr
 
-  header  x,'OPEN2'
+  hdr  x,'OPEN2'
 open2:
-  call  docol
+  call  do_colon
   dw  fh
   dw  fcb
   dw  rot
@@ -8089,16 +8175,16 @@ open2:
 
 ;  open3  ( flag err -- | ior )  ?ior ?dup if 0 use c! unnest then
 
-  header  x,'OPEN3'
+  hdr  x,'OPEN3'
 open3:
-  call  docol
+  call  do_colon
   dw  qior
   dw  qdup
   dw  zbran,open31
   dw  zero
   dw  use,cstor
    if  debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'UNNEST_OPEN3'
    endif
   dw  unnest
@@ -8109,9 +8195,9 @@ open31:
 ;          open1 15 open2 2 open3 fcb 9 + c@
 ;          6 rshift use c@ and 1 > 5 open3 0
 
-  header  1,'OPEN-FILE'
+  hdr  1,'OPEN-FILE'
 openf:
-  call  docol
+  call  do_colon
   dw  open1
   dw  clit
   db  15
@@ -8120,11 +8206,11 @@ openf:
   dw  fcb    ; test if file R/O and mode=write
   dw  clit
   db  9
-  dw  plus,cat
+  dw  plus,c_fetch
   dw  clit
   db  6
   dw  rsh
-  dw  use,cat,and_
+  dw  use,c_fetch,and_
   dw  one,great
   dw  clit
   db  5
@@ -8135,9 +8221,9 @@ openf:
 ;          open1 fcb 19 bdos drop 22 open2
 ;          5 open3 0
 
-  header  1,'CREATE-FILE'
+  hdr  1,'CREATE-FILE'
 creatf:
-  call  docol
+  call  do_colon
   dw  open1
   dw  fcb
   dw  clit
@@ -8154,9 +8240,9 @@ creatf:
 
 ;  >FCB  ( addr u -- fcb usr )  2dup >fname 18 + -rot 2 pick setfcb
 
-  header  1,'>FCB'
+  hdr  1,'>FCB'
 tfcb:
-  call  docol
+  call  do_colon
   dw  tdup,tfnam
   dw  clit
   db  18
@@ -8169,9 +8255,9 @@ tfcb:
 ;  DELETE-FILE  ( addr u -- ior )  >fcb setusr 19 bdos rstusr 255 = 2
 ;          ?ior
 
-  header  1,'DELETE-FILE'
+  hdr  1,'DELETE-FILE'
 delf:
-  call  docol
+  call  do_colon
   dw  tfcb,setusr
   dw  clit
   db  19
@@ -8183,15 +8269,15 @@ delf:
 ;          16 cmove r> 23 bdos 255 = 2 ?ior else
 ;          16 bdos r> 2drop 5 ior then rstusr
 
-  header  1,'RENAME-FILE'
+  hdr  1,'RENAME-FILE'
 renf:
-  call  docol
+  call  do_colon
   dw  tswap
   dw  tfcb,setusr,to_r
   dw  tfcb,drop
-  dw  rat,cat
+  dw  r_fetch,c_fetch
   dw  over,cstor
-  dw  dupp
+  dw  dup
   dw  clit
   db  15
   dw  bdos
@@ -8199,7 +8285,7 @@ renf:
   db  255
   dw  equal
   dw  zbran,renf1
-  dw  rat
+  dw  r_fetch
   dw  clit
   db  16
   dw  plus
@@ -8222,20 +8308,20 @@ renf1:
 
 ;  offs  ( -- x )      0 value offs
 
-  header  x,'OFFS'
+  hdr  x,'OFFS'
 offs:
-  call  doval
+  call  do_value
   dw  0
 
 ;  setsiz  ( -- size )    rwp@ over $7F and to offs fcb 33 +
 ;          rec! (recsiz) offs -
 
-  header  x,'SETSIZ'
+  hdr  x,'SETSIZ'
 setsiz:
-  call  docol
+  call  do_colon
   dw  rwpat,over
   dw  clit
-  db  7fh
+  db  0x7f
   dw  and_
   dw  pto,offs
   dw  fcb
@@ -8249,7 +8335,7 @@ setsiz:
 
 ;  SETDMA  ( a -- )    26 bdos drop
 
-  header  1,'SETDMA'
+  hdr  1,'SETDMA'
 setdma:
   pop  de
   ld  a,26
@@ -8259,14 +8345,14 @@ setdma:
 ;  ranrw  ( a size fn# -- a size | a u' )
 ;          fcb swap bdos if drop unnest r> then
 
-  header  x,'RANRW'
+  hdr  x,'RANRW'
 ranrw:
-  call  docol
+  call  do_colon
   dw  fcb,swap,bdos
   dw  zbran,ranrw1
   dw  drop
    if  debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'UNNEST_RW'
    endif
   dw  unnest
@@ -8278,15 +8364,15 @@ ranrw1:
 ;          setfh ?dup if nip ior unnest exit
 ;          then tuck
 
-  header  x,'RDINI'
+  hdr  x,'RDINI'
 rdini:
-  call  docol
+  call  do_colon
   dw  stfh,qdup
   dw  zbran,rdini1
   dw  nip
   dw  ior
    if  debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'UNNEST_RDINI'
    endif
   dw  unnest
@@ -8301,16 +8387,16 @@ rdini1:
 ;          hbuf offs + -rot cmove then dup >r +
 ;          rwp@ r@ m+ rwp! 2r> - repeat
 
-  header  x,'FREAD'
+  hdr  x,'FREAD'
 fread:
-  call  docol
+  call  do_colon
 fread1:
-  dw  dupp
+  dw  dup
   dw  zbran,fread4
   dw  to_r
   dw  setsiz
-  dw  rat,umin
-  dw  dupp
+  dw  r_fetch,umin
+  dw  dup
   dw  clit
   db  recsiz
   dw  equal
@@ -8329,12 +8415,12 @@ fread2:
   dw  offs,plus
   dw  drot,cmove
 fread3:
-  dw  dupp,to_r
+  dw  dup,to_r
   dw  plus
   dw  rwpat
-  dw  rat,mplus
+  dw  r_fetch,mplus
   dw  rwpst
-  dw  tfrom,subb
+  dw  two_from_r,subb
   dw  branch,fread1
 fread4:
   dw  exit
@@ -8342,15 +8428,15 @@ fread4:
 ;  wrini  ( a u fid mask -- a u | ior )
 ;          setfh ?dup if nip nip ior unnest          then
 
-  header  x,'WRINI'
+  hdr  x,'WRINI'
 wrini:
-  call  docol
+  call  do_colon
   dw  stfh,qdup
   dw  zbran,wrini1
   dw  nip,nip
   dw  ior
    if  debug
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'UNNEST_WRINI'
    endif
   dw  unnest
@@ -8364,7 +8450,7 @@ wrini1:
 ;          then 34 ranrw dup >r + rwp@ r@ m+
 ;          rwp! 2r> - repeat
 
-  header  x,'FWRITE'
+  hdr  x,'FWRITE'
 fwrit:
   ; XXX TODO
   ; XXX TMP -- 2drop
@@ -8372,14 +8458,14 @@ fwrit:
   pop hl
   jp  next
 ; XXX OLD
-;;  call  docol
+;;  call  do_colon
 ;;fwrit1:
-;;  dw  dupp
+;;  dw  dup
 ;;  dw  zbran,fwrit4
 ;;  dw  to_r
 ;;  dw  setsiz
-;;  dw  rat,umin
-;;  dw  dupp
+;;  dw  r_fetch,umin
+;;  dw  dup
 ;;  dw  clit
 ;;  db  recsiz
 ;;  dw  equal
@@ -8407,12 +8493,12 @@ fwrit:
 ;;  dw  clit
 ;;  db  34
 ;;  dw  ranrw
-;;  dw  dupp,to_r
+;;  dw  dup,to_r
 ;;  dw  plus
 ;;  dw  rwpat
-;;  dw  rat,mplus
+;;  dw  r_fetch,mplus
 ;;  dw  rwpst
-;;  dw  tfrom,subb
+;;  dw  two_from_r,subb
 ;;  dw  branch,fwrit1
 ;;fwrit4:
 ;;  dw  exit
@@ -8420,11 +8506,11 @@ fwrit:
 ;  READ-FILE  ( addr u1 fid -- u2 ior )  1 rdini uid c@ setusr fread
 ;          rstusr nip - 0
 
-  header  1,'READ-FILE'
+  hdr  1,'READ-FILE'
 readf:
-  call  docol
+  call  do_colon
   dw  one,rdini
-  dw  uid,cat
+  dw  uid,c_fetch
   dw  setusr
   dw  fread
   dw  rstusr
@@ -8436,16 +8522,16 @@ readf:
 ;  WRITE-FILE  ( addr u fid -- ior )  2 wrini uid c@ setusr fwrite
 ;          rstusr nip 0<> 255 ?ior
 
-  header  1,'WRITE-FILE'
+  hdr  1,'WRITE-FILE'
 writf:
-  call  docol
+  call  do_colon
   dw  two,wrini
-  dw  uid,cat
+  dw  uid,c_fetch
   dw  setusr
   dw  fwrit
   dw  rstusr
   dw  nip
-  dw  zneq
+  dw  zero_not_equals
   dw  clit
   db  255
   dw  qior
@@ -8457,10 +8543,10 @@ writf:
 ;        dup >r write-file ?dup if r> drop exit
 ;        then (crlf) 2 r> write-file
 
-  header  1,'WRITE-LINE'
+  hdr  1,'WRITE-LINE'
 writl:
-  call  docol
-  dw  dupp,to_r
+  call  do_colon
+  dw  dup,to_r
   dw  writf,qdup
   dw  zbran,writl1
   dw  from_r,drop
@@ -8475,7 +8561,7 @@ writl1:
 ;  eol?  ( addr -- 2|1|0 )    c@ $0D of 2 exit then $0A of 1 exit
 ;          then drop 0
 
-  header  x,'EOL?'
+  hdr  x,'EOL?'
 eolq:
   pop  hl
   ld  a,(hl)
@@ -8493,7 +8579,7 @@ eolq:
 ;          0<> rwp@ d+ rwp! i swap - -1 0 unloop
 ;          exit then loop nip dup 0<> 0
 
-  header  1,'READ-LINE'
+  hdr  1,'READ-LINE'
 readl:
 ; XXX TODO
   pop hl
@@ -8501,7 +8587,7 @@ readl:
   pop hl
   jp next
 ; XXX OLD -- DX-Forth 4.00
-;;  call  docol
+;;  call  do_colon
 ;;  dw  to_r,over,swap,from_r
 ;;  dw  readf,qdup
 ;;  dw  zbran,readl1
@@ -8511,7 +8597,7 @@ readl:
 ;;  dw  xqdo,readl5
 ;;readl2:
 ;;  dw  ido
-;;  dw  dupp,cat
+;;  dw  dup,c_fetch
 ;;  dw  clit
 ;;  db  ctlz
 ;;  dw  equal
@@ -8526,7 +8612,7 @@ readl:
 ;;  dw  over,plus
 ;;  dw  from_r
 ;;  dw  swap,subb
-;;  dw  dupp,zneq  ; handle buffer > 32K
+;;  dw  dup,zero_not_equals  ; handle buffer > 32K
 ;;  dw  rwpat,dplus,rwpst
 ;;  dw  ido,swap,subb
 ;;  dw  true,zero
@@ -8535,7 +8621,7 @@ readl:
 ;;  dw  xloop,readl2
 ;;readl5:
 ;;  dw  nip
-;;  dw  dupp,zneq,zero
+;;  dw  dup,zero_not_equals,zero
 ;;  dw  exit
 
 ; screen file selector
@@ -8547,9 +8633,9 @@ fdtab:
 
 ;  sfp  ( -- a )
 
-  header  x,'SFP',,1
+  hdr  x,'SFP',,1
 sfp:
-  call  docre
+  call  do_create
 sfp1:
   dw  fdtab    ; current
 sfp2:
@@ -8558,33 +8644,33 @@ sfp2:
 ;  SWAP-FILE  ( -- )  scr @ scr# ! sfp 2@ swap sfp 2!
 ;        scr# @ scr ! empty-buffers
 
-  header  1,'SWAP-FILE',,1
+  hdr  1,'SWAP-FILE',,1
 swapf:
-  call  docol
+  call  do_colon
   dw  scr,fetch
   dw  snum,store
   dw  sfp,tat
   dw  swap
-  dw  sfp,tstor
+  dw  sfp,two_store
   dw  snum,fetch
   dw  scr,store
-  dw  mtbuf
+  dw  empty_buffers
   dw  exit
 
 ;  FDB  ( -- addr )  (fdtab) (nfd) 0 do dup @ @ 0= if unloop exit
 ;        then cell+ loop abort" too many files"
 
-  header  1,'FDB',,1  ; get a free slot
+  hdr  1,'FDB',,1  ; get a free slot
 fdb:
-  call  docol
+  call  do_colon
   dw  lit,fdtab
   dw  clit
   db  nfd
   dw  zero
   dw  xdo,fdb3
 fdb1:
-  dw  dupp,fetch,fetch
-  dw  zequ
+  dw  dup,fetch,fetch
+  dw  zero_equals
   dw  zbran,fdb2
   dw  unloo
   dw  exit
@@ -8592,7 +8678,7 @@ fdb2:
   dw  cellp
   dw  xloop,fdb1
 fdb3:
-  dw  pabq
+  dw  paren_abort_quote
   dcs  'too many files'
   dw  exit
 
@@ -8602,114 +8688,114 @@ fdb3:
 ;  FID  cell    file handle
 ;  BLKS  cell    file size (blocks)
 ;  SCR#  cell    current SCR#
-;  FNB  'pfsiz' bytes  file name
+;  FNB  'filename_size' bytes  file name
 
 ;  fd  ( -- addr )
 
-  header  x,'FD',,1
+  hdr  x,'FD',,1
 fd:
-  call  docol    ; file descriptor field
+  call  do_colon    ; file descriptor field
   dw  sfp,fetch,fetch
   dw  exit
 
 ;  fid  ( -- addr )
 
-  header  x,'FID',,1
+  hdr  x,'FID',,1
 fid:
   ld  e,cw*1    ; file handle field
 fid1:
   ld  d,0
   push  de
-  call  docol
+  call  do_colon
   dw  fd,plus
   dw  exit
 
 ;  blks  ( -- addr )
 
-  header  x,'BLKS',,1
+  hdr  x,'BLKS',,1
 blks:
   ld  e,cw*2    ; file size field
   jp  fid1
 
 ;  scr#  ( -- addr )
 
-  header  x,'SCR#',,1
+  hdr  x,'SCR#',,1
 snum:
   ld  e,cw*3    ; current SCR# field
   jp  fid1
 
 ;  fnb  ( -- addr )
 
-  header  x,'FNB',,1
+  hdr  x,'FNB',,1
 fnb:
   ld  e,cw*4    ; file name field
   jp  fid1
 
 ;  buf  ( -- addr )
 
-  header  x,'BUF',,1
+  hdr  x,'BUF',,1
 buf:
-  call  docon    ; file buffer address
+  call  do_constant    ; file buffer address
   dw  sfb
 
 ;  blk#  ( -- addr )
 
-  header  x,'BLK#',,1
+  hdr  x,'BLK#',,1
 bnum:
-  call  docre    ; block#, update flag
+  call  do_create    ; block#, update flag
 bnum1:
   ds  cw
 
 ;  FILE?  ( -- flag )  fd @ 0<>
 
-  header  1,'FILE?',,1
+  hdr  1,'FILE?',,1
 fileq:
-  call  docol
+  call  do_colon
   dw  fd,fetch
-  dw  zneq
+  dw  zero_not_equals
   dw  exit
 
 ;  LOADFILE  ( -- c-addr u )  fnb count
 
-  header  1,'LOADFILE',,1
+  hdr  1,'LOADFILE',,1
 loadf:
-  call  docol
+  call  do_colon
   dw  fnb,count
   dw  exit
 
 ;  ?open  ( -- )    file? 0= abort" no file open"
 
-  header  x,'?OPEN',,1
+  hdr  x,'?OPEN',,1
 qopen:
-  call  docol
+  call  do_colon
   dw  fileq
-  dw  zequ
-  dw  pabq
+  dw  zero_equals
+  dw  paren_abort_quote
   dcs  'no file open'
   dw  exit
 
 ;  #SCREENS  ( -- +n )  ?open blks @
 
-  header  1,'#SCREENS',,1
+  hdr  1,'#SCREENS',,1
 nscr:
-  call  docol
+  call  do_colon
   dw  qopen
   dw  blks,fetch
   dw  exit
 
 ;  EMPTY-BUFFERS  ( -- )  $7fff blk# !
 
-  header  1,'EMPTY-BUFFERS',,1
-mtbuf:
+  hdr  1,'EMPTY-BUFFERS',,1
+empty_buffers:
   ld  hl,7fffh
   ld  (bnum1),hl
   jp next
 
 ;  UPDATE  ( -- )    ?open blk# @ $8000 or blk# !
 
-  header  1,'UPDATE',,1
+  hdr  1,'UPDATE',,1
 update:
-  call  docol
+  call  do_colon
   dw  qopen
   dw  bnum,fetch
   dw  lit,8000h
@@ -8719,10 +8805,10 @@ update:
 
 ;  blkerr  ( flag -- )  abort" block r/w error"
 
-  header  x,'BLKERR',,1
+  hdr  x,'BLKERR',,1
 blkerr:
-  call  docol
-  dw  pabq
+  call  do_colon
+  dw  paren_abort_quote
   dcs  'block r/w error'
   dw  exit
 
@@ -8730,9 +8816,9 @@ blkerr:
 ;        buf b/buf fid @ r> if write-file else
 ;        read-file blkerr b/buf < then blkerr
 
-  header  x,'BLK-RW',,1
+  hdr  x,'BLK-RW',,1
 blkrw:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  bbuf,umstr
   dw  fid,fetch
@@ -8755,22 +8841,22 @@ blkrw2:
 ;  ?blk  ( +n -- +n )  dup #screens 0 within
 ;        abort" block out of range"
 
-  header  x,'?BLK',,1
+  hdr  x,'?BLK',,1
 qblk:
-  call  docol
-  dw  dupp
+  call  do_colon
+  dw  dup
   dw  nscr,zero
   dw  within    ; block in range?
-  dw  pabq
+  dw  paren_abort_quote
   dcs  'block out of range'
   dw  exit
 
 ;  SAVE-BUFFERS  ( -- )  ?open blk# @ 0< if blk# @ $7fff and
 ;        dup blk# ! ?blk 1 blk-rw then
 
-  header  1,'SAVE-BUFFERS',,1
+  hdr  1,'SAVE-BUFFERS',,1
 savbuf:
-  call  docol
+  call  do_colon
   dw  qopen
   dw  bnum,fetch
   dw  zless
@@ -8778,7 +8864,7 @@ savbuf:
   dw  bnum,fetch
   dw  lit,7fffh
   dw  and_
-  dw  dupp
+  dw  dup
   dw  bnum,store
   dw  qblk    ; block in range?
   dw  one,blkrw
@@ -8786,17 +8872,17 @@ savbuf1:dw  exit
 
 ;  FLUSH  ( -- )    save-buffers empty-buffers
 
-  header  1,'FLUSH',,1
+  hdr  1,'FLUSH',,1
 flush:
-  call  docol
-  dw  savbuf,mtbuf
+  call  do_colon
+  dw  savbuf,empty_buffers
   dw  exit
 
 ;  BUFFER  ( +n -- addr )  save-buffers ?blk blk# ! buf
 
-  header  1,'BUFFER',,1
+  hdr  1,'BUFFER',,1
 buffer:
-  call  docol
+  call  do_colon
   dw  savbuf
   dw  qblk
   dw  bnum,store
@@ -8806,15 +8892,15 @@ buffer:
 ;  BLOCK  ( +n -- addr )  ?open blk# @ $7fff and over - if dup
 ;        buffer drop 0 blk-rw else drop then buf
 
-  header  1,'BLOCK',,1
+  hdr  1,'BLOCK',,1
 block:
-  call  docol
+  call  do_colon
   dw  qopen
   dw  bnum,fetch
   dw  lit,7fffh
   dw  and_,over,subb
   dw  zbran,block1
-  dw  dupp,buffer,drop
+  dw  dup,buffer,drop
   dw  zero,blkrw
   dw  branch,block2
 block1:
@@ -8826,21 +8912,21 @@ block2:
 ;  -->  ( -- )    blk @ 0= abort" loading only" (refill) drop
 ;        ;immediate
 
-  header  1,'-->',1,1
+  hdr  1,'-->',1,1
 arrow:
-  call  docol
+  call  do_colon
   dw  blk,fetch
-  dw  zequ
-  dw  pabq
+  dw  zero_equals
+  dw  paren_abort_quote
   dcs  'loading only'
   dw  prefil,drop
   dw  exit
 
 ;  (thru)  ( +n1 +n2 -- )  1+ swap ?do i block b/buf i (eval) loop
 
-  header  x,'(THRU)',,1
+  hdr  x,'(THRU)',,1
 pthru:
-  call  docol
+  call  do_colon
   dw  onep,swap
   dw  xqdo,pthru2
 pthru1:
@@ -8853,16 +8939,16 @@ pthru2:
 
 ;  THRU  ( +n1 +n2 -- )  (thru) ?block
 
-  header  1,'THRU',,1
+  hdr  1,'THRU',,1
 thru:
-  call  docol
+  call  do_colon
   dw  pthru
   dw  qblock
   dw  exit
 
 ;  LOAD  ( +n -- )   dup thru
 
-  header  1,'LOAD',,1
+  hdr  1,'LOAD',,1
 load:
   pop  hl
   push  hl
@@ -8871,10 +8957,10 @@ load:
 
 ;  fnbuf  ( -- addr )
 
-  header  x,'FNBUF',,1
+  hdr  x,'FNBUF',,1
 fnbuf:
-  call  docre    ; current file handle
-  ds  pfsiz
+  call  do_create    ; current file handle
+  ds  filename_size
 
 ;  (fbk)  ( +n -- )  #screens 2dup u< if drop dup loadfile -ext
 ;        s" $$$" +ext fnbuf place fnbuf count w/o
@@ -8886,13 +8972,13 @@ fnbuf:
 ;        throw fid ! then over blks ! ?do i buffer
 ;        b/buf blank update save-buffers loop
 
-  header  x,'(FBK)',,1
+  hdr  x,'(FBK)',,1
 pfbk:
-  call  docol
+  call  do_colon
   dw  nscr    ; tests if file open
   dw  tdup,uless
   dw  zbran,pfbk3
-  dw  drop,dupp
+  dw  drop,dup
   dw  loadf,dext
   dw  psqot
   dcs  '$$$'
@@ -8903,7 +8989,7 @@ pfbk:
   dw  over,zero
   dw  xqdo,pfbk2
 pfbk1:
-  dw  dupp
+  dw  dup
   dw  ido,block
   dw  bbuf
   dw  rot,writf,throw
@@ -8932,12 +9018,12 @@ pfbk5:
 
 ;  FILEBLOCKS  ( +n -- )  ['] (fbk) catch abort" can't resize file"
 
-  header  1,'FILEBLOCKS',,1
+  hdr  1,'FILEBLOCKS',,1
 fbloc:
-  call  docol
+  call  do_colon
   dw  lit,pfbk
   dw  catch
-  dw  pabq
+  dw  paren_abort_quote
   dcs  "can't resize file"
   dw  exit
 
@@ -8946,9 +9032,9 @@ fbloc:
 ;
 ; NOTE: errors are NOT reported with this function
 
-  header  1,'CLOSE',,1  ; close current file
+  hdr  1,'CLOSE',,1  ; close current file
 close:
-  call  docol
+  call  do_colon
   dw  fileq
   dw  zbran,close1
   dw  flush
@@ -8956,15 +9042,15 @@ close:
   dw  closf,drop
   dw  fd,off
 close1:
-  dw  mtbuf
+  dw  empty_buffers
   dw  exit
 
 ;  CLOSE-ALL  ( -- )  close (fdtab) nfd 0 do dup sfp ! close
 ;        cell+ loop drop
 
-  header  1,'CLOSE-ALL',,1
+  hdr  1,'CLOSE-ALL',,1
 closa:
-  call  docol
+  call  do_colon
   dw  close    ; ensure buffer flushed
   dw  lit,fdtab
   dw  clit
@@ -8972,7 +9058,7 @@ closa:
   dw  zero
   dw  xdo,closa2
 closa1:
-  dw  dupp
+  dw  dup
   dw  sfp,store
   dw  close
   dw  cellp
@@ -8983,18 +9069,18 @@ closa2:
 
 ;  lastfile  ( -- c-addr u )  zbuf cell+ @ count
 
-  header  x,'LASTFILE',,1
+  hdr  x,'LASTFILE',,1
 lastf:
-  call  docol    ; last named file used by open-file etc
+  call  do_colon    ; last named file used by open-file etc
   dw  zbuf,cellp
   dw  fetch,count
   dw  exit
 
 ;  .lastfile  ( -- )  beep cr lastfile type space
 
-  header  x,'.LASTFILE',,1
+  hdr  x,'.LASTFILE',,1
 dotlf:
-  call  docol
+  call  do_colon
   dw  beep,crr
   dw  lastf,typee
   dw  space
@@ -9006,23 +9092,23 @@ dotlf:
 ;        y/n 0= if abort then then lastfile r/w
 ;        create-file abort" can't create file"
 
-  header  x,'?CREATE',,1
+  hdr  x,'?CREATE',,1
 qcreat:
-  call  docol
+  call  do_colon
   dw  rso,openf  ; test if file exists
-  dw  zequ,tuck
+  dw  zero_equals,tuck
   dw  zbran,qcreat1
   dw  closf
 qcreat1:dw  drop
   dw  zbran,qcreat2
   dw  dotlf
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'exists - delete it? '
-  dw  yn,zequ
+  dw  yn,zero_equals
   dw  zbran,qcreat2
   dw  abort
 qcreat2:dw  lastf,rsw,creatf
-  dw  pabq
+  dw  paren_abort_quote
   dcs  "can't create file"
   dw  exit
 
@@ -9031,29 +9117,29 @@ qcreat2:dw  lastf,rsw,creatf
 ;          um/mod nip blks ! lastfile fnb
 ;          place loadfile upper empty-buffers
 
-  header  x,'INIT-SCR',,1
+  hdr  x,'INIT-SCR',,1
 iniscr:
-  call  docol    ; init screenfile
+  call  do_colon    ; init screenfile
   dw  zbran,iniscr1
   dw  drop
   dw  exit
 iniscr1:dw  fdb,sfp,store
   dw  fd,on
-  dw  dupp,fid,store
+  dw  dup,fid,store
   dw  fsiz,drop
   dw  bbuf,umslm,nip  ; overflow stores $FFFF
   dw  blks,store
   dw  lastf,fnb,place
   dw  loadf,upper
-  dw  mtbuf
+  dw  empty_buffers
   dw  exit
 
 ;  OPEN  ( c-addr u fam -- ior )  fdb drop >r s" scr" +ext r>
 ;          open-file tuck init-scr
 
-  header  1,'OPEN',,1  ; open a screen file
+  hdr  1,'OPEN',,1  ; open a screen file
 open:
-  call  docol
+  call  do_colon
   dw  fdb,drop  ; free slot?
   dw  to_r
   dw  psqot
@@ -9066,22 +9152,22 @@ open:
 
 ;  (open)  ( c-addr u -- )    r/w open abort" can't open file"
 
-  header  x,'(OPEN)',,1
+  hdr  x,'(OPEN)',,1
 popen:
-  call  docol
+  call  do_colon
   dw  rsw,open
-  dw  pabq
+  dw  paren_abort_quote
   dcs  "can't open file"
   dw  exit
 
 ;  GETFILENAME  ( -- c-addr u )  token dup 0= abort" specify filename"
 
-  header  1,'GETFILENAME',,1
-getfn:
-  call  docol
+  hdr  1,'GETFILENAME',,1
+getfilename:
+  call  do_colon
   dw  token
-  dw  dupp,zequ
-  dw  pabq
+  dw  dup,zero_equals
+  dw  paren_abort_quote
   dcs  'specify filename'
   dw  exit
 
@@ -9091,27 +9177,27 @@ getfn:
 ;          y/n then 0= if abort then lastfile
 ;          ?create 0 init-scr then 0 0 scr 2!
 
-  header  1,'USING',,1  ; open/make a screen file
+  hdr  1,'USING',,1  ; open/make a screen file
 using:
-  call  docol
+  call  do_colon
   dw  close
-  dw  getfn
+  dw  getfilename
   dw  rsw,open,qdup
   dw  zbran,using4
   dw  dotlf
   dw  lit,-507
   dw  equal
   dw  zbran,using1
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'access denied'
   dw  zero
   dw  branch,using2
 using1:
-  dw  pdotq
+  dw  paren_dot_quote
   dcs  'not found - create it? '
   dw  yn
 using2:
-  dw  zequ
+  dw  zero_equals
   dw  zbran,using3
   dw  abort
 using3:
@@ -9119,15 +9205,15 @@ using3:
   dw  zero,iniscr
 using4:
   dw  zero,zero  ; reset SCR
-  dw  scr,tstor
+  dw  scr,two_store
   dw  exit
 
 ;  LOADED  ( +n1 +n2 c-addr u -- )  sfp @ >r (open) (thru) close r>
 ;          sfp ! ?block
 
-  header  1,'LOADED',,1
+  hdr  1,'LOADED',,1
 loaded:
-  call  docol
+  call  do_colon
   dw  sfp,fetch
   dw  to_r
   dw  popen
@@ -9140,11 +9226,11 @@ loaded:
 
 ;  FLOAD  ( +n "filename[.SCR]" -- )  dup getfilename loaded
 
-  header  1,'FLOAD',,1
+  hdr  1,'FLOAD',,1
 fload:
-  call  docol
-  dw  dupp
-  dw  getfn
+  call  do_colon
+  dw  dup
+  dw  getfilename
   dw  loaded
   dw  exit
 
@@ -9157,64 +9243,73 @@ fload:
 ;        and r@ write-file then r> close-file or
 ;        abort" can't save file"
 
-  header  1,'SAVE',,1
+  hdr  1,'SAVE',,1
 save:
-  call  docol
-  dw  zero,zero
-save1:
-  dw  freez
-  dw  getfn
-  dw  psqot
-  dcs  'com'
-  dw  pext
-  dw  qcreat
-  dw  to_r    ; fid
-  dw  over,swap  ; set boot flags
-  dw  boot,tstor
-  dw  lit,cold6  ; insert compiler logo
-  dw  lit,zb1
-  dw  dupp
-  dw  clit
-  db  zbsiz*2
-  dw  erase
-  dw  clit
-  db  cold7-cold6
-  dw  cmove
-  dw  lit,100h
-  dw  dpp,fetch
-  dw  over,subb
-  dw  rat,writf  ; save application
-  dw  boot,cellp,off  ; reset forth flag
-  dw  qdup,zequ
-  dw  zbran,save2
-  dw  lit,hm
-  dw  dph,fetch
-  dw  over,subb
-  dw  rot,zequ,and_  ; system size
-  dw  rat,writf  ; save system
-save2:
-  dw  from_r,closf,or_
-  dw  pabq
-  dcs  "can't save file"
+  call  do_colon
+  ; XXX TODO
+  ; XXX OLD
+;;  dw  zero,zero
+;;save1:
+;;  dw  freez
+;;  dw  getfilename
+;;  dw  psqot
+;;  dcs  'com'
+;;  dw  pext
+;;  dw  qcreat
+;;  dw  to_r    ; fid
+;;  dw  over,swap  ; set boot flags
+;;  dw  boot,two_store
+;;  dw  lit,cold6  ; insert compiler logo
+;;  dw  lit,zb1
+;;  dw  dup
+;;  dw  clit
+;;  db  zbsiz*2
+;;  dw  erase
+;;  dw  clit
+;;  db  cold7-cold6
+;;  dw  cmove
+;;  dw  lit,0x0100
+;;  dw  dpp,fetch
+;;  dw  over,subb
+;;  dw  r_fetch,writf  ; save application
+;;  dw  boot,cellp,off  ; reset forth flag
+;;  dw  qdup,zero_equals
+;;  dw  zbran,save2
+;;  dw  lit,hm
+;;  dw  dph,fetch
+;;  dw  over,subb
+;;  dw  rot,zero_equals,and_  ; system size
+;;  dw  r_fetch,writf  ; save system
+;;save2:
+;;  dw  from_r,closf,or_
+;;  dw  paren_abort_quote
+;;  dcs  "can't save file"
   dw  exit
 
 ;  TURNKEY  ( "bootword" "filename[.COM]" -- )
 
-  header  1,'TURNKEY',,1
-turnk:
-  call  docol
-  dw  true
-turnk1:
-  dw  tick
-  dw  branch,save1
+  hdr  1,'TURNKEY',,1
+turnkey:
+  call  do_colon
+  ; XXX TODO
+  dw exit
+  ; XXX OLD
+;;  dw  true
+;;turnkey1:
+;;  dw  tick
+;;  dw  branch,save1
 
 ;  TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
 
-  header  1,'TURNKEY-SYSTEM',,1
-turnks:
-  call  docol
-  dw  zero
-  dw  branch,turnk1
+  hdr  1,'TURNKEY-SYSTEM',,1
+turnkey_system:
+  call  do_colon
+  call  do_colon
+  ; XXX TODO
+  dw exit
+  ; XXX OLD
+;;  dw  zero
+;;  dw  branch,turnkey1
 
 ; }}} **********************************************************
 ; Floating point functions {{{
@@ -9223,13 +9318,13 @@ turnks:
 
 ;  -FP  ( -- addr )    marker -FP
 
-  header  1,'-FP',,1
+  hdr  1,'-FP',,1
 dfp:
   call  next
 
 ;  FLOAT+ ( f-addr1 -- f-addr2 )  4 +
 
-  header  1,'FLOAT+'
+  hdr  1,'FLOAT+'
 floatp:
   pop  hl
   ld  de,fw
@@ -9238,7 +9333,7 @@ floatp:
 
 ;  FLOATS ( n1 -- n2 )    4 *
 
-  header  1,'FLOATS'
+  hdr  1,'FLOATS'
 floats:
   pop  hl
   add  hl,hl
@@ -9247,26 +9342,26 @@ floats:
 
 ;  FALIGN  ( -- )      aka noop falign immediate
 
-  header  1,'FALIGN',1,,noop
+  hdr  1,'FALIGN',1,,noop
 falign  equ  next
 
 ;  FALIGNED ( addr -- f-addr )  aka noop faligned immediate
 
-  header  1,'FALIGNED',1,,noop
+  hdr  1,'FALIGNED',1,,noop
 falignd  equ  next
 
 ;  F,  (F: r -- ) or ( r -- )  , ,
 
-  header  1,'F,',,1
+  hdr  1,'F,',,1
 fcomm:
-  call  docol
+  call  do_colon
   dw  comma,comma
   dw  exit
 
 ;  FLITERAL  ( -- r )
   ; aka fliteral 2literal immediate
 
-  header  1,'FLITERAL',1,,tlite
+  hdr  1,'FLITERAL',1,,tlite
 flite  equ  tlite
 
 flit  equ  tlit
@@ -9274,7 +9369,7 @@ flit  equ  tlit
 ;  FCONSTANT  ( -- r )
   ; aka 2constant fconstant
 
-  header  1,'FCONSTANT',,,tcon
+  hdr  1,'FCONSTANT',,,tcon
 fcon  equ  tcon
 
 dofcon  equ  tat
@@ -9282,65 +9377,65 @@ dofcon  equ  tat
 ;  FVARIABLE  ( -- f-addr )
 ;  aka 2variable fvariable
 
-  header  1,'FVARIABLE',,,tvar
+  hdr  1,'FVARIABLE',,,tvar
 fvar  equ  tvar
 
 ;  FDEPTH   ( -- +n )  depth 2/
 
-  header  1,'FDEPTH'
+  hdr  1,'FDEPTH'
 fdepth:
-  call  docol
+  call  do_colon
   dw  depth
   dw  twodiv
   dw  exit
 
 ;  FDROP  ( r -- )
 
-  header  1,'FDROP',,,two_drop  ; aka 2drop fdrop
+  hdr  1,'FDROP',,,two_drop  ; aka 2drop fdrop
 fdrop  equ  two_drop
 
 ;  FDUP  ( r -- r r )
 
-  header  1,'FDUP',,,tdup    ; aka 2dup fdup
+  hdr  1,'FDUP',,,tdup    ; aka 2dup fdup
 fdup  equ  tdup
 
 ;  FSWAP  ( r1 r2 -- r2 r1 )
 
-  header  1,'FSWAP',,,tswap  ; aka 2swap fswap
+  hdr  1,'FSWAP',,,tswap  ; aka 2swap fswap
 fswap  equ  tswap
 
 ;  FOVER  ( r1 r2 -- r1 r2 r1 )
 
-  header  1,'FOVER',,,tover  ; aka 2over fover
+  hdr  1,'FOVER',,,tover  ; aka 2over fover
 fover  equ  tover
 
 ;  FROT  ( r1 r2 r3 -- r2 r3 r1 )
 
-  header  1,'FROT',,,trot    ; aka 2rot frot
+  hdr  1,'FROT',,,trot    ; aka 2rot frot
 frot  equ  trot
 
 ;  F@  ( f-addr -- r )
 
-  header  1,'F@',,,tat    ; aka 2@ f@
-fat  equ  tat
+  hdr  1,'F@',,,tat    ; aka 2@ f@
+f_fetch  equ  tat
 
 ;  F!  ( r f-addr -- )
 
-  header  1,'F!',,,tstor    ; aka 2! f!
-fstor  equ  tstor
+  hdr  1,'F!',,,two_store    ; aka 2! f!
+f_store  equ  two_store
 
 ;  FPICK  ( +n -- r )  floats sp@ cell+ + f@
 
-  header  1,'FPICK'
+  hdr  1,'FPICK'
 fpick:
-  call  docol
+  call  do_colon
   dw  floats
 ;   if  fstack
 ;  dw  fsp,fetch
 ;   else
   dw  sp_fetch,cellp
 ;   endif
-  dw  plus,fat
+  dw  plus,f_fetch
   dw  exit
 
 ;   cseg ; XXX OLD
@@ -9365,7 +9460,7 @@ f2:
 ften:
   call  dofcon    ; fconstant
 fp10:
-  db  84h,20h,0,0  ; 10.0
+  db  0x84,0x20,0,0  ; 10.0
 
 ; save/load temp fp registers
 
@@ -9470,7 +9565,7 @@ ovf:
 ; exit  - bcd (packed), a=exp, flags set
 
 chs:
-  ld  a,80h
+  ld  a,0x80
   jp  fab1
 
 ; change sign of accumulator and again on result
@@ -9492,7 +9587,7 @@ fab:
 fab1:
   ld  hl,accs
   and  (hl)
-  xor  80h
+  xor  0x80
   ld  (hl),a    ; fall thru tst
 
 ; tst  load registers from acc and test
@@ -9530,7 +9625,7 @@ lod:
   inc  hl
   ld  d,(hl)
   ld  l,a
-  or  80h
+  or  0x80
   ld  b,a
   xor  l
 lod2:
@@ -9665,7 +9760,7 @@ shl_:
 fcpl:
   ld  hl,accs    ; change accum sign
   ld  a,(hl)
-  xor  80h
+  xor  0x80
   ld  (hl),a
   xor  a    ; complement fraction
   ld  l,a
@@ -9745,7 +9840,7 @@ rondr1:
   ret  nz
   inc  b
   ret  nz
-  ld  b,80h    ; new 1st fraction
+  ld  b,0x80    ; new 1st fraction
   ld  a,e    ; inc exp
   add  a,1    ; adjust cy
   ld  e,a
@@ -9755,7 +9850,7 @@ rondr1:
 ; fsu  floating point subtract subroutine
 
 fsu:
-  ld  a,80h    ; mask to change operand sign
+  ld  a,0x80    ; mask to change operand sign
   jp  fad1
 
 ; fad  floating point add subroutine
@@ -9777,7 +9872,7 @@ fad1:
 
   ld  l,b    ; unpack
   ld  a,b
-  or  80h
+  or  0x80
   ld  b,a
   xor  l    ; generate subtraction flag
   ld  hl,accs
@@ -9937,7 +10032,7 @@ mdex:
   rra      ; carry to sign
   xor  b    ; carry and sign must differ
   ld  a,b    ; result exp plus bias
-  ld  b,80h    ; exp bias, sign mask, most sig bit
+  ld  b,0x80    ; exp bias, sign mask, most sig bit
   jp  p,mdex1    ; if over or underflow
   sub  b    ; remove excess exp bias
   ret  z    ; return if underflow
@@ -10221,11 +10316,11 @@ flt:
 flt0:
   ld  a,32    ; scaling factor
 flt1:
-  xor  80h    ; apply exponent bias
+  xor  0x80    ; apply exponent bias
   ld  hl,acce
   ld  (hl),a
   inc  hl
-  ld  (hl),80h  ; assume positive accum sign
+  ld  (hl),0x80  ; assume positive accum sign
   ld  a,b    ; set cy if integer negative
   and  a
   rla
@@ -10251,7 +10346,7 @@ fix:
   and  a
   jp  z,zro    ; zero
   ld  a,e
-  add  a,80h-1    ; add bias-1
+  add  a,0x80-1    ; add bias-1
   sub  (hl)    ; shift count -1
   ret  c    ; accum too large
   cp  31    ; compare to large shift
@@ -10282,11 +10377,11 @@ fix:
 
 flr:
   ld  e,d
-  cp  80h+24
+  cp  0x80+24
   ret  nc    ; no fraction
 flr1:
   ld  e,a
-  ld  a,80h    ; unpack b
+  ld  a,0x80    ; unpack b
   or  b
   ld  b,a
   ld  a,(accs)
@@ -10300,12 +10395,12 @@ flr1:
 flr2:
   dec  d
 flr3:
-  ld  a,80h+24
+  ld  a,0x80+24
   sub  e
   call  shr_
   pop  af
   call  nc,rondr1  ; incr bcd
-  ld  a,80h+24
+  ld  a,0x80+24
   ld  (acce),a
   ld  a,d
   jp  c,flr4
@@ -10324,7 +10419,7 @@ flr4:
 rnd:
   call  tstr
   call  m,chss
-  cp  80h+24
+  cp  0x80+24
   ret  nc    ; no fraction
   ld  hl,fp50    ; 0.5
   call  fad
@@ -10332,7 +10427,7 @@ rnd:
 
 ;  FABS  ( r1 -- r2 )
 
-  header  1,'FABS'
+  hdr  1,'FABS'
 fabss:
   call  ldop
   call  fab
@@ -10340,7 +10435,7 @@ fabss:
 
 ;  FNEGATE  ( r1 -- r2 )
 
-  header  1,'FNEGATE'
+  hdr  1,'FNEGATE'
 fneg:
   call  ldop
   call  chs
@@ -10348,7 +10443,7 @@ fneg:
 
 ;  D>F  ( d -- r )
 
-  header  1,'D>F'
+  hdr  1,'D>F'
 dtof:
   pop  hl
   pop  de
@@ -10360,7 +10455,7 @@ dtof:
 
 ;  F>D  ( r -- d )
 
-  header  1,'F>D'
+  hdr  1,'F>D'
 ftod:
   call  ldop
   call  fix
@@ -10373,34 +10468,34 @@ ftod:
 
 ;  S>F  ( n -- r )    s>d d>f
 
-  header  1,'S>F'
+  hdr  1,'S>F'
 stof:
-  call  docol
+  call  do_colon
   dw  stod,dtof
   dw  exit
 
 ;  F>S  ( r -- n )    f>d d>s
 
-  header  1,'F>S'
+  hdr  1,'F>S'
 ftos:
-  call  docol
+  call  do_colon
   dw  ftod,dtos
   dw  exit
 
 ;  F0=  ( r -- flag )
 
-  header  1,'F0='
+  hdr  1,'F0='
 fze:
   pop  hl
   ld  h,l
   ex  (sp),hl
-  jp  zequ
+  jp  zero_equals
 
    if  fpx
 
 ;  F=  ( r1 r2 -- flag )
 
-  header  1,'F='
+  hdr  1,'F='
 feq:
   call  ld2op
   call  fcmp
@@ -10412,7 +10507,7 @@ feq:
 
 ;  F0<  ( r -- flag )
 
-  header  1,'F0<'
+  hdr  1,'F0<'
 fzl:
   pop  hl
   pop  de
@@ -10426,7 +10521,7 @@ fzl:
 
 ;  F<  ( r1 r2 -- flag )
 
-  header  1,'F<'
+  hdr  1,'F<'
 fles:
   call  ld2op
   call  fcmp
@@ -10436,7 +10531,7 @@ fles:
 
 ;  F0>  ( r -- flag )
 
-  header  1,'F0>'
+  hdr  1,'F0>'
 fzg:
   call  ldop
 fzg1:
@@ -10447,7 +10542,7 @@ fzg1:
 
 ;  F>  ( r1 r2 -- flag )
 
-  header  1,'F>'
+  hdr  1,'F>'
 fgre:
   call  ld2op
   call  fcmp
@@ -10455,7 +10550,7 @@ fgre:
 
 ;  FMIN  ( r1 r2 -- r1 | r2 )  fover fover f< 0= if fswap then fdrop
 
-  header  1,'FMIN'
+  hdr  1,'FMIN'
 fmin:
   call  ld2op
   push  hl
@@ -10466,7 +10561,7 @@ fmin:
 
 ;  FMAX  ( r1 r2 -- r1 | r2 )  fover fover f< if fswap then fdrop
 
-  header  1,'FMAX'
+  hdr  1,'FMAX'
 fmax:
   call  ld2op
   push  hl
@@ -10477,7 +10572,7 @@ fmax:
 
 ;  FLOOR  ( r1 -- r2 )
 
-  header  1,'FLOOR'
+  hdr  1,'FLOOR'
 floor:
   call  ldop
   call  flr
@@ -10485,7 +10580,7 @@ floor:
 
 ;  FROUND  ( r1 -- r2 )
 
-  header  1,'FROUND'
+  hdr  1,'FROUND'
 frnd:
   call  ldop
   call  rnd
@@ -10493,7 +10588,7 @@ frnd:
 
 ;  F+  ( r1 r2 -- r3 )
 
-  header  1,'F+'
+  hdr  1,'F+'
 fadd:
   call  ld2op
   call  fad
@@ -10501,7 +10596,7 @@ fadd:
 
 ;  F-  ( r1 r2 -- r3 )
 
-  header  1,'F-'
+  hdr  1,'F-'
 fsub:
   call  ld2op
   call  fsu
@@ -10509,7 +10604,7 @@ fsub:
 
 ;  F*  ( r1 r2 -- r3 )
 
-  header  1,'F*'
+  hdr  1,'F*'
 fstar:
   call  ld2op
   call  fmu
@@ -10517,7 +10612,7 @@ fstar:
 
 ;  F/  ( r1 r2 -- r3 )
 
-  header  1,'F/'
+  hdr  1,'F/'
 fslas:
   call  ld2op
   call  fdi
@@ -10525,7 +10620,7 @@ fslas:
 
 ;  FRANDOM  ( r1 -- r2 )
 
-  header  1,'FRANDOM'
+  hdr  1,'FRANDOM'
 rand:
   call  ldop
   jp  m,rand1    ; seed generator
@@ -10548,21 +10643,21 @@ rand1:
   dec  hl
   ld  d,(hl)
   dec  hl
-  ld  (hl),80h  ; make positive
+  ld  (hl),0x80  ; make positive
   dec  hl
   ld  e,(hl)
-  ld  (hl),80h  ; fix exponent
+  ld  (hl),0x80  ; fix exponent
   call  npack    ; normalise
   ld  hl,rand4
   call  str
   jp  svop
 
 rand2:
-  db  98h,35h,44h,7ah
+  db  0x98,0x35,0x44,0x7a
 rand3:
-  db  68h,28h,0b1h,46h
+  db  0x68,0x28,0xb1,0x46
 rand4:
-  db  80h,31h,41h,59h    ; seed
+  db  0x80,0x31,0x41,0x59    ; seed
 
 ;   cseg ; XXX OLD
 
@@ -10587,7 +10682,7 @@ fin:
   inc  a
   ld  (finstr+2),a
 
-  ld  a,80h    ; set sign positive
+  ld  a,0x80    ; set sign positive
   ld  (finsgn),a
   xor  a
   ld  (finpt),a  ; clear decimal point flag
@@ -10673,7 +10768,7 @@ fin8:
   jp  z,fin10
   cp  '-'
   jp  z,fin10
-  call  upc
+  call  uppercase_a
   cp  'E'
   jp  z,fin9
   cp  'D'
@@ -10742,7 +10837,7 @@ fin15:
 fin16:
   call  fmu    ; mul by 10
   ret  c    ; overflow
-  ld  a,0ffh
+  ld  a,0xff
   jp  fin15
 
 ; get next char, return z if end reached
@@ -10767,7 +10862,7 @@ fin18:
 
 ;  >FLOAT  ( c-addr u -- r true | false )
 
-  header  1,'>FLOAT'
+  hdr  1,'>FLOAT'
 tflt:
   pop  hl
   ld  a,l    ; assume u <= 255
@@ -10783,14 +10878,14 @@ tflt:
   push  hl
   jp  true
 
-  header  1,'MAX-PRECISION'
+  hdr  1,'MAX-PRECISION'
 mprec:
-  call  docco    ; max precision
+  call  do_byte_constant    ; max precision
   db  maxsig
 
-  header  x,'EXSN'
+  hdr  x,'EXSN'
 exsn:
-  call  docre    ; exponent, sign
+  call  do_create    ; exponent, sign
   ds  2*cw
 
 ;  REPRESENT  ( r c-addr n -- exp sign flag )
@@ -10804,27 +10899,27 @@ exsn:
 ;        2r> rot min 1 max cmove d0= if 1 0 else
 ;        exsn 2@ swap then true
 
-  header  1,'REPRESENT'
+  hdr  1,'REPRESENT'
 repr:
-  call  docol
+  call  do_colon
   dw  tdup
   dw  mprec,max
   dw  clit
   db  '0'
   dw  fill
   dw  mprec,min
-  dw  ttor
+  dw  two_to_r
   dw  fdup,fzl
-  dw  zero,exsn,tstor
+  dw  zero,exsn,two_store
   dw  fabss
   dw  fdup,fze
-  dw  zequ
+  dw  zero_equals
   dw  zbran,repr3
 repr1:
   dw  fdup    ; begin
   dw  flit
-  db  81h,0,0,0
-  dw  fles,zequ
+  db  0x81,0,0,0
+  dw  fles,zero_equals
   dw  zbran,repr2  ; while
   dw  ften,fslas
   dw  one,exsn,pstor
@@ -10832,14 +10927,14 @@ repr1:
 repr2:
   dw  fdup    ; begin
   dw  flit
-  db  7dh,4ch,0cch,0cdh
+  db  0x7d,0x4c,0xcc,0xcd
   dw  fles
   dw  zbran,repr3  ; while
   dw  ften,fstar
   dw  true,exsn,pstor
   dw  branch,repr2  ; repeat
 repr3:
-  dw  rat
+  dw  r_fetch
   dw  zero,max,zero
   dw  xqdo,repr5
 repr4:
@@ -10849,10 +10944,10 @@ repr5:
   dw  frnd,ftod
   dw  tdup
   dw  bdigs,digs,edigs
-  dw  dupp
-  dw  rat,subb  ; handle overflow
+  dw  dup
+  dw  r_fetch,subb  ; handle overflow
   dw  exsn,pstor
-  dw  tfrom
+  dw  two_from_r
   dw  rot,min
   dw  one,max
   dw  cmove
@@ -10869,58 +10964,58 @@ repr7:
 
 ;  PRECISION  ( -- u )
 
-  header  1,'PRECISION'
+  hdr  1,'PRECISION'
 prec:
-  call  doval
+  call  do_value
   dw  maxsig    ; default
 
 ;  SET-PRECISION  ( u -- )   1 max max-precision min to precision
 
-  header  1,'SET-PRECISION'
+  hdr  1,'SET-PRECISION'
 setpr:
-  call  docol
+  call  do_colon
   dw  one,max
   dw  mprec,min
   dw  pto,prec
   dw  exit
 
-  header  1,'FDP'
+  hdr  1,'FDP'
 fdp:
-  call  docre    ; decimal point display
+  call  do_create    ; decimal point display
   dw  -1    ; set by FPINIT
   ds  2
 
-  header  x,'FBUF'
+  hdr  x,'FBUF'
 fbuf:
-  call  docre    ; fp string buffer
+  call  do_create    ; fp string buffer
   ds  maxsig
 
-  header  x,'EX#'
+  hdr  x,'EX#'
 exn:
-  call  doval    ; exponent
+  call  do_value    ; exponent
   ds  cw
 
-  header  x,'SN#'
+  hdr  x,'SN#'
 snn:
-  call  doval    ; sign
+  call  do_value    ; sign
   ds  cw
 
-  header  x,'EF#'
+  hdr  x,'EF#'
 efn:
-  call  doval    ; exponent factor
+  call  do_value    ; exponent factor
   ds  cw
 
-  header  x,'PL#'
+  hdr  x,'PL#'
 pln:
-  call  doval    ; places after decimal point
+  call  do_value    ; places after decimal point
   ds  cw
 
 ;  (f1)  ( r -- r exp )
 ;        fdup fbuf max-precision represent 2drop
 
-  header  x,'(F1)'  ; get exponent
+  hdr  x,'(F1)'  ; get exponent
 pf1:
-  call  docol
+  call  do_colon
   dw  fdup
   dw  fbuf,mprec
   dw  repr,two_drop  ; never error
@@ -10928,9 +11023,9 @@ pf1:
 
 ;  (f2)  ( exp -- offset exp' )  s>d ef# fm/mod ef# *
 
-  header  x,'(F2)'  ; apply exponent factor
+  hdr  x,'(F2)'  ; apply exponent factor
 pf2:
-  call  docol
+  call  do_colon
   dw  stod
   dw  efn,fmmod
   dw  efn,star
@@ -10942,10 +11037,10 @@ pf2:
 ;                               min then fbuf swap represent drop to sn# to
 ;                               ex# fbuf max-precision -trailing <# ;
 
-  header  x,'(F3)'  ; float to ascii
+  hdr  x,'(F3)'  ; float to ascii
 pf3:
-  call  docol
-  dw  dupp
+  call  do_colon
+  dw  dup
   dw  pto,pln
   dw  zless
   dw  zbran,pf31
@@ -10977,20 +11072,20 @@ pf33:
 ;        2drop dup sign 0< r> d0= if [char] + hold
 ;        then [char] E hold
 
-  header  x,'(F4)'  ; insert exponent
+  hdr  x,'(F4)'  ; insert exponent
 pf4:
-  call  docol
+  call  do_colon
   dw  pln,zless
   dw  to_r
-  dw  dupp
+  dw  dup
   dw  abss,stod
-  dw  rat,zequ
+  dw  r_fetch,zero_equals
   dw  zbran,pf41
   dw  dig
 pf41:
   dw  digs
   dw  two_drop
-  dw  dupp,sign
+  dw  dup,sign
   dw  zless
   dw  from_r
   dw  dzequ
@@ -11006,28 +11101,28 @@ pf42:
 
 ;  (f5)  ( n -- +n|0 )  0max dup fdp 2+ +!
 
-  header  x,'(F5)'  ; conditionally set flag
+  hdr  x,'(F5)'  ; conditionally set flag
 pf5:
-  call  docol
+  call  do_colon
   dw  zero_max
-  dw  dupp
+  dw  dup
   dw  fdp,twop
   dw  pstor
   dw  exit
 
 ;  (f6)  ( c-addr u -- )  (f5) shold
 
-  header  x,'(F6)'  ; insert string
+  hdr  x,'(F6)'  ; insert string
 pf6:
-  call  docol
+  call  do_colon
   dw  pf5,shold
   dw  exit
 
 ;  (f7)  ( n -- )    (f5) [char] 0 nhold
 
-  header  x,'(F7)'  ; insert '0's
+  hdr  x,'(F7)'  ; insert '0's
 pf7:
-  call  docol
+  call  do_colon
   dw  pf5
   dw  clit
   db  '0'
@@ -11036,9 +11131,9 @@ pf7:
 
 ;  (f8)  ( -- )    sn# sign 0 0 #>
 
-  header  x,'(F8)'  ; insert sign
+  hdr  x,'(F8)'  ; insert sign
 pf8:
-  call  docol
+  call  do_colon
   dw  snn,sign
   dw  zero,zero
   dw  edigs
@@ -11048,16 +11143,16 @@ pf8:
 ;        pl# 0< if begin dup while 1- 2dup
 ;        + c@ [char] 0 - until 1+ then then
 
-  header  x,'(F9)'  ; trim trailing '0's
+  hdr  x,'(F9)'  ; trim trailing '0's
 pf9:
-  call  docol
+  call  do_colon
   dw  pln,zless
   dw  zbran,pf92
 pf91:
-  dw  dupp
+  dw  dup
   dw  zbran,pf92
   dw  onem,tdup
-  dw  plus,cat
+  dw  plus,c_fetch
   dw  clit
   db  '0'
   dw  subb
@@ -11068,12 +11163,12 @@ pf92:
 
 ;  (fa)  ( u1 -- u1 u2 )  pl# 0< if dup else pl# then
 
-  header  x,'(FA)'
+  hdr  x,'(FA)'
 pfaa:
-  call  docol
+  call  do_colon
   dw  pln,zless
   dw  zbran,pfaa1
-  dw  dupp
+  dw  dup
   dw  branch,pfaa2
 pfaa1:
   dw  pln
@@ -11084,19 +11179,19 @@ pfaa2:
 ;        (f7) (fa) min r@ - (f6) r> (fa) min (f7)
 ;        fdp 2@ or if [char] . hold then
 
-  header  x,'(FB)'  ; insert fraction n places right of dec. pt
+  hdr  x,'(FB)'  ; insert fraction n places right of dec. pt
 pfbb:
-  call  docol
+  call  do_colon
   dw  fdp,twop
   dw  off
   dw  to_r
   dw  pf9
-  dw  rat,plus
+  dw  r_fetch,plus
   dw  pfaa
   dw  over,subb
   dw  pf7
   dw  pfaa,min
-  dw  rat,subb
+  dw  r_fetch,subb
   dw  pf6
   dw  from_r
   dw  pfaa,min
@@ -11112,12 +11207,12 @@ pfbb1:
 ;  (fc)  ( c-addr u n -- )
 ;        >r 2dup r@ min 2swap r> /string 0 (fb) (f6)
 
-  header  x,'(FC)'  ; split into int/frac and insert
+  hdr  x,'(FC)'  ; split into int/frac and insert
 pfcc:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  tdup
-  dw  rat,min
+  dw  r_fetch,min
   dw  tswap
   dw  from_r,sstr
   dw  zero,pfbb
@@ -11127,9 +11222,9 @@ pfcc:
 ;  (fd)  ( r n factor -- c-addr u )
 ;        to ef# (f3) ex# 1- (f2) (f4) 1+ (fc) (f8)
 
-  header  x,'(FD)'  ; exponent form
+  hdr  x,'(FD)'  ; exponent form
 pfdd:
-  call  docol
+  call  do_colon
   dw  pto,efn
   dw  pf3
   dw  exn,onem
@@ -11141,7 +11236,7 @@ pfdd:
 
 ;  (FS.)  ( r n -- c-addr u )  1 (fd)
 
-  header  1,'(FS.)'
+  hdr  1,'(FS.)'
 pfsd:
   ld  hl,1
   push  hl
@@ -11150,18 +11245,18 @@ pfsd:
 ;  FS.R  ( r n1 n2 -- )
 ;        >r (fs.) r> s.r
 
-  header  1,'FS.R'
+  hdr  1,'FS.R'
 fsdr:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  pfsd
   dw  branch,ddotr1
 
 ;  FS.  ( r -- )    -1 0 fs.r space
 
-  header  1,'FS.'
+  hdr  1,'FS.'
 fsdot:
-  call  docol
+  call  do_colon
   dw  true
   dw  zero,fsdr
   dw  space
@@ -11171,7 +11266,7 @@ fsdot:
 
 ;  (FE.)  ( r -- c-addr u )  3 (fd)
 
-  header  1,'(FE.)'
+  hdr  1,'(FE.)'
 pfse:
   ld  hl,3
   push  hl
@@ -11179,18 +11274,18 @@ pfse:
 
 ;  FE.R  ( r n1 n2 -- )  >r (fe.) r> s.r
 
-  header  1,'FE.R'
+  hdr  1,'FE.R'
 fedr:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  pfse
   dw  branch,ddotr1
 
 ;  FE.  ( r -- )    -1 0 fe.r space
 
-  header  1,'FE.'
+  hdr  1,'FE.'
 fedot:
-  call  docol
+  call  do_colon
   dw  true
   dw  zero,fedr
   dw  space
@@ -11204,13 +11299,13 @@ fedot:
 ;        else dup 0> if (fc) else abs (fb) 1 (f7)
 ;        then then (f8)
 
-  header  1,'(F.)'
+  hdr  1,'(F.)'
 pfd:
-  call  docol
+  call  do_colon
   dw  zero
   dw  pto,efn
   dw  pf3
-  dw  exn,dupp
+  dw  exn,dup
   dw  mprec,great
   dw  zbran,pfd1  ; if
   dw  fbuf,zero
@@ -11220,7 +11315,7 @@ pfd:
   dw  pf6
   dw  branch,pfd3  ; else
 pfd1:
-  dw  dupp,zgrea
+  dw  dup,zgrea
   dw  zbran,pfd2
   dw  pfcc
   dw  branch,pfd3  ; else
@@ -11234,18 +11329,18 @@ pfd3:
 
 ;  F.R  ( r n1 n2 -- )  >r (f.) r> s.r
 
-  header  1,'F.R'
+  hdr  1,'F.R'
 fdotr:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  pfd
   dw  branch,ddotr1
 
 ;  F.  ( r -- )    -1 0 f.r space
 
-  header  1,'F.'
+  hdr  1,'F.'
 fdot:
-  call  docol
+  call  do_colon
   dw  true
   dw  zero,fdotr
   dw  space
@@ -11254,9 +11349,9 @@ fdot:
 ;  (G.)  ( r n -- c-addr u )  >r (f1) -3 7 within  r> swap if (f.) else
 ;        (fs.) then
 
-  header  1,'(G.)'
+  hdr  1,'(G.)'
 pgd:
-  call  docol
+  call  do_colon
   dw  to_r
   dw  pf1
   dw  lit,-3
@@ -11274,17 +11369,17 @@ pgd2:
 
 ;  G.R  ( r n1 n2 -- )  >r (g.) r> s.r
 
-  header  1,'G.R'
+  hdr  1,'G.R'
 gdotr:
-  call  docol
+  call  do_colon
   dw  to_r,pgd
   dw  branch,ddotr1
 
 ;  G.  ( r -- )    -1 0 g.r space
 
-  header  1,'G.'
+  hdr  1,'G.'
 gdot:
-  call  docol
+  call  do_colon
   dw  true
   dw  zero,gdotr
   dw  space
@@ -11301,7 +11396,7 @@ sqr:
   call  savf1
   and  a
   rra
-  add  a,40h
+  add  a,0x40
   call  savf2
   ld  d,5
 sqr1:
@@ -11372,16 +11467,16 @@ polx:
 exp:
   ld  hl,ln2
   call  fdi
-  cp  88h
+  cp  0x88
   jp  nc,ovf
-  cp  68h
+  cp  0x68
   ld  hl,fp1
   jp  c,lod
   call  savf2
   call  flr
   call  savf1
   ld  a,e
-  add  a,81h
+  add  a,0x81
   jp  z,exp1
   push  af
   call  lodf2
@@ -11403,15 +11498,15 @@ exp1:
 
 exp4:
   db  7
-  db  74h,59h,88h,7ch
-  db  77h,26h,97h,0e0h
-  db  7ah,1eh,1dh,0c4h
-  db  7ch,63h,50h,5eh
-  db  7eh,75h,0feh,1ah
+  db  0x74,0x59,0x88,0x7c
+  db  0x77,0x26,0x97,0x00e0
+  db  0x7a,0x1e,0x1d,0xc4
+  db  0x7c,0x63,0x50,0x5e
+  db  0x7e,0x75,0xfe,0x1a
 ln2:
-  db  80h,31h,72h,18h    ; ln2
+  db  0x80,0x31,0x72,0x18    ; ln2
 fp1:
-  db  81h,0,0,0    ; 1.0
+  db  0x81,0,0,0    ; 1.0
 
 ;  log
 
@@ -11419,9 +11514,9 @@ log:
   call  tstr
   jp  m,ovf    ; neg
   jp  z,ovf    ; zero
-  xor  80h
+  xor  0x80
   push  af
-  ld  a,80h
+  ld  a,0x80
   ld  hl,log2
   call  poly
   call  savf1
@@ -11434,15 +11529,15 @@ log:
 
 log2:
   db  9
-  db  82h,94h,0eeh,0d8h
-  db  84h,7dh,0aah,0a9h
-  db  86h,0bfh,99h,7dh
-  db  87h,28h,0e5h,7bh
-  db  87h,0c0h,71h,8ah
-  db  87h,14h,95h,6eh
-  db  86h,0a0h,1eh,0b2h
-  db  85h,02h,7ah,0adh
-  db  83h,8dh,9dh,09h
+  db  0x82,0x94,0xee,0xd8
+  db  0x84,0x7d,0xaa,0xa9
+  db  0x86,0xbf,0x99,0x7d
+  db  0x87,0x28,0xe5,0x7b
+  db  0x87,0x00c0,0x71,0x8a
+  db  0x87,0x14,0x95,0x6e
+  db  0x86,0x00a0,0x1e,0xb2
+  db  0x85,0x02,0x7a,0xad
+  db  0x83,0x8d,0x9d,0x09
 
 ;  sin / cos
 
@@ -11452,7 +11547,7 @@ cos:
 sin:
   or  a
   ret  z
-  cp  80h+25
+  cp  0x80+25
   jp  nc,ovf
   ld  hl,f2pi
   call  fdi
@@ -11485,27 +11580,27 @@ sin1:
 
 sin7:
   db  5
-  db  86h,1eh,0d7h,0fbh
-  db  87h,99h,26h,64h
-  db  87h,23h,34h,58h
-  db  86h,0a5h,5dh,0e1h
+  db  0x86,0x1e,0xd7,0xfb
+  db  0x87,0x99,0x26,0x64
+  db  0x87,0x23,0x34,0x58
+  db  0x86,0xa5,0x5d,0xe1
 f2pi:
-  db  83h,49h,0fh,0dbh ; 2pi
+  db  0x83,0x49,0fh,0xdb ; 2pi
 
 fpi2:
-  db  81h,49h,0fh,0dbh ; pi/2
+  db  0x81,0x49,0x0f,0xdb ; pi/2
 
 fp50:
-  db  80h,0,0,0  ; 0.5
+  db  0x80,0,0,0  ; 0.5
 fp25:
-  db  7fh,0,0,0  ; 0.25
+  db  0x7f,0,0,0  ; 0.25
 
 ;  atan
 
 atan:
   call  tstr
   call  m,chss    ; make positive
-  cp  81h
+  cp  0x81
   jp  c,atan1    ; < 1
   ld  hl,atan3
   push  hl
@@ -11546,27 +11641,27 @@ atan4:
 atan6:
   db  2
 atan7:
-  db  81h,5dh,0b3h,0d7h
-  db  81h,80h,0,0    ; -1.0
+  db  0x81,0x5d,0xb3,0xd7
+  db  0x81,0x80,0,0    ; -1.0
 
 atan8:
   db  4
-  db  7eh,83h,35h,62h
-  db  7eh,4ch,24h,50h
-  db  7fh,0aah,0a9h,79h
-  db  81h,0,0,0
+  db  0x7e,0x83,0x35,0x62
+  db  0x7e,0x4c,0x24,0x50
+  db  0x7f,0xaa,0xa9,0x79
+  db  0x81,0,0,0
 
 atan9:
-  db  7fh,09h,38h,0a3h
+  db  0x7f,0x09,0x38,0xa3
 atan10:
-  db  80h,06h,0ah,92h
+  db  0x80,0x06,0x0a,0x92
 
 atan11:
   ds  fw
 
 ;  FSQRT  ( r1 -- r2 )
 
-  header  1,'FSQRT'
+  hdr  1,'FSQRT'
 fsqr:
   call  ldop
   call  sqr
@@ -11574,7 +11669,7 @@ fsqr:
 
 ;  FEXP  ( r1 -- r2 )
 
-  header  1,'FEXP'
+  hdr  1,'FEXP'
 fexp:
   call  ldop
   call  exp
@@ -11582,7 +11677,7 @@ fexp:
 
 ;  FLN  ( r1 -- r2 )
 
-  header  1,'FLN'
+  hdr  1,'FLN'
 ffln:
   call  ldop
   call  log
@@ -11590,16 +11685,16 @@ ffln:
 
 ;  F**  ( r1 r2 -- r3 )  fswap fln f* fexp
 
-  header  1,'F**'
+  hdr  1,'F**'
 ftst:
-  call  docol
+  call  do_colon
   dw  fswap,ffln
   dw  fstar,fexp
   dw  exit
 
 ;  FSIN  ( r1 -- r2 )
 
-  header  1,'FSIN'
+  hdr  1,'FSIN'
 fsin:
   call  ldop
   call  sin
@@ -11607,7 +11702,7 @@ fsin:
 
 ;  FCOS  ( r1 -- r2 )
 
-  header  1,'FCOS'
+  hdr  1,'FCOS'
 fcos:
   call  ldop
   call  cos
@@ -11615,7 +11710,7 @@ fcos:
 
 ;  FATAN  ( r1 -- r2 )
 
-  header  1,'FATAN'
+  hdr  1,'FATAN'
 fatan:
   call  ldop
   call  atan
@@ -11623,27 +11718,27 @@ fatan:
 
 ;  PI  ( -- r )
 
-  header  1,'PI'
+  hdr  1,'PI'
 fpi:
   call  dofcon
-  db  82h,49h,0fh,0dbh  ; pi
+  db  0x82,0x49,0fh,0xdb  ; pi
 
 ;  fpinit  ( -- )    max-precision set-precision fdp on
 
-  header  x,'FPINIT'
+  hdr  x,'FPINIT'
 fpini:
-  call  docol
+  call  do_colon
   dw  mprec,setpr
   dw  fdp,on
   dw  exit
 
 ;  fident  ( -- )
 
-  header  x,'FIDENT',,1
+  hdr  x,'FIDENT',,1
 fiden:
-  call  docol
+  call  do_colon
   dw  crr
-  dw  pdotq
+  dw  paren_dot_quote
   db  fiden1-$-1
   db  'Software floating-point ('
 ;   if  fstack
@@ -11660,9 +11755,9 @@ fiden1:
 ;        and if >float else 2drop 0 then dup >r
 ;        state? and if postpone fliteral then r>
 
-  header  x,'FNUMBER',,1
+  hdr  x,'FNUMBER',,1
 fnumb:
-  call  docol
+  call  do_colon
   dw  tdup    ; scan 'E'
   dw  psqot
   dcs  'E'
@@ -11680,7 +11775,7 @@ fnumb1:
 fnumb2:
   dw  two_drop,zero
 fnumb3:
-  dw  dupp,to_r
+  dw  dup,to_r
   dw  stateq
   dw  and_
   dw  zbran,fnumb4
@@ -11695,7 +11790,7 @@ fnumb4:
 ;        ['] false (inte12) ! (nfps) off (nfpm) off
 ;        ; remember
 
-  header  x,'(-FP)',,1
+  hdr  x,'(-FP)',,1
 fprun:
   ld  hl,noop
   ld  (cold2),hl    ; INIT
@@ -11741,4 +11836,5 @@ initdph equ $
 ;;  ld  (cldd7),hl  ; patch myself out
 ;;  jp  (hl)
 
-  end cold_boot
+;  end cold_boot
+  end sm
