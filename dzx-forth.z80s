@@ -12,7 +12,7 @@ yes equ not no
 ; Date last revised
 
 version macro
-  db 'A-00-201412200016'
+  db 'A-00-201412200058'
   endm
 
 ; Modification level
@@ -6880,9 +6880,9 @@ cold:
 
 ; ----------------------- XXX TMP -- for testing
 ;  dw noop
-  dw two
+  dw lit,2
   dw border
-  dw decimal     ; default base
+;  dw decimal     ; default base
   dw bye
 ;  dw bootmessage ; XXX FIXME fails
 ;  dw paren_dot_quote
@@ -9330,12 +9330,22 @@ turnkey_system:
 
   hdr 1,'BORDER'
 border:
-  ; XXX TODO -- Benschop's Forth-83 does this:
-  ; DUP DUP 4 < 7 AND SWAP 8 * + 23624 C! 254 P!
+  ; Code based on Benschop's Forth-83:
+  ;   : BORDER  ( n -- )
+  ;     DUP DUP 4 < 7 AND SWAP 8 * + 23624 C! 254 P! ;
+  ; And this is the translation in Z80:
   pop hl
   ld a,l
-  and %111
+  cp 4 ; dark color?
+  jp nc,border1
+  ; dark color
+  sla a
+  sla a
+  sla a ; *8 (converted to paper)
+  add a,7 ; white ink
+border1:
   ld (sys_bordcr),a
+  ld l,a
   out (254),a
   jp next
 
