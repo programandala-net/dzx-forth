@@ -1,0 +1,70 @@
+rem DZX-Forth loader
+rem (C) 2014 Marcos Cruz (programandala.net)
+
+// This file is part of DZX-Forth
+// http://programandala.net/en.program.dzx-forth.html
+
+// It's written in Vimclair BASIC
+// http://programandala.net/en.program.vimclair_basic.html
+
+// -------------------------------------------------------------
+// History
+
+// 2014-12-20: First draft.
+
+// -------------------------------------------------------------
+// XXX TODO
+
+// Substitute 'origin+x' and 'length' with the proper values, using
+// the labels of the assembler... 'make.sh' must create
+// <dzx-forth.inc.vbas> with the needed '#vim' directives.
+
+// -------------------------------------------------------------
+// Init
+
+#filename dzx-forth
+#runLabel @install
+#include dzx-forth.inc.vbas
+
+def fn f$()=\ // filename
+  "0123456789" and usr origin+6
+
+// -------------------------------------------------------------
+// Entry points to DX-Forth
+
+// DX-Forth returns the number of the line to be executed for BASIC
+
+@warm:
+  goto usr origin+4:rem warm restart
+@cold:
+  goto usr origin+2:rem cold restart
+@first:
+  goto usr origin:rem first run
+
+// -------------------------------------------------------------
+// Commands
+
+@erase:
+  erase d peek(origin+x);fn f$:goto val"@warm"
+@cat:
+  cat peek(origin+x):goto val"@warm"
+@save:
+  save d peek(origin+x);a$code fn p(origin+start),fn p(origin+size):goto val"@warm"
+@load:
+  load d peek(origin+x);a$code fn p(origin+start),fn p(origin+size):goto val"@warm"
+@stop:
+  stop
+
+// -------------------------------------------------------------
+// Install
+
+// This part is executed only the first time this program is loaded
+// from tape. It saves itself and the main code to disk.
+
+@install
+
+  clear val"origin-1":\
+  save d*"Autoload" line val"@first":\
+  load "" code val"origin":\
+  save d*"dzx-forth"code val"origin",val"length":\
+  goto val"@first":\
