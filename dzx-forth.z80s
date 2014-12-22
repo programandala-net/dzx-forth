@@ -11,7 +11,7 @@
 ; XXX TODO Use Benschop's Forth-83's 'bcal' to write 'goto'.
 
 version macro
-  db 'A-00-201412221347'
+  db 'A-00-201412221917'
   endm
 
 ; }}} **********************************************************
@@ -3845,7 +3845,7 @@ conin:
   call do_colon    ; console input
 conin1:
 ; XXX TODO
-;;  dw keyq
+;;  dw key_question
 ;;  dw question_branch,conin1
 ;;  dw zero,three
 ;;  dw bios
@@ -4143,22 +4143,36 @@ pause1: ; XXX TODO rename this label
 ; KEY?  ( -- flag )
 
   hdr 1,'KEY?'
-keyq:
-  call do_colon
-  dw lit,vkeyq   ; (vkeyq)
-  dw fetch_execute       ; @execute
-  dw pause       ; pause
-  dw exit
+key_question:
+  ld hl,0
+  ld a,(sys_last_k)
+  and a
+  jp z,push_hl
+  dec hl
+  jp push_hl
+
+; XXX OLD
+;;  call do_colon
+;;  dw lit,vkeyq   ; (vkeyq)
+;;  dw fetch_execute       ; @execute
+;;  dw pause       ; pause
+;;  dw exit
 
 ; KEY  ( -- char )
 
   hdr 1,'KEY'
 key:
-  xor a
-  ld (sys_last_k),a 
-;  call rom_keyboard
   ld a,(sys_last_k)
+  ld (previous_key),a
+key1
+  call pause
+  ; call rom_keyboard ; XXX TODO not needed if system interrupts are on
+  ld a,(sys_last_k)
+previous_key equ $+1
+  cp 0 ; a different key?
+  jp z,key1
   jp push_a
+
 ; XXX OLD
 ;;  call do_colon
 ;;  dw lit,vkey
@@ -4166,27 +4180,39 @@ key:
 ;;  dw pause
 ;;  dw exit
 
-
-; INKEY  ( -- char )
+;;; INKEY  ( -- char ) ; XXX OLD -- try
   
-  hdr 1,'INKEY'
-  ; XXX Unfinished convertion from Benschop's Forth-83:
-inkey:
-  push de
-  call rom_keyboard
-  jp nz,no_inkey
-  call rom_key_test
-  jp nc,no_inkey
-  ld c,0
-  dec d
-  call rom_key_decode
-  pop de
-  ; jr continue ; XXX point in 'pkey'
-no_inkey
-  pop de
-  ld hl,0
-  push hl
-  jp next
+;;  hdr 1,'INKEY'
+;;inkey:
+
+  ; XXX OLD Unfinished convertion from Benschop's Forth-83:
+;;  push de
+;;  call rom_keyboard
+;;  jp nz,no_inkey
+;;  call rom_key_test
+;;  jp nc,no_inkey
+;;  ld c,0
+;;  dec d
+;;  call rom_key_decode
+;;  pop de
+;;  ; jr continue ; XXX in 'pkey'
+;;no_inkey
+;;  pop de
+;;  ld hl,0
+;;  push hl
+;;  jp next
+
+; XXX unfinished conversion from Boriel's ZX BASIC; moved to 'KEY'
+;;  call rom_key_scan
+;;  jp z,inkey
+;;  call rom_key_test
+;;  jp nc,inkey
+;;  dec d   ; D is expected to be FLAGS so set bit 3 $FF
+;;          ; 'L' Mode so no keywords
+;;  ld e, a ; main key to A
+;;          ; C is MODE 0 'KLC' from above still
+;;  call rom_key_decode
+;;  jp push_a
 
 ; SPACE  ( -- )   bl emit
 
@@ -6866,10 +6892,22 @@ cold:
 
 ;  dw bootmessage ; XXX FIXME fails
 
+;  dw lit,sys_last_k
+;  dw c_fetch
+;  dw return
+
+  dw c_lit
+  db '"'
+  dw emit
   dw key
+  dw emit
+  dw c_lit
+  db '"'
+  dw emit
+  dw lit,2
   dw return
   
-  dw bye  ; XXX works
+;  dw bye  ; XXX works
 
 
 ;  dw paren_dot_quote
