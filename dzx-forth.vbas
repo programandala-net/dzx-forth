@@ -1,5 +1,5 @@
 rem DZX-Forth loader
-rem (C) 2014 Marcos Cruz (programandala.net)
+rem Copyright (C) 2014 Marcos Cruz (programandala.net)
 
 // This file is part of DZX-Forth
 // http://programandala.net/en.program.dzx-forth.html
@@ -32,7 +32,8 @@ def fn f$()=\ // filename
 // -------------------------------------------------------------
 // Entry points to DX-Forth
 
-// DX-Forth returns the number of the line to be executed for BASIC
+// DX-Forth always returns the number of the line to be executed by
+// BASIC
 
 @warm:
   goto usr origin+4:rem warm restart
