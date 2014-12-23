@@ -11,93 +11,93 @@
 ; XXX TODO Use Benschop's Forth-83's 'bcal' to write 'goto'.
 
 version macro
-  db 'A-00-201412221917'
+  dcs 'A-00-201412231524'
   endm
 
 ; }}} **********************************************************
 ; Labels {{{
 
-no  equ 0
-yes equ not no
+no:  equ 0
+yes: equ not no
 
 ; Modification level
 ; XXX OLD
-;;rel   equ 4 ; release #
-;;rev   equ 00  ; revision #
-;;beta  equ no  ; beta release
+;;rel:  equ 4 ; release #
+;;rev:  equ 00  ; revision #
+;;beta: equ no  ; beta release
 
 ; Equates for conditional assembly
 
-debug equ no  ; debugging messages
-ucase equ yes ; forth names case insensitive
-fpeng equ yes ; engineering output functions
-cfs   equ yes ; control flow stack extensions
-wopt  equ yes ; warning options
-fpx equ no  ; extra f/p functions
+debug: equ no  ; debugging messages
+ucase: equ yes ; forth names case insensitive
+fpeng: equ yes ; engineering output functions
+cfs:   equ yes ; control flow stack extensions
+wopt:  equ yes ; warning options
+fpx:   equ no  ; extra f/p functions
 
 ;
 
 x       equ no  ; show hidden words
 ;fstack equ yes ; separate floating point stack XXX TODO -- try
-floord  equ no  ; integer division method
-float   equ yes ; floating point
-nfd     equ 6 ; max open source files (min = 2)
-retro   equ no  ; classic forth behaviours
+floord: equ no  ; integer division method
+float:  equ yes ; floating point
+nfd:    equ 6 ; max open source files (min = 2)
+retro:  equ no  ; classic forth behaviours
 
 ; Memory 
 
-sm  equ 0x8000 ; start of system memory
+sm: equ 0x8000 ; start of system memory
 
-cw  equ 2   ; cell size (bytes)
-fw  equ 4 ; float size (bytes)
+cw: equ 2   ; cell size (bytes)
+fw: equ 4 ; float size (bytes)
 
 ; Buffer sizes
 
-user_area_size                equ 128
-return_stack_size             equ 256
-tib_size                      equ 80        ; TIB buffer size
-block_size                    equ 1024      ; max block size
-file_handle_size              equ 6+36      ; file handle size (keep even)
-filename_size                 equ 10        ; max path/filename size
-word_buffer_size              equ 31+5      ; min WORD buffer size
-parsed_string_buffer_size     equ 255       ; max parsed string buffer size
-file_descriptor_size          equ filename_size+(4*cw)  ; file descriptor size ; XXX OLD
-pictured_numeric_buffer_size  equ 68        ; pictured numeric buffer size
+user_area_size:               equ 128
+return_stack_size:            equ 256
+tib_size:                     equ 80        ; TIB buffer size
+block_size:                   equ 1024      ; max block size
+file_handle_size:             equ 6+36      ; file handle size (keep even)
+filename_size:                equ 10        ; max path/filename size
+word_buffer_size:             equ 31+5      ; min WORD buffer size
+parsed_string_buffer_size:    equ 255       ; max parsed string buffer size
+file_descriptor_size:         equ filename_size+(4*cw)  ; file descriptor size ; XXX OLD
+pictured_numeric_buffer_size: equ 68        ; pictured numeric buffer size
 
 ; DOS and memory ; XXX OLD
 
-dosfcb  equ 0x005c   ; default file control block
-dosbuf  equ 0x0080   ; default DTA and command-line buffer
-recsiz  equ 128   ; CP/M record size ; XXX OLD
+dosfcb: equ 0x005c   ; default file control block
+dosbuf: equ 0x0080   ; default DTA and command-line buffer
+recsiz: equ 128   ; CP/M record size ; XXX OLD
 
 ; Equates ; XXX TODO rename, organize
 
-fhno  equ 10  ; max open handles
+fhno: equ 10  ; max open handles
 
-init  defl  noop  ; INIT
-ident defl  noop  ; IDENT
-fnu   defl  false ; FNUMBER
-fnum  defl  0 ; fp-stack items
-fps   defl  0 ; fp-stack size
+init: defl  noop  ; INIT
+ident: defl  noop  ; IDENT
+fnu:  defl  false ; FNUMBER
+fnum: defl  0 ; fp-stack items
+fps:  defl  0 ; fp-stack size
 
-toppru  defl  0 ; top prunes
+toppru: defl  0 ; top prunes
 
 ; Float
 
    if float
 
-maxsig  equ 7 ; max significant digits
+maxsig: equ 7 ; max significant digits
 
-init  defl  fpini
-ident defl  fiden
-fnu   defl  fnumb
+init: defl  fpini
+ident: defl  fiden
+fnu:  defl  f_number
 
 ;  if fstack
 ;fnum defl  6
-;fps  defl  (fnum+5)*fw ; allow extra for fp display etc
+;fps: defl  (fnum+5)*fw ; allow extra for fp display etc
 ;  endif
 
-toppru  defl  fprun1
+toppru: defl  fprun1
 
    endif
 
@@ -109,15 +109,15 @@ toppru  defl  fprun1
 ; ASCII characters
 ; XXX TODO adapt
 ;; bel equ 0x07 ; bell ; XXX OLD
-bs_char       equ 0x08 ; backspace
-tab_char      equ 0x09 ; tab
-lf_char       equ 0x0a ; line feed
-ff_char       equ 0x0c ; form feed
-cr_char       equ 0x0d ; carriage return
+bs_char:      equ 0x08 ; backspace
+tab_char:     equ 0x09 ; tab
+lf_char:      equ 0x0a ; line feed
+ff_char:      equ 0x0c ; form feed
+cr_char:      equ 0x0d ; carriage return
 ;;can equ 0x18 ; ctl-x 
-ctrl_z_char   equ 0x1a ; ctl-z ;; XXX OLD -- still used in old code
-esc_char      equ 0x1b ; escape
-sp_char       equ 0x20 ; space
+ctrl_z_char:  equ 0x1a ; ctl-z ;; XXX OLD -- still used in old code
+esc_char:     equ 0x1b ; escape
+sp_char:      equ 0x20 ; space
 
 ; }}} **********************************************************
 ; Description {{{
@@ -295,14 +295,29 @@ dcs macro string1,string2,string3,string4 ; allow comma separated
 ; ------------------------------
 ; Macro to generate fdb table
 
+; XXX OLD
+
 gfdb   macro
   local _a
-_a  defl  fdbs
+_a: defl  fdbs
    rept nfd
   dw _a
-_a  defl  _a+file_descriptor_size
+_a: defl  _a+file_descriptor_size
    endm
    endm
+
+; ------------------------------
+; Macro to save the IP
+
+; This is used by words that call ROM routines.
+; 'saved_ip' is defined in the word 'type'.
+; See the word 'cls' as a usage example.
+
+save_ip macro
+  ld h,b
+  ld l,c
+  ld (saved_ip),hl
+  endm
 
 ; }}} **********************************************************
 ; Boot {{{
@@ -329,7 +344,7 @@ parsed_string_buffer:
   ds parsed_string_buffer_size+word_buffer_size ; buffer S" WORD
    endif
 
-hm  equ $   ; system definitions and header memory
+hm: equ $   ; system definitions and header memory
 dnfa:
   db 0   ; dummy nfa - don't remove! ; XXX NEW -- changed its position in DX-Forth 4.09
 
@@ -362,7 +377,7 @@ speed:
 
 ; Boot up variables used by COLD, must be in same order as USER variables
 
-initu equ $   ; <<< beginning data
+initu: equ $   ; <<< beginning data
   ds 3*cw    ; reserved for multitasking
 is0:
   ds cw    ; s0
@@ -415,14 +430,14 @@ biospb:
 
 ; Buffer for temporary filename/fcb
 
-zbsiz equ filename_size+1+36
+zbsiz: equ filename_size+1+36
 
 zb1:
   ds zbsiz
 zb2:
   ds zbsiz
 
-tmp_stack  equ $-cw ; temp stack for startup
+tmp_stack: equ $-cw ; temp stack for startup
 
 ; }}} **********************************************************
 ; Misc. subroutines
@@ -546,10 +561,10 @@ amovd:
 ; Virtual machine {{{
 
 ; XXX TODO -- add headers:
-do_create         equ next
-do_value          equ fetch
-do_constant       equ fetch
-do_byte_constant  equ c_fetch
+do_create:        equ next
+do_value:         equ fetch
+do_constant:      equ fetch
+do_byte_constant: equ c_fetch
 
 ; runtime for colon definitions
 
@@ -580,18 +595,18 @@ do_user_variable:
 ; NOOP  ( -- )
 
   hdr 1,'NOOP'
-noop  equ $
+noop: equ $
 
 ; NEXT  -  Forth Address Interpreter
 
 next:
-  ld a,(bc)    ; 7T      NEXT  011D
-  ld l,a   ; 4T
-  inc bc    ; 6T
-  ld a,(bc)    ; 7T
-  ld h,a   ; 4T
-  inc bc    ; 6T
-  jp (hl)    ; 4T
+  ld a,(bc)   ; 7T
+  ld l,a      ; 4T
+  inc bc      ; 6T
+  ld a,(bc)   ; 7T
+  ld h,a      ; 4T
+  inc bc      ; 6T
+  jp (hl)     ; 4T
 
 ; UNNEST  ( -- )
 
@@ -608,7 +623,7 @@ unnest:
   hdr 1,'(EXIT)'
 exit:
   ld bc,next
-exit1:
+;;exit1:
   push bc
   ld hl,(return_stack_pointer)  ; pop IP from return stack
   ld c,(hl)
@@ -616,6 +631,7 @@ exit1:
   ld b,(hl)
   inc hl
   ld (return_stack_pointer),hl
+  ret ; execute NEXT
 
 ; EXECUTE  ( xt -- )
 
@@ -642,8 +658,6 @@ fetch_execute:
 c_lit:
   ld a,(bc)
   inc bc
-
-; push A register
 
 push_a:
   ld l,a
@@ -675,6 +689,7 @@ two_lit:
   inc bc
   ld a,(bc)
   ld h,a
+  ; XXX FIXME DX-Forth bug? HL is not pushed!
   inc bc
   ld a,(bc)
   ld e,a
@@ -773,14 +788,14 @@ two_from_r:
   ld de,cw*2
   add hl,de
   ld (return_stack_pointer),hl
-  jp tat
+  jp two_fetch
 
 ; 2R@  ( -- x1 x2 )
 
   hdr 1,'2R@'
 two_r_fetch:
   ld hl,(return_stack_pointer)
-  jp tat1
+  jp two_fetch1
 
 ; 2DROP  ( x1 x2 -- )
 
@@ -1016,7 +1031,7 @@ tswap:
 tover:
   ld hl,4
   add hl,sp
-  jp tat1
+  jp two_fetch1
 
 ;  2ROT  ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
 ;  5 roll 5 roll
@@ -1123,9 +1138,9 @@ cstor1:
 ; 2@  ( a-addr -- x1 x2 )
 
   hdr 1,'2@'
-tat:
+two_fetch:
   pop hl
-tat1:
+two_fetch1:
   ld e,(hl)
   inc hl
   ld d,(hl)
@@ -1351,7 +1366,7 @@ invert:
 ; NOT  ( x1 -- x2 )   aka 0= not
 
   hdr 1,'NOT',,,zero_equals    ; F79 NOT
-nott  equ zero_equals
+nott: equ zero_equals
 
 ; S>D  ( n -- d )
 
@@ -1370,7 +1385,7 @@ stod1:
 ; D>S  ( d -- n )     aka drop d>s
 
   hdr 1,'D>S',,,drop
-dtos  equ drop
+dtos: equ drop
 
 ; NEGATE  ( n1 -- n2 )
 
@@ -1761,9 +1776,9 @@ fmmod1:
   hdr x,'M/MOD',,,msmod
 
    if floord
-msmod equ fmmod
+msmod: equ fmmod
    else
-msmod equ smrem
+msmod: equ smrem
    endif
 
 ; /MOD  ( n1 n2 -- n3 n4 )  >r s>d r> m/mod
@@ -2826,7 +2841,7 @@ pstr:
   ld c,l
   ld b,h
   ld hl,t1
-  jp tat1
+  jp two_fetch1
 
 ; XXX TMP
 t1: ds cw
@@ -2932,7 +2947,7 @@ lowercase_a:
 ; (of)  ( n1 n2 -- )
 
   hdr x,'(OF)'
-pof:
+paren_of:
   pop hl
   pop de
   call hl_minus_de_to_hl
@@ -2969,14 +2984,14 @@ question_branch1:
 ; (loop)  ( -- )
 
   hdr x,'(LOOP)'
-xloop:
+paren_loop:
   ld hl,(return_stack_pointer)
   inc (hl)
   jp nz,branch
   inc hl
   inc (hl)
   jp nz,branch
-xloop1:
+paren_loop1:
   inc bc    ; skip over branch
   inc bc
 ; jp unloo
@@ -2994,7 +3009,7 @@ unloo:
 ; (+loop)  ( n -- )
 
   hdr x,'(+LOOP)'
-xploo:
+paren_plus_loop:
   ld hl,(return_stack_pointer)
   ld e,(hl)
   inc hl
@@ -3002,10 +3017,10 @@ xploo:
   pop hl
   ld a,h
   or a
-  jp m,xploo2
+  jp m,paren_plus_loop2
   add hl,de
-  jp c,xloop1
-xploo1:
+  jp c,paren_loop1
+paren_plus_loop1:
   ex de,hl
   ld hl,(return_stack_pointer)
   ld (hl),e
@@ -3013,15 +3028,15 @@ xploo1:
   ld (hl),d
   jp branch
 
-xploo2:
+paren_plus_loop2:
   add hl,de
-  jp c,xploo1
-  jp xloop1
+  jp c,paren_plus_loop1
+  jp paren_loop1
 
 ; (leave)  ( -- )
 
   hdr x,'(LEAVE)'
-pleav:
+paren_leave:
   ld a,(bc)
   ld l,a
   inc bc
@@ -3035,10 +3050,10 @@ pleav:
 ; (?do)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (xdo1)
 
   hdr x,'(?DO)'
-xqdo:
+paren_question_do:
   call do_colon
   dw two_dup,equals
-  dw question_branch,xdo1
+  dw question_branch,paren_do1
   dw two_drop
   dw from_r,fetch,to_r
   dw exit
@@ -3046,11 +3061,11 @@ xqdo:
 ; (do)  ( n1 n2 -- )    over - r> cell+ -rot 2>r >r
 
   hdr x,'(DO)'
-xdo:
+paren_do:
   call do_colon
-xdo1:
+paren_do1:
   dw over,subb
-  dw from_r,cellp
+  dw from_r,cell_plus
   dw drot
   dw two_to_r
   dw to_r
@@ -3170,7 +3185,7 @@ then:
   hdr 1,'IF',1,1
 iff:
   call do_colon
-  dw comp,question_branch
+  dw compile,question_branch
   dw fmark
   dw exit
 
@@ -3180,7 +3195,7 @@ iff:
   hdr 1,'AHEAD',1,1
 ahead:
   call do_colon
-  dw comp,branch
+  dw compile,branch
   dw fmark
   dw exit
 
@@ -3248,7 +3263,7 @@ lvv:
 
   hdr 1,'DO',1,1
 do:
-  ld hl,xdo
+  ld hl,paren_do
 do1:
   push hl
   call do_colon
@@ -3265,7 +3280,7 @@ do1:
 
   hdr 1,'?DO',1,1
 qdo:
-  ld hl,xqdo
+  ld hl,paren_question_do
   jp do1
 
 ; I  ( -- x )
@@ -3315,7 +3330,7 @@ jdo:
   hdr 1,'LEAVE',1,1
 leavee:
   call do_colon
-  dw comp,pleav
+  dw compile,paren_leave
   dw lvv
   dw qorig
   dw comma
@@ -3326,7 +3341,7 @@ leavee:
 
   hdr 1,'LOOP',1,1
 loopp:
-  ld hl,xloop
+  ld hl,paren_loop
 loopp1:
   push hl
   call do_colon
@@ -3340,8 +3355,8 @@ loopp1:
 ;         postpone then to lv ;immediate
 
   hdr 1,'+LOOP',1,1
-ploop:
-  ld hl,xploo
+plus_loop:
+  ld hl,paren_plus_loop
   jp loopp1
 
    if cfs
@@ -3358,7 +3373,7 @@ cspic:
 ; CS-ROLL       aka roll cs-roll
 
   hdr 1,'CS-ROLL',,,roll
-csrol equ roll
+csrol: equ roll
 
 ; CS-DROP       drop -bal
 
@@ -3487,19 +3502,19 @@ thens2  dw dbal
   hdr 1,'OF',1,1
 of:
   call do_colon
-  dw comp,pof
+  dw compile,paren_of
   dw fmark
   dw exit
 
 ; ENDOF  ( addr1 -- addr2 ) aka else endof
 
   hdr 1,'ENDOF',1,,elsee
-endof equ elsee
+endof: equ elsee
 
 ; CASE  ( -- sys )    aka cond case
 
   hdr 1,'CASE',1,,cond
-casee equ cond
+casee: equ cond
 
 ; ENDCASE  ( sys -- )   postpone drop postpone thens
 ;         ;immediate
@@ -3507,7 +3522,7 @@ casee equ cond
   hdr 1,'ENDCASE',1,1
 endc:
   call do_colon
-  dw comp,drop
+  dw compile,drop
   dw thens
   dw exit
 
@@ -3530,16 +3545,16 @@ pels1:
   dw dup
   dw question_branch,pels6
   dw two_dup
-  dw psqot
+  dw paren_s_quot
   dcs '[IF]'
   dw cmpp
   dw question_branch,pels4
   dw two_dup
-  dw psqot
+  dw paren_s_quot
   dcs '[ELSE]'
   dw cmpp
   dw question_branch,pels2
-  dw psqot
+  dw paren_s_quot
   dcs '[THEN]'
   dw cmpp,zero_equals
   dw branch,pels3
@@ -3574,7 +3589,7 @@ pif:
 ; [THEN]  ( -- )    aka noop [then] immediate
 
   hdr 1,'[THEN]',1,,noop
-pthen equ next
+pthen: equ next
 
 ; }}} **********************************************************
 ; Numeric output {{{
@@ -3582,7 +3597,7 @@ pthen equ next
 ; (D.)  ( d -- c-addr u )  tuck dabs <# #s rot sign #>
 
   hdr 1,'(D.)'
-pddot:
+paren_d_dot:
   call do_colon
   dw tuck
   dw dabs
@@ -3608,7 +3623,7 @@ udotr:
 ;;d_dot_r:
 ;;  call  do_colon
 ;;  dw to_r
-;;  dw pddot
+;;  dw paren_d_dot
 ;;d_dot_r1:
 ;;  dw from_r
 ;;  dw over,subb
@@ -3623,7 +3638,7 @@ udotr:
 d_dot_r:
   call do_colon
   dw to_r
-  dw pddot
+  dw paren_d_dot
 d_dot_r1:
   dw from_r
   ; dw sdotr ; XXX FIXME -- not found
@@ -3908,9 +3923,9 @@ lstout:
 ; (MS)  ( ms -- )
 
   hdr x,'(MS)'
-ms0:
+paren_ms:
   pop de
-ms01:
+paren_ms1:
   ld a,e
   or d
   jp z,next
@@ -3918,7 +3933,7 @@ ms01:
   add hl,hl
   add hl,hl
   add hl,hl
-ms02:
+paren_ms2:
   ex (sp),hl    ; 19T
   ex (sp),hl    ; 19T
   ex (sp),hl    ; 19T
@@ -3929,9 +3944,9 @@ ms02:
   ld a,0    ; 7T
   ld a,l    ; 4T
   or h    ; 4T
-  jp nz,ms02    ; 10T
+  jp nz,paren_ms2    ; 10T
   dec  de
-  jp ms01
+  jp paren_ms1
 
 ;  (BEEP)  ( -- )
 
@@ -3946,7 +3961,7 @@ paren_beep:
   hdr 1,'MS'
 ms:
   call fetch_execute
-  dw ms0
+  dw paren_ms
 
 ;  SOUND  ( freq ms -- )
 ;
@@ -4053,10 +4068,11 @@ atxy:
 ;  XXX TODO -- call it from 'PAGE'
 
 cls:
+  save_ip
   call rom_cl_all
   ld a,2
   call rom_chan_open
-  jp next
+  jp restore_ip_next
 ; XXX OLD
 ;;  call  do_colon
 ;;  dw lit,tceold
@@ -4171,7 +4187,10 @@ key1
 previous_key equ $+1
   cp 0 ; a different key?
   jp z,key1
-  jp push_a
+  ld l,a ; save the key
+  xor a
+  ld (sys_last_k),a ; delete the last key
+  jp push_l
 
 ; XXX OLD
 ;;  call do_colon
@@ -4221,16 +4240,19 @@ space:
   ld a,32
   jp emit_a
 
-; EMIT  ( char -- ) (vemit) @execute 1 out +! pause
-
+; EMIT  ( char -- )
+  ; XXX TODO make it defered
   hdr 1,'EMIT'
 emit:
   pop hl
+emit_l:
   ld a,l
 emit_a:
   rst 0x10
-  jp next
+  jp pause
+
 ; XXX OLD
+;;;   (vemit) @execute 1 out +! pause
 ;;  call  do_colon
 ;;  dw lit,vemit
 ;;  dw fetch_execute
@@ -4243,15 +4265,27 @@ emit_a:
 ; XXX TODO use ROM call instead
   hdr 1,'TYPE'
 type:
-  call do_colon
-  dw zero_max,zero
-  dw xqdo,type2
-type1:
-  dw count,emit
-  dw xloop,type1
-type2:
-  dw drop
-  dw exit
+
+; XXX OLD
+;;  call do_colon
+;;  dw zero_max,zero
+;;  dw paren_question_do,type2
+;;type1:
+;;  dw count,emit
+;;  dw paren_loop,type1
+;;type2:
+;;  dw drop
+;;  dw exit
+
+  save_ip
+  call rom_chan_s ; set print to screen
+  pop bc ; length
+  pop de ; address
+  call rom_print_string
+restore_ip_next: equ $
+saved_ip: equ $+1
+  ld bc,0 ; restore IP
+  jp next
 
 ; SPACES  ( +n -- ) 0max 0 ?do space loop
 
@@ -4260,10 +4294,10 @@ type2:
 spacs:
   call do_colon
   dw zero_max,zero ; 0max 0
-  dw xqdo,spacs2 ; ?do
+  dw paren_question_do,spacs2 ; ?do
 spacs1:
   dw space
-  dw xloop,spacs1 ; loop
+  dw paren_loop,spacs1 ; loop
 spacs2:
   dw exit
 
@@ -4393,23 +4427,23 @@ wfind6:
 ;       wfind ?dup if nip 2nip leave then loop
 
   hdr x,'(FIND)',,1 ; searches CONTEXT CURRENT FORTH
-pfind:
+paren_find:
   call do_colon
   dw zero
   dw three
   dw zero
-  dw xdo,pfind3
-pfind1:
+  dw paren_do,paren_find3
+paren_find1:
   dw over
   dw ido,cells
   dw cont,plus,fetch
   dw wfind,question_dup
-  dw question_branch,pfind2
+  dw question_branch,paren_find2
   dw nip,tnip
-  dw pleav,pfind1-cw
-pfind2:
-  dw xloop,pfind1
-pfind3:
+  dw paren_leave,paren_find1-cw
+paren_find2:
+  dw paren_loop,paren_find1
+paren_find3:
   dw exit
 
 ; FIND  ( c-addr -- c-addr 0 | xt -1 | xt 1 )
@@ -4417,7 +4451,7 @@ pfind3:
   hdr 1,'FIND',,1
 find:
   call fetch_execute
-  dw pfind
+  dw paren_find
 
    if 0
 
@@ -4425,16 +4459,17 @@ find:
 ;       >r wpack r> wfind dup if nip then
 
   hdr 1,'SEARCH-WORDLIST',,1
-swlis:
+search_wordlist:
   call do_colon
   dw to_r
   dw wpack
   dw from_r
   dw wfind
   dw dup
-  dw question_branch,swlis1
+  dw question_branch,search_wordlist1
   dw nip
-swlis1  dw exit
+search_wordlist1:
+  dw exit
 
    endif
 
@@ -4479,7 +4514,7 @@ qwarn3:
 ; IMMEDIATE  ( -- ) $40 xnfa
 
   hdr 1,'IMMEDIATE',,1
-immed:
+immediate:
   ld e,0x40
   jp smudg1
 
@@ -4535,7 +4570,7 @@ header1:
   dw plus
   dw getcur,wtnam
   dw over,store
-  dw cellp,swap
+  dw cell_plus,swap
   dw c_lit
   db 5
   dw plus
@@ -4598,7 +4633,7 @@ colon1:
   hdr 1,'EXIT',1,1
 exitt:
   call do_colon
-  dw comp,exit
+  dw compile,exit
   dw exit
 
 ; ;  ( -- )   postpone exit bal @ ?bal ?csp smudge
@@ -4648,7 +4683,7 @@ pscod:
   hdr 1,'DOES>',1,1
 does:
   call do_colon
-  dw comp,pscod
+  dw compile,pscod
   dw lit,do_colon
   dw comma_call
   dw exit
@@ -4687,7 +4722,7 @@ value1:
   hdr 1,'CONSTANT',,1
 con:
   call do_colon
-  dw charq
+  dw char_question
   dw question_branch,value1
   dw lit,do_byte_constant
   dw build
@@ -4705,7 +4740,7 @@ two_variable:
   dw allot
   dw exit
 
-dotvar  equ next
+dotvar: equ next
 
 ; 2CONSTANT  ( -- x2 x1 )  (dotcon) build , ,
 
@@ -4717,7 +4752,7 @@ tcon:
   dw comma,comma
   dw exit
 
-dotcon  equ tat   ; 2@
+dotcon: equ two_fetch   ; 2@
 
 ; USER  ( -- addr ) (do_user_variable) build ,
 
@@ -4738,7 +4773,7 @@ addr:
   dw tick,tbody
   dw stateq
   dw question_branch,addr1
-  dw liter
+  dw literal
 addr1:
   dw exit
 
@@ -4766,7 +4801,7 @@ to:
   dw tick
   dw stateq
   dw question_branch,to1
-  dw comp,pto
+  dw compile,pto
   dw comma
   dw branch,to2
 to1:
@@ -4794,9 +4829,9 @@ defer:
 ; IS      aka to is
 
   hdr 1,'IS',1,,to  ; state-smart
-is  equ to
+is: equ to
 
-pis equ pto
+pis: equ pto
 
 ; AKA  ( "oldname" "newname" -- )  defined tuck ?defined (header)
 ;         $80 xnfa 0> if immediate then
@@ -4812,7 +4847,7 @@ aka:
   dw xnfa    ;
   dw zgrea
   dw question_branch,aka1
-  dw immed
+  dw immediate
 aka1:
   dw exit
 
@@ -4842,7 +4877,7 @@ false:
 ; 0  ( -- 0 )   aka false 0
 
   hdr 1,'0',,,false
-zero  equ false
+zero: equ false
 
 ; 1  ( -- 1 )
 
@@ -5023,9 +5058,9 @@ blk1:
 ; >IN
 
   hdr 1,'>IN',,1
-inn:
+in_:
   call do_create
-inn1:
+in_1:
   ds cw
 
 ; SCR     occupies 2 cells
@@ -5046,9 +5081,9 @@ state1:
 ; 'SOURCE     occupies 2 cells
 
   hdr 1,"'SOURCE",,1
-tsourc:
+tick_source:
   call do_create
-tsour1:
+tick_source1:
   ds 2*cw
 
 ; WARNING
@@ -5336,7 +5371,7 @@ fbody:
 ;  n>count  ( nfa -- h-addr len )  aka (name) n>count
 
   hdr x,'N>COUNT',,,pname
-ncnt  equ  pname
+ncnt: equ  pname
 
 ; XXX OLD -- DX-Forth 4.00
 ;;; n>link  ( nfa -- lfa )
@@ -5374,13 +5409,13 @@ ntnam:
   hdr x,'NAME>',,1
 namef:
   call do_colon
-  dw nlnk,cellp,fetch ; n>link cell+ @
+  dw nlnk,cell_plus,fetch ; n>link cell+ @
   dw exit
 
 ; W>NAME  ( wid -- nfa | 0 )  aka @ w>name
 
   hdr 1,'W>NAME',,,fetch
-wtnam equ fetch
+wtnam: equ fetch
 
 ; -alias  ( nfa -- nfa flag )  dup c@ $80 <
 
@@ -5446,7 +5481,7 @@ to_name1:
   dw dup
   dw question_branch,to_name5
   dw tuck
-  dw cellm
+  dw cell_minus
   dw wtnam
 to_name2:
   dw question_dup
@@ -5523,7 +5558,7 @@ dotnam:
   hdr 1,'.WID',,1
 dotwid:
   call do_colon
-  dw cellp,cellp
+  dw cell_plus,cell_plus
   dw fetch,dotid
   dw exit
 
@@ -5659,11 +5694,11 @@ comxt1:
 ; COMPILE  ( -- )   ?comp r> dup cell+ >r @ compile,
 
   hdr 1,'COMPILE',,1
-comp:
+compile:
   call do_colon
   dw qcomp   ; prevent crash if interpreting
   dw from_r
-  dw dup,cellp
+  dw dup,cell_plus
   dw to_r
   dw fetch
   dw comxt
@@ -5679,7 +5714,7 @@ postp:
   dw dup,qdef
   dw zless
   dw question_branch,postp1
-  dw comp,comp
+  dw compile,compile
 postp1:
   dw comxt
   dw exit
@@ -5845,8 +5880,8 @@ pad:
 
   hdr 1,'SOURCE',,1
 source:
-  ld hl,tsour1
-  jp tat1
+  ld hl,tick_source1
+  jp two_fetch1
 
 ; PARSE  ( char -- c-addr u ) 0 (parse)
 
@@ -5854,25 +5889,25 @@ source:
 parse:
   ld hl,0
   push hl
-  jp ppars ; XXX NEW -- because headers and code share the same zone
+  jp paren_parse ; XXX NEW -- because headers and code share the same zone
 
 ; (parse)  ( char f -- c-addr u ) 2>r source >in @ /string r> if tuck
 ;         r@ skip over - >in +! then 2dup r>
 ;         scan nip tuck - dup rot 0<> - >in +!
 
   hdr 0,'(PARSE)',,1
-ppars:
+paren_parse:
   call do_colon
   dw two_to_r
   dw source
-  dw inn,fetch,sstr
+  dw in_,fetch,sstr
   dw from_r
-  dw question_branch,ppars1
+  dw question_branch,paren_parse1
   dw tuck
   dw r_fetch,skip
   dw rot,over,subb
-  dw inn,pstor
-ppars1:
+  dw in_,pstor
+paren_parse1:
   dw two_dup
   dw from_r
   dw scan,nip
@@ -5880,7 +5915,7 @@ ppars1:
   dw subb,dup
   dw rot,zero_not_equals
   dw subb
-  dw inn,pstor
+  dw in_,pstor
   dw exit
 
 ; +psb  ( a1 n1 n2 -- n3 )  >r (parsed_string_buffer_size) r@ - umin r> 2dup + >r
@@ -5927,7 +5962,7 @@ parss1:
   dw equals
   dw question_branch,parss2
   dw one,dup
-  dw inn,pstor
+  dw in_,pstor
   dw from_r,ppsb
   dw branch,parss1
 parss2:
@@ -5971,9 +6006,9 @@ pwa:
 ;;; WORD  ( char -- c-addr )  true (parse) >wbuf
 ;;
 ;;  header 1,'WORD',,1
-;;wordd:
+;;word:
 ;;  call  do_colon
-;;  dw true,ppars
+;;  dw true,paren_parse
 ;;  dw twbuf
 ;;  dw exit
 ;;
@@ -5982,7 +6017,7 @@ pwa:
 ;;  header x,'BL-WORD',,1
 ;;blword:
 ;;  call  do_colon
-;;  dw bl,wordd
+;;  dw bl,word
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
@@ -6011,9 +6046,9 @@ wpack:
 ;  WORD  ( char -- c-addr )  true (parse) wpack
 
   hdr 1,'WORD',,1
-wordd:
+word:
   call do_colon
-  dw true,ppars
+  dw true,paren_parse
   dw wpack
   dw exit
 
@@ -6023,7 +6058,7 @@ wordd:
 blword:
   ld hl,0x20
   push hl
-  jp wordd
+  jp word
 
 ; token  ( -- c-addr u )  bl-word count
 
@@ -6098,12 +6133,12 @@ bslas:
   dw blk,fetch
   dw question_branch,bslas1
   dw csll
-  dw inn,fetch
+  dw in_,fetch
   dw over,slash
   dw onep,star
   dw min
 bslas1:
-  dw inn,store
+  dw in_,store
   dw exit
 
 ; \\  ( "ccc" -- )  source nip >in ! ;immediate
@@ -6112,7 +6147,7 @@ bslas1:
 bslss:
   call do_colon
   dw source,nip
-  dw inn,store
+  dw in_,store
   dw exit
 
 ; XXX NEW -- DX-Forth 4.09
@@ -6178,7 +6213,7 @@ vocabulary:
   dw dup,value ; XXX NEW -- DX-Forth 4.09
   dw last,fetch   ; set name field in wordlist struct
   dw swap
-  dw cellp,cellp
+  dw cell_plus,cell_plus
   dw store
   dw sys,store
   dw pscod
@@ -6215,8 +6250,10 @@ forth:
   call do_vocabulary
   dw forth1
 
-; UNUSED  ( -- u )  sys? if (esm) @ else sp@ then here
-;       255 + 2dup u> -rot - and
+; UNUSED  ( -- u )
+;
+;   sys? if (esm) @ else sp@ then here
+;   255 + 2dup u> -rot - and
 
   hdr 1,'UNUSED'
 unused:
@@ -6276,13 +6313,13 @@ interpret4:
   dw over,c_fetch
   dw c_lit
   db '$'
-  dw pof,interpret5
+  dw paren_of,interpret5
   dw hex,one
   dw branch,interpret7
 interpret5:
   dw c_lit
   db '#'
-  dw pof,interpret6
+  dw paren_of,interpret6
   dw decimal,one
   dw branch,interpret7
 interpret6:
@@ -6300,7 +6337,7 @@ interpret8:
   dw drop
   dw stateq
   dw question_branch,interpret9
-  dw liter
+  dw literal
 interpret9:
   dw branch,interpret11
 interpret10:
@@ -6330,16 +6367,16 @@ interpret15:
 peval:
   call do_colon
   dw blk,fetch
-  dw inn,fetch
+  dw in_,fetch
   dw two_to_r
   dw source,two_to_r
   dw blk,store
-  dw tsourc,two_store
-  dw inn,off     ; reset >IN
+  dw tick_source,two_store
+  dw in_,off     ; reset >IN
   dw interpret
-  dw two_from_r,tsourc,two_store
+  dw two_from_r,tick_source,two_store
   dw two_from_r
-  dw inn,store
+  dw in_,store
   dw blk,store
   dw exit
 
@@ -6392,8 +6429,8 @@ prefil1:
   dw accept
   dw space
 prefil2:
-  dw tsourc,two_store
-  dw inn,off
+  dw tick_source,two_store
+  dw in_,off
   dw true
 prefil3:
   dw exit
@@ -6421,7 +6458,7 @@ reset:
 sinte:
   ld hl,0
   ld (blk1),hl
-  ld (inn1),hl
+  ld (in_1),hl
   jp lbrac
 
 ; forth-reset  ( -- )
@@ -6444,7 +6481,7 @@ forth_reset:
 ;;  dw erase   ;
 ;;  dw empty_buffers   ; mark screen buffer as empty
 ;;  dw sinte   ; reset interpreter
-;;  dw tsourc,off  ; clear parsed word buffer
+;;  dw tick_source,off  ; clear parsed word buffer
 ;;  dw blword,drop ;
   dw exit
 
@@ -6559,7 +6596,7 @@ doterr:
   dw and_    ; screen file open and loading from block?
   dw question_branch,doterr1
   dw loadfile,type
-  dw inn,fetch
+  dw in_,fetch
   dw twom    ; adjust pointer
   dw zero_max
   dw blk,fetch
@@ -6598,18 +6635,18 @@ doterr1:
 error:
   call do_colon
   dw true    ; -1
-  dw pof,error1
+  dw paren_of,error1
   dw pabor
 error1:
   dw lit,-2
-  dw pof,error3
-  dw boot,cellp,fetch
+  dw paren_of,error3
+  dw boot,cell_plus,fetch
   dw zero_equals
   dw question_branch,error2
   dw doterr    ; skipped by applications
 error2:
   dw space
-  dw errmsg,tat
+  dw errmsg,two_fetch
   dw type
   dw pabor
 error3:
@@ -6698,7 +6735,7 @@ paren_abort_quote_1:
   hdr 1,'ABORT"',1,1
 abort_quote:
   call do_colon
-  dw comp,paren_abort_quote
+  dw compile,paren_abort_quote
   dw comq
   dw exit
 
@@ -6814,18 +6851,25 @@ cold_boot:
 ;;  dw movpat      ; later patched to 'cold'
 
 ; BOOTMESSAGE  ( -- )
+
 ; XXX NEW -- after Gforth
 ; XXX TODO -- defered
 
 bootmessage:
   call do_colon
   dw paren_dot_quote
-  dcs 'DZX-Forth'
-;  dw paren_dot_quote
-;  version
-  jp next
+  dcs "DZX-Forth "
+  dw paren_dot_quote
+  version
+  dw paren_dot_quote
+  dcs cr_char,"Copyright (C) 2014 Marcos Cruz"
+  dw paren_dot_quote
+  dcs cr_char,"(programandala.net)"
+  dw paren_dot_quote
+  dcs cr_char,"Type 'bye' to exit.",cr_char
+  dw exit
 
-; COld ( -- )
+; COLD ( -- )
 
   hdr 1,'COLD'    ; FIG
 cold:
@@ -6868,13 +6912,43 @@ cold:
 ;;  ld bc,initu2-initu
 ;;  call  bmovu
 
-  ld hl,0      ; patch PAUSE
+;  ld a,3
+;  ld (sys_bordcr),a
+;  out (254),a
+
+  ld hl,0      ; patch 'pause'
   ld (pause1),hl
+  xor a
+  ld (sys_last_k),a ; delete the last key; XXX needed by 'key?'?
 
 ; XXX OLD
 ;;  ld de,dosbuf   ; reset DOS DTA
 ;;  ld c,26
 ;;  call  0x0005
+
+  ; XXX TEST -- it works:
+;;  call rom_chan_s ; set print to screen
+;;  ld bc,9 ; length
+;;  ld de,tmpmsg ; address
+;;  call rom_print_string
+;;  jr tmp
+;;tmpmsg:
+;;  db "DZX-Forth"
+;;tmp:
+
+  ; XXX TEST -- it works:
+;;  ld bc,9 ; length
+;;  ld de,tmpmsg ; address
+;;  push de
+;;  push bc
+;;  call rom_chan_s ; set print to screen
+;;  pop bc
+;;  pop de
+;;  call rom_print_string
+;;  jr tmp
+;;tmpmsg:
+;;  db "DZX-Forth"
+;;tmp:
 
   call do_colon
 ;;  dw zfh     ; reset handles
@@ -6882,32 +6956,47 @@ cold:
 
 ; ----------------------- XXX TMP -- for testing
 ;  dw noop
-  dw lit,2
-  dw border
+;  dw lit,2
+;  dw border
 ;  dw decimal     ; default base
 
   ; XXX this works:
 ;  dw lit,-10
 ;  dw return
 
-;  dw bootmessage ; XXX FIXME fails
+  ; XXX this works:
+;  dw paren_dot_quote
+;  dcs 'DZX-Forth'
 
+  dw cls
+  dw bootmessage
+
+  ; XXX this works:
+;  dw cls
+;  dw paren_dot_quote
+;  dcs 'En un lugar de la Mancha...'
+;  dw lit,5,border
+;  dw paren_dot_quote
+;  dcs ' de cuyo nombre no me quiero acordar'
+
+  ; XXX this works:
 ;  dw lit,sys_last_k
 ;  dw c_fetch
 ;  dw return
 
-  dw c_lit
-  db '"'
-  dw emit
-  dw key
-  dw emit
-  dw c_lit
-  db '"'
-  dw emit
-  dw lit,2
-  dw return
+  ; XXX TEST -- it works:
+;;  dw c_lit
+;;  db '"'
+;;  dw emit
+;;  dw key
+;;  dw emit
+;;  dw c_lit
+;;  db '"'
+;;  dw emit
+;;  dw lit,2
+;;  dw return
   
-;  dw bye  ; XXX works
+  dw bye  ; XXX works
 
 
 ;  dw paren_dot_quote
@@ -6915,8 +7004,8 @@ cold:
   ; XXX NEW
 ;  dw cls
 ;  dw bootmessage
-forever:
-  dw branch,forever ; XXX INFORMER
+;forever:
+;  dw branch,forever ; XXX INFORMER
 ; -----------------------
 
 
@@ -6940,7 +7029,7 @@ cold3:
 ;;  dw tuck
 ;;  dw lit,tib     ; copy to tib
 ;;  dw zero,pstr
-;;  dw tsourc,two_store
+;;  dw tick_source,two_store
 ;;  dw question_branch,cold5
 ;;  dw zero
 ;;  dw lit,cmdf    ; disable
@@ -6951,7 +7040,7 @@ cold3:
 ;;  db 1,'-'     ; skips file open
 ;;  dw subb
 ;;  dw question_branch,cold4
-;;  dw inn,off
+;;  dw in_,off
 ;;  dw getfilename,popen
 ; XXX OLD <<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -7053,7 +7142,7 @@ pruns1:
   dw xdp,fetch
   dw uless,zero_equals
   dw question_branch,pruns2
-  dw tat
+  dw two_fetch
   dw tprun,store
   dw execute
   dw branch,pruns1
@@ -7145,7 +7234,7 @@ chain:
   dw addr,fetch
   dw two_dup,equals  ; same wordlist
   dw qvoc
-  dw cellm
+  dw cell_minus
   dw lit,2001h
   dw over,fetch,subb  ; not a wordlist
   dw qvoc
@@ -7174,12 +7263,12 @@ pforg:
   dw vocl    ; trim vocs > nfa
 pforg1:
   dw fetch
-  dw dup,cellp,fetch
+  dw dup,cell_plus,fetch
   dw r_fetch,uless
   dw question_branch,pforg1
   dw dup,vocl,store
 pforg2:
-  dw dup,cellm  ; scan remaining vocs
+  dw dup,cell_minus  ; scan remaining vocs
   dw dup
   dw fetch
 pforg3:
@@ -7201,7 +7290,7 @@ pforg5:
   dw question_branch,pforg2  ; until all vocs done
   dw from_r
   dw dup,dpp
-  dw cellp,store
+  dw cell_plus,store
   dw lit,idph  ; below fence?
   dw fetch,uless
   dw question_branch,pforg6
@@ -7217,7 +7306,7 @@ empty:
   call do_colon
   dw forth,defin  ; switch to a safe vocabulary
   dw lit,idp
-  dw tat
+  dw two_fetch
   dw pforg
   dw exit
 
@@ -7288,7 +7377,7 @@ comq:
 ;;; (s")  ( -- c-addr u ) r> count 2dup + >r
 ;;
 ;;  header x,'(S")'
-;;psqot:
+;;paren_s_quot:
 ;;  call  do_colon
 ;;  dw from_r,count
 ;;  dw two_dup,plus,to_r
@@ -7298,7 +7387,7 @@ comq:
 ; (s")  ( -- c-addr u ) r> count 2dup + >r
 
   hdr x,'(S")'
-psqot:
+paren_s_quot:
   ld a,(bc)
   ld l,a
   ld h,0
@@ -7315,7 +7404,7 @@ psqot:
   hdr 1,'SLITERAL',1,1
 slite:
   call do_colon
-  dw comp,psqot
+  dw compile,paren_s_quot
   dw scomm
   dw exit
 
@@ -7350,21 +7439,15 @@ squot1:
 
   hdr x,'(.")'
 paren_dot_quote:
-  ld a,(bc)  ; get the length of the string
-
-  ; XXX INFORMER
-;;  ld b,0
-;;  ld c,a
-;;  ret
-
-  ld l,a
+  ld a,(bc)  ; length of the string
   ld h,0
+  ld l,a
   inc bc      ; address of the first char
-  push bc    ; address
-  push hl    ; length
+  push bc     ; address
+  push hl     ; length
   add hl,bc   ; calculate the new IP
-  ld c,l     ; update the IP
   ld b,h
+  ld c,l      ; update the IP
   jp type
 
 ; ."      compile (.") ," ;immediate
@@ -7372,14 +7455,14 @@ paren_dot_quote:
   hdr 1,'."',1,1
 dot_quote:
   call do_colon
-  dw comp,paren_dot_quote
+  dw compile,paren_dot_quote
   dw comq
   dw exit
 
 ; CHAR?  ( x -- x flag )
 
   hdr x,'CHAR?',,1
-charq:
+char_question:
   pop hl
   push hl
   ld l,h
@@ -7389,15 +7472,15 @@ charq:
 ;       postpone lit , ;immediate
 
   hdr 1,'LITERAL',1,1
-liter:
+literal:
   call do_colon
-  dw charq
-  dw question_branch,liter1
-  dw comp,c_lit
+  dw char_question
+  dw question_branch,literal1
+  dw compile,c_lit
   dw c_comma
   dw exit
-liter1:
-  dw comp,lit
+literal1:
+  dw compile,lit
   dw comma
   dw exit
 
@@ -7406,23 +7489,23 @@ liter1:
   hdr 1,'2LITERAL',1,1
 two_literal:
   call do_colon
-  dw comp,two_lit
+  dw compile,two_lit
   dw comma,comma
   dw exit
 
 ; [']     ' [compile] literal  ;immediate
 
   hdr 1,"[']",1,1
-btick:
+bracket_tick:
   call do_colon
   dw tick
-  dw liter
+  dw literal
   dw exit
 
 ; [COMPILE]   ' compile,  ;immediate
 
   hdr 1,'[COMPILE]',1,1
-bcomp:
+bracket_compile:
   call do_colon
   dw tick
   dw comxt
@@ -7431,7 +7514,7 @@ bcomp:
 ; RECURSE  ( -- )   last cell+ @ compile, ;immediate
 
   hdr 1,'RECURSE',1,1
-recurs:
+recurse:
   ld hl,(last2)
   push hl
   jp comxt
@@ -7441,17 +7524,17 @@ recurs:
   hdr 1,'CHAR',,1
 char:
   call do_colon
-  dw bl,wordd
+  dw bl,word
   dw onep,c_fetch
   dw exit
 
 ; [CHAR]  ( -- char ) char [compile] literal
 
   hdr 1,'[CHAR]',1,1
-pchar:
+bracket_char:
   call do_colon
   dw char
-  dw liter
+  dw literal
   dw exit
 
 ; Y/N  ( -- flag )  ." (y/n) N\bs" key upcase [char] Y = dup
@@ -7480,42 +7563,42 @@ yn2:
 ; CHAR+  ( c-addr1 -- c-addr2 ) aka 1+ char+
 
   hdr 1,'CHAR+',,,onep
-charp equ onep
+char_plus: equ onep
 
 ; CHARS  ( n1 -- n2 )   aka noop chars immediate
 
   hdr 1,'CHARS',1,,noop
-chars equ next
+chars: equ next
 
 ; CELL+  ( addr1 -- addr2 ) aka 2+ cell+
 
   hdr 1,'CELL+',,,twop
-cellp equ twop
+cell_plus: equ twop
 
 ; CELL-  ( addr1 -- addr2 ) aka 2- cell-
 
   hdr 1,'CELL-',,,twom
-cellm equ twom
+cell_minus: equ twom
 
 ; CELLS  ( n1 -- n2 )   aka 2* cells
 
   hdr 1,'CELLS',,,tstar
-cells equ tstar
+cells: equ tstar
 
 ; ALIGN  ( -- )     aka noop align immediate
 
   hdr 1,'ALIGN',1,,noop
-alignn  equ next
+align: equ next
 
 ; ALIGNED  ( addr -- a-addr ) aka noop aligned immediate
 
   hdr 1,'ALIGNED',1,,noop
-alignd  equ next
+aligned: equ next
 
 ; DZX-FORTH  ( -- minor major )
 
   hdr 1,'DZX-FORTH'
-dxf:
+dzx_forth:
 ; XXX OLD
 ;;  ld hl,(dxver)
 ;;  jp dosver1
@@ -7528,7 +7611,7 @@ dxf:
 ;  RESET-DISKS  ( -- )
 
   hdr 1,'RESET-DISKS'
-rstdsk:
+reset_disks:
   ld a,25
   call bdoss
   push af
@@ -7543,7 +7626,7 @@ rstdsk:
 ;  >DRIVE  ( u1 -- u2 )  ?dup if 1- else 0 25 bdos then
 
   hdr 1,'>DRIVE'
-tdrv:
+to_drive:
   pop de
   ld a,e
   dec  a
@@ -7567,7 +7650,7 @@ path:
   db ':'
   dw hold
   dw digs
-  dw rot,tdrv
+  dw rot,to_drive
   dw c_lit
   db 'A'
   dw plus
@@ -7596,7 +7679,7 @@ dpath1:
 ;  filetype?  ( addr1 u1 -- u2 )  -path [char] . scan nip
 
   hdr x,'FILETYPE?'  ; get filetype length
-ftype:
+filetype_question:
   call do_colon
   dw dpath
   dw c_lit
@@ -7612,12 +7695,12 @@ ftype:
   hdr 1,'+EXT'  ; uses filename buffer
 pext:
   call do_colon
-  dw tover,ftype
+  dw tover,filetype_question
   dw question_branch,pext1
   dw two_drop,exit
 pext1:
   dw three,min
-  dw psqot
+  dw paren_s_quot
   dcs '.'
   dw trot
   dw dtrai    ; trim trailing blanks
@@ -7635,9 +7718,9 @@ pext1:
 ;  -EXT  ( addr1 u1 -- addr2 u2 )  2dup filetype? -
 
   hdr 1,'-EXT'
-dext:
+minus_ext:
   call do_colon
-  dw two_dup,ftype
+  dw two_dup,filetype_question
   dw subb
   dw exit
 
@@ -7899,7 +7982,7 @@ tfnam:
   dw zbuf,fetch
   dw packd
   dw zero,affix  ; trailing null
-  dw zbuf,tat
+  dw zbuf,two_fetch
   dw swap
   dw zbuf,two_store
   dw exit
@@ -7962,7 +8045,7 @@ fcb:
 rwpat:
   call do_colon
   dw use,twop
-  dw tat
+  dw two_fetch
   dw exit
 
 ;  rwp!  ( ud -- )    use 2+ 2! ;
@@ -8151,22 +8234,22 @@ closf2:
 ;  R/O  ( -- fam )      aka 0 r/o
 
   hdr 1,'R/O',,,zero
-rso  equ  zero
+rso: equ  zero
 
 ;  W/O  ( -- fam )      aka 1 w/o
 
   hdr 1,'W/O',,,one
-wso  equ  one
+wso: equ  one
 
 ;  R/W  ( -- fam )      aka 2 r/w
 
   hdr 1,'R/W',,,two
-rsw  equ  two
+rsw: equ  two
 
 ;  BIN  ( fam1 -- fam2 )    aka noop bin immediate
 
   hdr 1,'BIN',1,,noop
-binn  equ  next
+binn: equ  next
 
 ;  open1  ( addr u fam -- | x ior )
 ;          getfh 0= if 2drop 4 ior unnest exit
@@ -8635,7 +8718,7 @@ readl:
 ;;  dw exit
 ;;readl1:
 ;;  dw two_dup,over,plus,swap
-;;  dw xqdo,readl5
+;;  dw paren_question_do,readl5
 ;;readl2:
 ;;  dw ido
 ;;  dw dup,c_fetch
@@ -8645,7 +8728,7 @@ readl:
 ;;  dw question_branch,readl3
 ;;  dw rot,subb
 ;;  dw fh,file_size,drop,rwpst
-;;  dw pleav,readl2-cw
+;;  dw paren_leave,readl2-cw
 ;;readl3:
 ;;  dw eolq,question_dup
 ;;  dw question_branch,readl4
@@ -8659,7 +8742,7 @@ readl:
 ;;  dw true,zero
 ;;  dw unloo,exit
 ;;readl4:
-;;  dw xloop,readl2
+;;  dw paren_loop,readl2
 ;;readl5:
 ;;  dw nip
 ;;  dw dup,zero_not_equals,zero
@@ -8688,7 +8771,7 @@ swapf:
   call do_colon
   dw scr,fetch
   dw snum,store
-  dw sfp,tat
+  dw sfp,two_fetch
   dw swap
   dw sfp,two_store
   dw snum,fetch
@@ -8706,7 +8789,7 @@ fdb:
   dw c_lit
   db nfd
   dw zero
-  dw xdo,fdb3
+  dw paren_do,fdb3
 fdb1:
   dw dup,fetch,fetch
   dw zero_equals
@@ -8714,8 +8797,8 @@ fdb1:
   dw unloo
   dw exit
 fdb2:
-  dw cellp
-  dw xloop,fdb1
+  dw cell_plus
+  dw paren_loop,fdb1
 fdb3:
   dw paren_abort_quote
   dcs 'too many files'
@@ -8968,12 +9051,12 @@ arrow:
 pthru:
   call do_colon
   dw onep,swap
-  dw xqdo,pthru2
+  dw paren_question_do,pthru2
 pthru1:
   dw ido,block
   dw bbuf
   dw ido,peval
-  dw xloop,pthru1
+  dw paren_loop,pthru1
 pthru2:
   dw exit
 
@@ -9019,21 +9102,21 @@ pfbk:
   dw two_dup,uless
   dw question_branch,pfbk3
   dw drop,dup
-  dw loadfile,dext
-  dw psqot
+  dw loadfile,minus_ext
+  dw paren_s_quot
   dcs '$$$'
   dw pext
   dw fnbuf,place
   dw fnbuf,count
   dw wso,creatf,throw
   dw over,zero
-  dw xqdo,pfbk2
+  dw paren_question_do,pfbk2
 pfbk1:
   dw dup
   dw ido,block
   dw bbuf
   dw rot,writf,throw
-  dw xloop,pfbk1
+  dw paren_loop,pfbk1
 pfbk2:
   dw closf,throw
   dw fid,fetch
@@ -9047,12 +9130,12 @@ pfbk2:
 pfbk3:
   dw over
   dw blks,store  ; update max block
-  dw xqdo,pfbk5
+  dw paren_question_do,pfbk5
 pfbk4:
   dw ido,buffer
   dw bbuf,blank
   dw update,savbuf
-  dw xloop,pfbk4
+  dw paren_loop,pfbk4
 pfbk5:
   dw exit
 
@@ -9096,13 +9179,13 @@ closa:
   dw c_lit
   db nfd
   dw zero
-  dw xdo,closa2
+  dw paren_do,closa2
 closa1:
   dw dup
   dw sfp,store
   dw close
-  dw cellp
-  dw xloop,closa1
+  dw cell_plus
+  dw paren_loop,closa1
 closa2:
   dw drop
   dw exit
@@ -9112,7 +9195,7 @@ closa2:
   hdr x,'LASTFILE',,1
 lastf:
   call do_colon    ; last named file used by open-file etc
-  dw zbuf,cellp
+  dw zbuf,cell_plus
   dw fetch,count
   dw exit
 
@@ -9185,7 +9268,7 @@ open:
   call do_colon
   dw fdb,drop  ; free slot?
   dw to_r
-  dw psqot
+  dw paren_s_quot
   dcs 'scr'
   dw pext
   dw from_r,openf
@@ -9295,7 +9378,7 @@ save:
 ;;save1:
 ;;  dw freez
 ;;  dw getfilename
-;;  dw psqot
+;;  dw paren_s_quot
 ;;  dcs  'com'
 ;;  dw pext
 ;;  dw qcreat
@@ -9315,7 +9398,7 @@ save:
 ;;  dw dpp,fetch
 ;;  dw over,subb
 ;;  dw r_fetch,writf  ; save application
-;;  dw boot,cellp,off  ; reset forth flag
+;;  dw boot,cell_plus,off  ; reset forth flag
 ;;  dw question_dup,zero_equals
 ;;  dw question_branch,save2
 ;;  dw lit,hm
@@ -9368,15 +9451,15 @@ border:
   pop hl
   ld a,l
   cp 4 ; dark color?
-  jp nc,border1
+  jp nc,border_a
   ; dark color
   sla a
   sla a
   sla a ; *8 (converted to paper)
   add a,7 ; white ink
-border1:
+border_a:
   ld (sys_bordcr),a
-  ld l,a
+  ld a,l
   out (254),a
   jp next
 
@@ -9447,12 +9530,12 @@ floats:
 ;  FALIGN  ( -- )      aka noop falign immediate
 
   hdr 1,'FALIGN',1,,noop
-falign  equ  next
+falign: equ  next
 
 ;  FALIGNED ( addr -- f-addr )  aka noop faligned immediate
 
   hdr 1,'FALIGNED',1,,noop
-falignd  equ  next
+falignd: equ  next
 
 ;  F,  (F: r -- ) or ( r -- )  , ,
 
@@ -9467,21 +9550,21 @@ fcomm:
 
   hdr 1,'FLITERAL',1,,two_literal
 f_literal equ  two_literal
-f_lit     equ  two_lit
+f_lit:    equ  two_lit
 
 ;  FCONSTANT  ( -- r )
   ; aka 2constant fconstant
 
   hdr 1,'FCONSTANT',,,tcon
-fcon  equ  tcon
+fcon: equ  tcon
 
-dofcon  equ  tat
+dofcon: equ  two_fetch
 
 ;  FVARIABLE  ( -- f-addr )
 ;  aka 2variable fvariable
 
   hdr 1,'FVARIABLE',,,two_variable
-f_variable  equ  two_variable
+f_variable: equ  two_variable
 
 ;  FDEPTH   ( -- +n )  depth 2/
 
@@ -9495,37 +9578,37 @@ fdepth:
 ;  FDROP  ( r -- )
 
   hdr 1,'FDROP',,,two_drop  ; aka 2drop fdrop
-fdrop  equ  two_drop
+fdrop: equ  two_drop
 
 ;  FDUP  ( r -- r r )
 
   hdr 1,'FDUP',,,two_dup    ; aka 2dup fdup
-fdup  equ  two_dup
+f_dup: equ  two_dup
 
 ;  FSWAP  ( r1 r2 -- r2 r1 )
 
   hdr 1,'FSWAP',,,tswap  ; aka 2swap fswap
-fswap  equ  tswap
+fswap: equ  tswap
 
 ;  FOVER  ( r1 r2 -- r1 r2 r1 )
 
   hdr 1,'FOVER',,,tover  ; aka 2over fover
-fover  equ  tover
+f_over: equ  tover
 
 ;  FROT  ( r1 r2 r3 -- r2 r3 r1 )
 
   hdr 1,'FROT',,,trot    ; aka 2rot frot
-frot  equ  trot
+f_rot: equ  trot
 
 ;  F@  ( f-addr -- r )
 
-  hdr 1,'F@',,,tat    ; aka 2@ f@
-f_fetch  equ  tat
+  hdr 1,'F@',,,two_fetch    ; aka 2@ f@
+f_fetch: equ  two_fetch
 
 ;  F!  ( r f-addr -- )
 
   hdr 1,'F!',,,two_store    ; aka 2! f!
-f_store  equ  two_store
+f_store: equ  two_store
 
 ;  FPICK  ( +n -- r )  floats sp@ cell+ + f@
 
@@ -9536,7 +9619,7 @@ fpick:
 ;   if  fstack
 ;  dw fsp,fetch
 ;   else
-  dw sp_fetch,cellp
+  dw sp_fetch,cell_plus
 ;   endif
   dw plus,f_fetch
   dw exit
@@ -9545,7 +9628,7 @@ fpick:
 
 acce:
   ds 5    ; accumulator exponent
-accs  equ  acce+1    ; accumulator sign
+accs: equ  acce+1    ; accumulator sign
 acc1  equ  accs+1    ; accumulator 1st fraction
 acc2  equ  acc1+1    ; accumulator 2nd fraction
 acc3  equ  acc2+1    ; accumulator 3rd fraction
@@ -10611,7 +10694,7 @@ feq:
 ;  F0<  ( r -- flag )
 
   hdr 1,'F0<'
-fzl:
+f_zero_less_than:
   pop hl
   pop de
   ld a,l
@@ -10635,9 +10718,9 @@ fles:
 ;  F0>  ( r -- flag )
 
   hdr 1,'F0>'
-fzg:
+f_zero_greater_than:
   call ldop
-fzg1:
+f_zero_greater_than1:
   pop bc
   jp z,false
   jp m,false
@@ -10646,15 +10729,15 @@ fzg1:
 ;  F>  ( r1 r2 -- flag )
 
   hdr 1,'F>'
-fgre:
+f_greater_than:
   call ld2op
   call fcmp
-  jp fzg1
+  jp f_zero_greater_than1
 
 ;  FMIN  ( r1 r2 -- r1 | r2 )  fover fover f< 0= if fswap then fdrop
 
   hdr 1,'FMIN'
-fmin:
+f_min:
   call ld2op
   push hl
   call fcmp
@@ -10708,7 +10791,7 @@ fsub:
 ;  F*  ( r1 r2 -- r3 )
 
   hdr 1,'F*'
-fstar:
+f_star:
   call ld2op
   call fmu
   jp svop
@@ -11010,14 +11093,14 @@ repr:
   dw fill
   dw mprec,min
   dw two_to_r
-  dw fdup,fzl
+  dw f_dup,f_zero_less_than
   dw zero,exsn,two_store
   dw fabss
-  dw fdup,fze
+  dw f_dup,fze
   dw zero_equals
   dw question_branch,repr3
 repr1:
-  dw fdup    ; begin
+  dw f_dup    ; begin
   dw f_lit
   db 0x81,0,0,0
   dw fles,zero_equals
@@ -11026,21 +11109,21 @@ repr1:
   dw one,exsn,pstor
   dw branch,repr1  ; repeat
 repr2:
-  dw fdup    ; begin
+  dw f_dup    ; begin
   dw f_lit
   db 0x7d,0x4c,0xcc,0xcd
   dw fles
   dw question_branch,repr3  ; while
-  dw ften,fstar
+  dw ften,f_star
   dw true,exsn,pstor
   dw branch,repr2  ; repeat
 repr3:
   dw r_fetch
   dw zero,max,zero
-  dw xqdo,repr5
+  dw paren_question_do,repr5
 repr4:
-  dw ften,fstar
-  dw xloop,repr4
+  dw ften,f_star
+  dw paren_loop,repr4
 repr5:
   dw frnd,ftod
   dw two_dup
@@ -11057,7 +11140,7 @@ repr5:
   dw one,zero  ; 0.0E fixup
   dw branch,repr7
 repr6:
-  dw exsn,tat
+  dw exsn,two_fetch
   dw swap
 repr7:
   dw true
@@ -11117,7 +11200,7 @@ pln:
   hdr x,'(F1)'  ; get exponent
 pf1:
   call do_colon
-  dw fdup
+  dw f_dup
   dw fbuf,mprec
   dw repr,two_drop  ; never error
   dw exit
@@ -11297,7 +11380,7 @@ pfbb:
   dw from_r
   dw pfaa,min
   dw pf7
-  dw fdp,tat,or_
+  dw fdp,two_fetch,or_
   dw question_branch,pfbb1
   dw c_lit
   db '.'
@@ -11785,16 +11868,16 @@ ffln:
 ;  F**  ( r1 r2 -- r3 )  fswap fln f* fexp
 
   hdr 1,'F**'
-ftst:
+f_star_star:
   call do_colon
   dw fswap,ffln
-  dw fstar,fexp
+  dw f_star,fexp
   dw exit
 
 ;  FSIN  ( r1 -- r2 )
 
   hdr 1,'FSIN'
-fsin:
+f_sin:
   call ldop
   call sin
   jp svop
@@ -11802,7 +11885,7 @@ fsin:
 ;  FCOS  ( r1 -- r2 )
 
   hdr 1,'FCOS'
-fcos:
+f_cos:
   call ldop
   call cos
   jp svop
@@ -11810,7 +11893,7 @@ fcos:
 ;  FATAN  ( r1 -- r2 )
 
   hdr 1,'FATAN'
-fatan:
+f_atan:
   call ldop
   call atan
   jp svop
@@ -11818,7 +11901,7 @@ fatan:
 ;  PI  ( -- r )
 
   hdr 1,'PI'
-fpi:
+f_pi:
   call dofcon
   db 0x82,0x49,0fh,0xdb  ; pi
 
@@ -11855,10 +11938,10 @@ fiden1:
 ;        state? and if postpone fliteral then r>
 
   hdr x,'FNUMBER',,1
-fnumb:
+f_number:
   call do_colon
   dw two_dup    ; scan 'E'
-  dw psqot
+  dw paren_s_quot
   dcs 'E'
    if  ucase
   dw caps
@@ -11867,19 +11950,19 @@ fnumb:
   dw drot,two_drop
   dw dcmq    ; decimal base?
   dw and_
-  dw question_branch,fnumb2
-fnumb1:
+  dw question_branch,f_number2
+f_number1:
   dw tflt
-  dw branch,fnumb3
-fnumb2:
+  dw branch,f_number3
+f_number2:
   dw two_drop,zero
-fnumb3:
+f_number3:
   dw dup,to_r
   dw stateq
   dw and_
-  dw question_branch,fnumb4
+  dw question_branch,f_number4
   dw f_literal
-fnumb4:
+f_number4:
   dw from_r
   dw exit
 
@@ -11910,12 +11993,12 @@ fprun1:
 
 ; XXX TODO it seems these 'last_' labels could be renamed
 ; to 'top_' instead:
-top_nfa  equ last_nfa   ; nfa of top word in forth vocabulary
+top_nfa: equ last_nfa   ; nfa of top word in forth vocabulary
 top_xt equ last_xt   ; xt of top word in forth vocabulary
 
-initdp  equ $
+initdp: equ $
 
-initdph equ $
+initdph: equ $
 
 ; Code is run once then disabled.
 
