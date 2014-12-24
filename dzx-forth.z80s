@@ -6,12 +6,10 @@
 ; Assemble with Pasmo:
 ;   pasmo --tapbas dzx-forth.z80s dzx-forth.tap
 
-; XXX TODO Use ROM 703 (0x02bf) wait for key and store it into last-k
 ; XXX TODO Doc: Programación en Ensamblador, by Tony Woods, p. 168, ROM routines.
-; XXX TODO Use Benschop's Forth-83's 'bcal' to write 'goto'.
 
-version macro
-  dcs 'A-00-201412241812'
+version: macro
+  dcs 'A-00-201412241913'
   endm
 
 ; }}} **********************************************************
@@ -29,26 +27,26 @@ yes: equ not no
 ; Equates for conditional assembly
 
 debug: equ no  ; debugging messages
-ucase: equ yes ; forth names case insensitive
+case_insensitive_names: equ yes ; forth names case insensitive
 fpeng: equ yes ; engineering output functions
 control_flow_stack_extensions:   equ yes
 warning_options:  equ yes ; warning options
 
 ;
 
-x       equ no  ; show hidden words
-;fstack equ yes ; separate floating point stack XXX TODO -- try
+x:      equ no  ; show hidden words
 floord: equ no  ; integer division method
-float:  equ yes ; floating point
-nfd:    equ 6 ; max open source files (min = 2)
+floating_point_support:  equ yes ; floating point support
+;fstack equ yes ; separate floating point stack XXX TODO -- try
+nfd:    equ 6   ; max open source files (min = 2)
 retro:  equ no  ; classic forth behaviours
 
 ; Memory 
 
-sm: equ 0x8000 ; start of system memory
+start: equ 0x8000 ; start of DZX-Forth in memory
 
-cw: equ 2   ; cell size (bytes)
-fw: equ 4 ; float size (bytes)
+cw: equ 2 ; cell size (bytes)
+fw: equ 4 ; floating point number size (bytes)
 
 ; Buffer sizes
 
@@ -72,32 +70,33 @@ recsiz: equ 128   ; CP/M record size
 
 max_open_file_handles: equ 10
 
-f_init_patch defl  noop  ; INIT
-f_identify_patch: defl  noop
-f_number_patch:  defl false
-f_stack_items: defl  0 ; fp-stack items
-f_stack_size:  defl  0 ; floating point stack size (bytes)
 
-toppru: defl  0 ; top prunes
+toppru: defl 0 ; top prunes
 
-; Float
+; Floating point
 
-   if float
+f_init_patch:     defl noop
+f_identify_patch: defl noop
+f_number_patch:   defl false
+f_stack_items:    defl 0
+f_stack_size:     defl 0 ; bytes
 
-maxsig: equ 7 ; max significant digits
+  if floating_point_support
 
-f_init_patch defl  f_init
-f_identify_patch: defl  f_identify
-f_number_patch:  defl  f_number
+    maxsig: equ 7 ; max significant digits
 
-;  if fstack
-;f_stack_items defl  6
-;f_stack_size: defl  (f_stack_items+5)*fw ; allow extra for fp display etc
-;  endif
+    f_init_patch:     defl f_init
+    f_identify_patch: defl f_identify
+    f_number_patch:   defl f_number
 
-toppru: defl  fprun1
+    ;if fstack
+    ;  f_stack_items: defl 6
+    ;  f_stack_size:  defl (f_stack_items+5)*fw ; allow extra for fp display etc
+    ;endif
 
-   endif
+    toppru: defl fprun1
+
+  endif
 
 ; ZX Spectrum
 
@@ -105,6 +104,7 @@ toppru: defl  fprun1
   include zx_spectrum_rom_routines.z80s
 
 ; ASCII characters
+
 ; XXX TODO adapt
 ;; bel equ 0x07 ; bell ; XXX OLD
 bs_char:      equ 0x08 ; backspace
@@ -220,9 +220,9 @@ sp_char:      equ 0x20 ; space
 ; ------------------------------
 ; Macro for generating word headers
 
-previous_nfa defl  0   ; initial link pointer (end of chain)
+previous_nfa: defl 0   ; initial link pointer (end of chain)
 
-hdr macro enabled,name,immediate,fl,alias_xt
+hdr: macro enabled,name,immediate,fl,alias_xt
   ; enabled  = enable the header? (0=disable)
   ; name = name string
   ; immediate  = immediate
@@ -232,13 +232,13 @@ hdr macro enabled,name,immediate,fl,alias_xt
   if enabled
 
     ; the name field
-    last_nfa defl  $ ; link address for next word
-    bits  defl  0
+    last_nfa: defl $ ; link address for next word
+    bits: defl 0
     if not nul immediate
-      bits  defl  bits+0x40  ; set immediate bit
+      bits: defl bits+0x40  ; set immediate bit
     endif
     if not nul alias_xt
-      bits  defl  bits+0x80  ; set alias bit
+      bits: defl bits+0x80  ; set alias bit
     endif
     local _first ; address of the first char of the name
     local _next  ; address after the last char of the name
@@ -251,42 +251,42 @@ hdr macro enabled,name,immediate,fl,alias_xt
 
     ; the code field
     if nul alias_xt
-      last_xt defl $+2
+      last_xt: defl $+2
     else
-      last_xt defl alias_xt
+      last_xt: defl alias_xt
     endif
     dw last_xt
-    previous_nfa defl  last_nfa
+    previous_nfa: defl last_nfa
 
   endif
 
-  endm
+endm
 
 ; ------------------------------
 ; Macro to generate a counted string
 
-dcs macro string1,string2,string3,string4 ; allow comma separated
-    local _first,_next
-    db _next-_first ; count byte
+dcs: macro string1,string2,string3,string4 ; allow comma separated strings
+  local _first,_next
+  db _next-_first ; count byte
   _first: db string1
-    if not nul string2
-      db string2
-      if not nul string3
-        db string3
-        if not nul string4
-          db string4
-        endif
+  if not nul string2
+    db string2
+    if not nul string3
+      db string3
+      if not nul string4
+        db string4
       endif
     endif
+  endif
   _next:
-  endm
+endm
 
 ; ------------------------------
 ; Macro to ignore next 1 bytes
 
 ; XXX OLD -- not needed anymore
 ; XXX TODO -- how does it worked?
-;;ignore1  macro
+;;ignore1:  macro
 ;;  db 0x00fe  ; cp n
 ;;   endm
 
@@ -294,12 +294,12 @@ dcs macro string1,string2,string3,string4 ; allow comma separated
 ; Macro to generate fdb table
 
 ; XXX OLD
-;;gfdb   macro
+;;gfdb:   macro
 ;;  local _a
-;;_a: defl  fdbs
+;;_a: defl fdbs
 ;;   rept nfd
 ;;  dw _a
-;;_a: defl  _a+file_descriptor_size
+;;_a: defl _a+file_descriptor_size
 ;;   endm
 ;;   endm
 
@@ -310,16 +310,16 @@ dcs macro string1,string2,string3,string4 ; allow comma separated
 ; 'saved_ip' is defined in the word 'type'.
 ; See the word 'cls' as a usage example.
 
-save_ip macro
+save_ip: macro
   ld h,b
   ld l,c
   ld (saved_ip),hl
-  endm
+endm
 
 ; }}} **********************************************************
 ; Boot {{{
 
-  org sm
+  org start
 
   jp cold_boot
 ;  jp warm_boot  ; XXX TODO
@@ -335,6 +335,8 @@ tib:
   ds tib_size  ; TIB (terminal input buffer)
 user_area:
   ds user_area_size
+return_stack:
+  ds return_stack_size
 
 parsed_string_buffer:
    if retro
@@ -366,7 +368,7 @@ dnfa:
 user_area_pointer:
   dw user_area
 return_stack_pointer:
-  ds cw
+  dw return_stack
 
 ; cpu speed (TURBO PASCAL compatible)
 speed:
@@ -696,7 +698,7 @@ two_lit:
   jp next
 
 ; }}} **********************************************************
-; Stack functions {{{
+; Stack pointer manipulation {{{
 
 ; SP@  ( -- addr )
 
@@ -730,6 +732,9 @@ rp_store:
   pop hl
   ld (return_stack_pointer),hl
   jp next
+
+; }}} **********************************************************
+; Return stack {{{
 
 ; >R  ( x -- )
 
@@ -797,8 +802,11 @@ two_r_fetch:
   hdr 1,'2DROP'
 two_drop:
   pop hl
-  pop hl ; XXX NEW
-  jp next ; XXX NEW -- because headers and code share the same zone
+  pop hl
+  jp next
+
+; }}} **********************************************************
+; Data stack {{{
 
 ; DROP  ( x -- )
 
@@ -966,16 +974,6 @@ tuck:
   push de
   jp next
 
-; ><  ( x1 -- x2 )
-
-  hdr 1,'><'
-bswp:
-  pop de
-  ld h,e
-  ld l,d
-  push hl
-  jp next
-
 ;  2DUP  ( x1 x2 -- x1 x2 x1 x2 )
 
   hdr 1,'2DUP'
@@ -1066,8 +1064,6 @@ depth:
   dw twodiv
   dw exit
 
-; end
-
 ; }}} **********************************************************
 ; Memory operations {{{
 
@@ -1094,8 +1090,7 @@ two_store1:
   inc hl
   ld (hl),d
   inc hl
-  jp store1 ; XXX NEW -- because headers and code share the same zone
-;  ignore1 ; XXX OLD
+  jp store1
 
 ; !  ( x a-addr -- )
 
@@ -1182,8 +1177,7 @@ move:
   hdr 1,'ERASE'
 erase:
   ld e,0
-  jp fill1  ; XXX NEW -- because headers and code share the same zone
-;  ignore1 ; XXX OLD
+  jp fill1
 
 ; FILL  ( c-addr u char -- )
 
@@ -1255,6 +1249,16 @@ ctog1:
 
 ; }}} **********************************************************
 ; Arithmetic and logical {{{
+
+; ><  ( x1 -- x2 )
+
+  hdr 1,'><'
+bswp:
+  pop de
+  ld h,e
+  ld l,d
+  push hl
+  jp next
 
 ; AND  ( x1 x2 -- x3 )
 
@@ -3547,7 +3551,7 @@ pels:
   dw one
 pels1:
   dw token
-   if ucase
+   if case_insensitive_names
   dw two_dup,upper
    endif
   dw dup
@@ -3622,7 +3626,7 @@ udotr:
   ld hl,0
   ex (sp),hl
   push hl
-  jp d_dot_r ; XXX NEW -- because headers and code share the same zone
+  jp d_dot_r
 
 ; XXX OLD -- DX-Forth 4.00
 ;;; D.R  ( d u -- )   >r (d.) r> over - spaces type
@@ -3668,7 +3672,7 @@ dot_r:
 u_dot:
   ld hl,0
   push hl
-  jp ddot ; XXX NEW -- because headers and code share the same zone
+  jp ddot
 
 ; D.  ( d -- )    0 d.r space
 
@@ -4361,12 +4365,12 @@ wfind5:
   inc hl    ; check each char
   inc de
   ld a,(de)
-   if ucase
+   if case_insensitive_names
   call uppercase_a
    endif
   ld c,a
   ld a,(hl)
-   if ucase
+   if case_insensitive_names
   call uppercase_a
    endif
   xor c
@@ -5580,7 +5584,8 @@ qexec:
   dcs 'execution only'
   dw exit
 
-; ?STACK  ( -- )    sp@ s0 @ over u< swap pad u< or
+; ?STACK  ( -- )
+;       sp@ s0 @ over u< swap pad u< or
 ;       abort" stack?" r0 @ rp@ u< rp@ fs0 @ u<
 ;       or abort" r-stack?" fs0 @ fsp @ u< fsp @
 ;       fs0 @ (nfpm) @ - u< or abort" f-stack?"
@@ -5866,7 +5871,7 @@ source:
 parse:
   ld hl,0
   push hl
-  jp paren_parse ; XXX NEW -- because headers and code share the same zone
+  jp paren_parse
 
 ; (parse)  ( char f -- c-addr u ) 2>r source >in @ /string r> if tuck
 ;         r@ skip over - >in +! then 2dup r>
@@ -6211,7 +6216,7 @@ defin:
 
 ; wordlist structure
 
-forth3  defl  previous_nfa
+forth3: defl previous_nfa
 
   dw 0x2001    ; dummy nfa for vocabulary chaining
 forth1:
@@ -6710,7 +6715,7 @@ paren_abort_quote_1:
 abort_quote:
   call do_colon
   dw compile,paren_abort_quote
-  dw comq
+  dw comma_quote
   dw exit
 
 ; XXX OLD -- DX-Forth 4.00
@@ -6810,7 +6815,7 @@ cold_boot:
 ;;  ld c,0     ; later patched to LD C,L
 ;;  ld hl,(idp)
 ;;  call  bmovu
-;;  ld de,sm
+;;  ld de,start
 ;;
 ;;cldd6:
 ;;  ex  de,hl
@@ -7060,21 +7065,23 @@ freez:
   dw cmove
   dw exit
 
-;  'prune      variable 'prune  'prune off
+; XXX OLD
+;;;  'prune      variable 'prune  'prune off
+;;
+;;  hdr x,"'PRUNE",,1
+;;tprun:
+;;  call do_create
+;;  dw toppru    ; 0=end
 
-  hdr x,"'PRUNE",,1
-tprun:
-  call do_create
-  dw toppru    ; 0=end
-
-;  REMEMBER  ( xt -- )  'prune link, ,
-
-  hdr 1,'REMEMBER',,1  ; add xt to prunes
-remem:
-  call do_colon
-  dw tprun,linkc
-  dw comma
-  dw exit
+; XXX OLD
+;;;  REMEMBER  ( xt -- )  'prune link, ,
+;;
+;;  hdr 1,'REMEMBER',,1  ; add xt to prunes
+;;remember:
+;;  call do_colon
+;;  dw tprun,linkc
+;;  dw comma
+;;  dw exit
 
 ;  xdp  ( adr -- adr xdp )  dup limit u< if dp else dph then
 
@@ -7088,27 +7095,28 @@ xdp:
   jp nc,dph
   jp dpp
 
-;  prunes  ( -- )    begin 'prune @ dup while dup xdp @ u< 0=
-;        while 2@ 'prune ! execute repeat then drop
-
-  hdr x,'PRUNES',,1
-pruns:
-  call do_colon
-pruns1:
-  dw tprun,fetch
-  dw dup
-  dw question_branch,pruns2
-  dw dup
-  dw xdp,fetch
-  dw u_less_than,zero_equals
-  dw question_branch,pruns2
-  dw two_fetch
-  dw tprun,store
-  dw execute
-  dw branch,pruns1
-pruns2:
-  dw drop
-  dw exit
+; XXX OLD
+;;;  prunes  ( -- )    begin 'prune @ dup while dup xdp @ u< 0=
+;;;        while 2@ 'prune ! execute repeat then drop
+;;
+;;  hdr x,'PRUNES',,1
+;;pruns:
+;;  call do_colon
+;;pruns1:
+;;  dw tprun,fetch
+;;  dw dup
+;;  dw question_branch,pruns2
+;;  dw dup
+;;  dw xdp,fetch
+;;  dw u_less_than,zero_equals
+;;  dw question_branch,pruns2
+;;  dw two_fetch
+;;  dw tprun,store
+;;  dw execute
+;;  dw branch,pruns1
+;;pruns2:
+;;  dw drop
+;;  dw exit
 
 ;  ?protected ( h-addr -- h-addr )  (idph) @ over u> check? and
 ;          abort" is protected"
@@ -7216,47 +7224,47 @@ chain:
 ;        cell+ ! (idph) @ u< if freeze then prunes
 
   hdr x,'(FORGET)',,1
-pforg:
+paren_forget:
   call do_colon
   dw dpp,store  ; starting maximums
   dw to_r
   dw vocl    ; trim vocs > nfa
-pforg1:
+paren_forget1:
   dw fetch
   dw dup,cell_plus,fetch
   dw r_fetch,u_less_than
-  dw question_branch,pforg1
+  dw question_branch,paren_forget1
   dw dup,vocl,store
-pforg2:
+paren_forget2:
   dw dup,cell_minus  ; scan remaining vocs
   dw dup
   dw fetch
-pforg3:
+paren_forget3:
   dw dup,r_fetch  ; for each word >= nfa
   dw u_less_than,zero_equals
-  dw question_branch,pforg5
+  dw question_branch,paren_forget5
   dw dalias    ; not an alias
-  dw question_branch,pforg4
+  dw question_branch,paren_forget4
   dw dup,namef  ; get its xt
   dw dpp,fetch
   dw u_min,dpp,store  ; trim dict
-pforg4:
+paren_forget4:
   dw ntnam
-  dw branch,pforg3
-pforg5:
+  dw branch,paren_forget3
+paren_forget5:
   dw swap,store
   dw fetch
   dw question_dup,zero_equals
-  dw question_branch,pforg2  ; until all vocs done
+  dw question_branch,paren_forget2  ; until all vocs done
   dw from_r
   dw dup,dpp
   dw cell_plus,store
   dw lit,idph  ; below fence?
   dw fetch,u_less_than
-  dw question_branch,pforg6
+  dw question_branch,paren_forget6
   dw freez    ; fix bootup values
-pforg6:
-  dw pruns    ; run prunes chain
+paren_forget6:
+;;  dw pruns    ; run prunes chain ; XXX OLD
   dw exit
 
 ;  EMPTY  ( -- )    forth definitions (idp) 2@ (forget)
@@ -7267,7 +7275,7 @@ empty:
   dw forth,defin  ; switch to a safe vocabulary
   dw lit,idp
   dw two_fetch
-  dw pforg
+  dw paren_forget
   dw exit
 
 ;  FORGET  ( "name" -- )  get-current context ! name? -alias 0=
@@ -7275,7 +7283,7 @@ empty:
 ;        drop dp @ then (forget)
 
   hdr 1,'FORGET',,1
-forg:
+forget:
   call do_colon
   dw getcur
   dw cont,store
@@ -7286,11 +7294,11 @@ forg:
   dw swap
   dw limit
   dw over,u_less_than
-  dw question_branch,forg1
+  dw question_branch,forget1
   dw drop
   dw dpp,fetch
-forg1:
-  dw pforg
+forget1:
+  dw paren_forget
   dw exit
 
 ;  MARKER  ( "name" -- )  sys? system create sys !
@@ -7325,7 +7333,7 @@ s_comma:
 ; ,"  ( "ccc" -- )  [char] " parse$ s,
 
   hdr 1,',"',,1
-comq:
+comma_quote:
   call do_colon
   dw c_lit
   db '"'
@@ -7416,7 +7424,7 @@ paren_dot_quote:
 dot_quote:
   call do_colon
   dw compile,paren_dot_quote
-  dw comq
+  dw comma_quote
   dw exit
 
 ; CHAR?  ( x -- x flag )
@@ -9459,9 +9467,9 @@ normal:
   jp next
 
 ; }}} **********************************************************
-; Floating point functions {{{
+; Floating point {{{
 
-  if float
+  if floating_point_support
 
 ;  -FP  ( -- addr )    marker -FP
 
@@ -11901,7 +11909,7 @@ f_number:
   dw two_dup    ; scan 'E'
   dw paren_s_quot
   dcs 'E'
-   if  ucase
+   if  case_insensitive_names
   dw caps
    endif
   dw search
@@ -11945,24 +11953,23 @@ fprun1:
   dw 0    ; link
   dw fprun    ; xt
 
-  endif
+  endif ; floating_point_support
 
 ; }}} **********************************************************
-; XXX {{{
+; End {{{
 
 ; XXX TODO it seems these 'last_' labels could be renamed
 ; to 'top_' instead:
-top_nfa: equ last_nfa   ; nfa of top word in forth vocabulary
-top_xt equ last_xt   ; xt of top word in forth vocabulary
 
-initdp: equ $
+top_nfa:  equ last_nfa   ; nfa of top word in forth vocabulary
+top_xt:   equ last_xt   ; xt of top word in forth vocabulary
 
-initdph: equ $
+initdp:   equ $
+initdph:  equ $ ; XXX OLD
 
+; XXX OLD
 ; Code is run once then disabled.
-
 ; MOVE-PATCH  ( -- )
-
 ;;movpat:
 ;;  ld a,0x44   ; change to LD B,H
 ;;  ld (cldd4),a
@@ -11971,5 +11978,4 @@ initdph: equ $
 ;;  ld (cldd7),hl  ; patch myself out
 ;;  jp (hl)
 
-;  end cold_boot
-  end sm
+  end start
