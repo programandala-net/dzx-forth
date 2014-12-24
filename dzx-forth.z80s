@@ -11,7 +11,7 @@
 ; XXX TODO Use Benschop's Forth-83's 'bcal' to write 'goto'.
 
 version macro
-  dcs 'A-00-201412232333'
+  dcs 'A-00-201412241812'
   endm
 
 ; }}} **********************************************************
@@ -52,32 +52,31 @@ fw: equ 4 ; float size (bytes)
 
 ; Buffer sizes
 
-user_area_size:               equ 128
+block_size:                   equ 1024
+file_descriptor_size:         equ filename_size+(4*cw)  ; ; XXX OLD
+file_handle_size:             equ 6+36      ; (keep even) ; XXX OLD
+filename_size:                equ 10        ; XXX TODO bigger, for +3, divide, etc.
+parsed_string_buffer_size:    equ 255
+pictured_numeric_buffer_size: equ 68
 return_stack_size:            equ 256
-tib_size:                     equ 80        ; TIB buffer size
-block_size:                   equ 1024      ; max block size
-file_handle_size:             equ 6+36      ; file handle size (keep even)
-filename_size:                equ 10        ; max path/filename size
-word_buffer_size:             equ 31+5      ; min WORD buffer size
-parsed_string_buffer_size:    equ 255       ; max parsed string buffer size
-file_descriptor_size:         equ filename_size+(4*cw)  ; file descriptor size ; XXX OLD
-pictured_numeric_buffer_size: equ 68        ; pictured numeric buffer size
+tib_size:                     equ 80        ; (Terminal Input Buffer)
+user_area_size:               equ 128
+word_buffer_size:             equ 31+5
 
 ; DOS and memory ; XXX OLD
-
 dosfcb: equ 0x005c   ; default file control block
 dosbuf: equ 0x0080   ; default DTA and command-line buffer
-recsiz: equ 128   ; CP/M record size ; XXX OLD
+recsiz: equ 128   ; CP/M record size
 
 ; Equates ; XXX TODO rename, organize
 
-fhno: equ 10  ; max open handles
+max_open_file_handles: equ 10
 
-init: defl  noop  ; INIT
-ident: defl  noop  ; IDENT
-fnu:  defl  false ; FNUMBER
-fnum: defl  0 ; fp-stack items
-fps:  defl  0 ; fp-stack size
+f_init_patch defl  noop  ; INIT
+f_identify_patch: defl  noop
+f_number_patch:  defl false
+f_stack_items: defl  0 ; fp-stack items
+f_stack_size:  defl  0 ; floating point stack size (bytes)
 
 toppru: defl  0 ; top prunes
 
@@ -87,13 +86,13 @@ toppru: defl  0 ; top prunes
 
 maxsig: equ 7 ; max significant digits
 
-init: defl  fpini
-ident: defl  f_ident
-fnu:  defl  f_number
+f_init_patch defl  f_init
+f_identify_patch: defl  f_identify
+f_number_patch:  defl  f_number
 
 ;  if fstack
-;fnum defl  6
-;fps: defl  (fnum+5)*fw ; allow extra for fp display etc
+;f_stack_items defl  6
+;f_stack_size: defl  (f_stack_items+5)*fw ; allow extra for fp display etc
 ;  endif
 
 toppru: defl  fprun1
@@ -4927,12 +4926,13 @@ tnext1:
 nfcb:
   call do_value
 nfcb1:
-  dw fhno
+  dw max_open_file_handles
 
 ; SYS-VEC  ( -- addr )  system vector table
 
 ; XXX -- This word is not used in DX-Forth.
 ; It appears only in <misc.fs>, but commented out.
+; XXX TODO -- The useful values could be converted to variables.
 
   hdr 1,'SYS-VEC'
 sysvec:
@@ -4949,17 +4949,17 @@ vcon:
 vlst:
   dw lstout    ;  8 PRINTER out
 ainit:
-  dw cold2   ; 10 INIT patch
+  dw do_f_init_patch   ; 10 FINIT patch
 aident:
-  dw cold9   ; 12 IDENTIFY patch
+  dw do_f_identify_patch   ; 12 FIDENTIFY patch
 afnumb:
   dw interpret12    ; 14 FNUMBER patch
 nfps:
-  dw fps   ; 16 fp-stack size (bytes)
+  dw f_stack_size   ; 16 floating point stack size (bytes)
 anumb:
   dw interpret8   ; 18 NUMBER? patch
 nfpm:
-  dw fnum*fw    ; 20 fp-stack min (bytes)
+  dw f_stack_items*fw    ; 20 fp-stack min (bytes)
 nrts:
   dw return_stack_size   ; 22 return stack (bytes)
 nus:
@@ -6325,7 +6325,7 @@ interpret11:
   dw true
   dw branch,interpret13
 interpret12:
-  dw fnu     ; FNUMBER patch
+  dw f_number_patch
 interpret13:
   dw from_r,base,store
   dw qdef
@@ -6972,8 +6972,8 @@ cold:
 ;;  dw reset     ; general reset
 cold1:
 ;;  dw forth_reset
-cold2:
-;;  dw init      ; run INIT eg. for float
+do_f_init_patch:
+  dw f_init_patch
 ;;  dw bootq
 ;;  dw dup,boot,store     ; restore BOOT
 ;;  dw question_dup
@@ -7019,10 +7019,10 @@ cold3:
 ;;;;  dw lit,termn   ; show terminal name ; XXX OLD
 ;;;;  dw count,type
 ;;  dw paren_dot_quote
-;;  db cold9-$-1
+;;  db do_f_identify_patch-$-1
 ;;  db cr_char,lf_char
-cold9:
-  dw ident     ; run IDENTIFY
+do_f_identify_patch:
+  dw f_identify_patch
 ;;  dw cr
 ;;  dw gcfile_question
 ;;  dw question_branch,cold10
@@ -11124,7 +11124,7 @@ setpr:
   hdr 1,'FDP'
 fdp:
   call do_create    ; decimal point display
-  dw -1    ; set by FPINIT
+  dw -1    ; set by FINIT
   ds 2
 
   hdr x,'FBUF'
@@ -11863,23 +11863,23 @@ f_pi:
   call do_f_constant
   db 0x82,0x49,0fh,0xdb  ; pi
 
-;  fpinit  ( -- )    max-precision set-precision fdp on
+;  finit  ( -- )    max-precision set-precision fdp on
 
-  hdr x,'FPINIT'
-fpini:
+  hdr x,'FINIT'
+f_init:
   call do_colon
   dw mprec,setpr
   dw fdp,on
   dw exit
 
-;  fident  ( -- )
+;  fidentify  ( -- )
 
-  hdr x,'FIDENT',,1
-f_ident:
+  hdr x,'FIDENTIFY',,1
+f_identify:
   call do_colon
   dw cr
   dw paren_dot_quote
-  db f_ident1-$-1
+  db f_identify1-$-1
   db 'Software floating-point ('
 ;   if  fstack
 ;  db 'separate'
@@ -11887,7 +11887,7 @@ f_ident:
   db 'common'
 ;   endif
   db ' stack)'
-f_ident1:
+f_identify1:
   dw exit
 
 ;  fnumber  ( c-addr u -- [r] flag )
@@ -11924,15 +11924,16 @@ f_number4:
   dw from_r
   dw exit
 
-;   ( -- )      :noname ['] noop dup (cold2) ! (cold9) !
+;   ( -- )
+;        :noname ['] noop dup (do_f_init_patch) ! (do_f_identify_patch) !
 ;        ['] false (interpret12) ! (nfps) off (nfpm) off
 ;        ; remember
 
   hdr x,'(-FP)',,1
 fprun:
   ld hl,noop
-  ld (cold2),hl    ; INIT
-  ld (cold9),hl    ; INDENTIFY
+  ld (do_f_init_patch),hl    ; INIT
+  ld (do_f_identify_patch),hl    ; INDENTIFY
   ld hl,false
   ld (interpret12),hl    ; FNUMBER
 ;  ld hl,0
