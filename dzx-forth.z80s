@@ -8,18 +8,15 @@
 
 ; XXX TODO Doc: Programación en Ensamblador, by Tony Woods, p. 168, ROM routines.
 
-; XXX FIXME Problems with 'hdr' macro.
-; The last working copy is 2014122516
-
 version: macro
-  dcs 'A-00-201412252354'
+  dcs 'A-00-201412260019'
   endm
 
 ; }}} **********************************************************
 ; Labels {{{
 
-no:  equ 0
-yes: equ not no
+no:     equ 0
+yes:    equ not no
 
 ; Modification level
 ; XXX OLD
@@ -38,7 +35,7 @@ warning_options:                  equ yes
 floord:                           equ no  ; integer division method
 floating_point_support:           equ yes
 fp_engineering_output_functions:  equ yes
-;fstack equ yes ; separate floating point stack XXX TODO -- try
+separated_f_stack:                equ yes ; XXX TODO -- try
 
 classic_Forth_behaviours:         equ no
 
@@ -96,10 +93,10 @@ f_stack_size:     defl 0 ; bytes
     f_identify_patch: defl f_identify
     f_number_patch:   defl f_number
 
-    ;if fstack
-    ;  f_stack_items: defl 6
-    ;  f_stack_size:  defl (f_stack_items+5)*fw ; allow extra for fp display etc
-    ;endif
+    if separated_f_stack
+      f_stack_items: defl 6
+      f_stack_size:  defl (f_stack_items+5)*fw ; allow extra for fp display etc
+    endif
 
     toppru: defl fprun.1
 
@@ -253,15 +250,15 @@ immediate_mask:     equ 1 << immediate_bit
 smudge_bit:         equ 5
 smudge_mask:        equ 1 << smudge_bit
 
-_public:      equ true
-_hidden:      equ false ; make all hidden words public?
-_immediate:   equ true
+_public:      equ yes
+_hidden:      equ not _public ; change this to make all hidden words public
+_immediate:   equ yes
 
 previous_nfa: defl 0   ; initial link pointer (end of chain)
 
 hdr: macro enabled,name,immediate,alias_xt
 
-  ; enabled     = enable the header? (true,false; _public,_hidden)
+  ; enabled     = enable the header? (yes/no, _public/_hidden)
   ; name        = name string
   ; immediate   = immediate?
   ; alias_xt    = alias xt
@@ -401,12 +398,12 @@ speed: ; XXX OLD -- not needed, unless the OS is not used
 init_user_variables: ; start of data
 
                 ds 3*cw     ; reserved for multitasking
-init_s0:        dw stack_0
-init_r0:        dw return_stack_0
+init_s0:        dw stack_0 ;s0
+init_r0:        dw return_stack_0 ; r0
 init_dp:        dw initdp   ; dp
 init_dph:       dw initdph  ; dph ; XXX OLD
 init_voc_link:  dw forth.2  ; voc-link
-init_fs0:       ds cw       ; fs0 ; XXX TODO
+init_fs0:       dw float_stack_0 ; fs0 ; XXX TODO
                 ds cw       ; reserved
 
 init_user_variables.end:  ; end of data
@@ -989,7 +986,7 @@ tuck:
   push de
   jp next
 
-;  2DUP  ( x1 x2 -- x1 x2 x1 x2 )
+; 2DUP  ( x1 x2 -- x1 x2 x1 x2 )
 
   hdr _public,'2DUP'
 two_dup:
@@ -1000,7 +997,7 @@ two_dup:
   push de
   jp next
 
-;  2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
+; 2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 
   hdr _public,'2SWAP'
 two_swap:
@@ -1033,7 +1030,7 @@ two_swap:
   push de
   jp next
 
-;  2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
+; 2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
 
   hdr _public,'2OVER'
 two_over:
@@ -1041,7 +1038,7 @@ two_over:
   add hl,sp
   jp two_fetch.1
 
-;  2ROT  ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
+; 2ROT  ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
 ;  5 roll 5 roll
 
   hdr _public,'2ROT'
@@ -1055,7 +1052,7 @@ two_rot:
   dw roll
   dw exit
 
-;  2NIP  ( x1 x2 x3 x4 -- x3 x4 )
+; 2NIP  ( x1 x2 x3 x4 -- x3 x4 )
 
   hdr _public,'2NIP'
 two_nip:
@@ -1834,7 +1831,7 @@ modd:
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-;  */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> sm/rem
+; */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> sm/rem
   hdr _public,'*/MOD'
 star_slash_mod:
   call do_colon
@@ -2228,7 +2225,7 @@ d_max:
 ; }}} **********************************************************
 ; Numeric conversion {{{ 
 
-;  DECIMAL  ( -- )    10 base !
+; DECIMAL  ( -- )    10 base !
 
   hdr _public,'DECIMAL'
 decimal:
@@ -2238,7 +2235,7 @@ decimal:
   dw base,store
   dw exit
 
-;  HEX  ( -- )    16 base !
+; HEX  ( -- )    16 base !
 
   hdr _public,'HEX'
 hex:
@@ -2248,7 +2245,7 @@ hex:
   dw base,store
   dw exit
 
-;  digit  ( c base -- u -1 | 0 )
+; DIGIT  ( c base -- u -1 | 0 )
 
   hdr _hidden,'DIGIT'
 digit:
@@ -2270,7 +2267,7 @@ digit.1:
   push de
   jp true
 
-;  >NUMBER  ( d1 a1 u1 -- d2 a2 u2 )
+; >NUMBER  ( d1 a1 u1 -- d2 a2 u2 )
 ;        begin dup while over c@ base @ digit while
 ;        >r 2swap r> swap base @ um* drop rot base @
 ;        um* d+ 2swap 1 /string 1 dpl +! repeat then
@@ -2301,7 +2298,7 @@ to_number.1:
 to_number.2:
   dw exit    ; then
 
-;  NUMBER?  ( ca u -- d -1 | 0 )
+; NUMBER?  ( ca u -- d -1 | 0 )
 ;        over c@ [char] - = over 0> and dup >r 1
 ;        and /string over c@ [char] . > and 0 0
 ;        2swap ?dup if >number dpl on dup if 1-
@@ -2356,7 +2353,7 @@ number_question.4:
 number_question.5:
   dw exit
 
-;  <#  ( -- )    pad hld !
+; <#  ( -- )    pad hld !
 
   hdr _public,'<#'
 bdigs:
@@ -2365,7 +2362,7 @@ bdigs:
   dw hld,store
   dw exit
 
-;  #>  ( d -- ca u )  2drop hld @ pad over -
+; #>  ( d -- ca u )  2drop hld @ pad over -
 
   hdr _public,'#>'
 edigs:
@@ -2399,7 +2396,7 @@ hold:
   dw c_store
   dw exit
 
-;  SIGN  ( n -- )    0< if [char] - hold then
+; SIGN  ( n -- )    0< if [char] - hold then
 
   hdr _public,'SIGN'
 sign:
@@ -2412,7 +2409,7 @@ sign:
 sign.1:
   dw exit
 
-;  #  ( ud1 -- ud2 )  0 base @ um/mod >r base @ um/mod r>
+; #  ( ud1 -- ud2 )  0 base @ um/mod >r base @ um/mod r>
 ;        rot 9 over < if 7 + then [char] 0 + hold
 
   hdr _public,'#'
@@ -2440,7 +2437,7 @@ dig.1:
   dw hold
   dw exit
 
-;  #S  ( +d -- 0 0 )  begin # 2dup d0= until
+; #S  ( +d -- 0 0 )  begin # 2dup d0= until
 
   hdr _public,'#S'
 digs:
@@ -2472,7 +2469,7 @@ nhold:
 ;  decimal? ( -- flag )  base @ 10 =
 
   hdr _hidden,'DECIMAL?'
-dcmq:
+decimal_question:
   call do_colon
   dw base,fetch    ; decimal base?
   dw c_lit
@@ -2529,7 +2526,7 @@ count:
   push de
   jp push_a
 
-;  PACKED  ( ca1 u ca2 -- ca2 )
+; PACKED  ( ca1 u ca2 -- ca2 )
 ;            2dup 2>r 1+ swap move 2r> tuck c!
 
   hdr _public,'PACKED'
@@ -2550,7 +2547,7 @@ packed:
   push hl
   jp next
 
-;  PLACE  ( ca1 u ca2 -- )  packed drop
+; PLACE  ( ca1 u ca2 -- )  packed drop
 
   hdr _public,'PLACE'
 place:
@@ -2846,7 +2843,7 @@ string_1_addr equ $+1
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-;  +STRING  ( ca1 u1 ca2 u2 -- ca2 u3)
+; +STRING  ( ca1 u1 ca2 u2 -- ca2 u3)
 ;          2swap swap 2over + 2 pick cmove +
 
   hdr _public,'+STRING'  ; uses temps 1-3
@@ -2876,7 +2873,7 @@ t2: ds cw
 t3: ds cw
 
 ; XXX NEW -- DX-Forth 4.09
-;  S.R  ( ca n1 n2 -- )  over - spaces type
+; S.R  ( ca n1 n2 -- )  over - spaces type
 
   hdr _public,'S.R'    ; type string right-justified
 s_dot_r:
@@ -3735,7 +3732,7 @@ ques:
   hdr _public,'.'
 dot:
   call do_colon
-;  dw dcmq ; XXX FIXME -- undefined
+;  dw decimal_question ; XXX FIXME -- undefined
   dw question_branch,dot.1
   dw s_to_d,ddot
   dw exit
@@ -3746,7 +3743,7 @@ dot.1:
 ; }}} **********************************************************
 ; DOS functions {{{
 
-;  FDOS  ( DE u -- HL A )
+; FDOS  ( DE u -- HL A )
 
   hdr _public,'FDOS'
 fdos:
@@ -3760,7 +3757,7 @@ fdos:
   ; XXX TODO
   jp next
 
-;  BDOS  ( DE u -- A )
+; BDOS  ( DE u -- A )
 
   hdr _public,'BDOS'
 bdos:
@@ -3770,7 +3767,7 @@ bdos:
 ;;  dw fdos,nip
   dw exit
 
-;  BIOS  ( BC u -- A )
+; BIOS  ( BC u -- A )
 
   hdr _public,'BIOS'
 bios:
@@ -3786,7 +3783,7 @@ bios:
 ;;  pop  bc
 ;;  jp push_a
 
-;  BIOSHL  ( DE BC u -- HL )
+; BIOSHL  ( DE BC u -- HL )
 
   hdr _public,'BIOSHL'
 ;biosh:
@@ -3804,7 +3801,7 @@ bios:
 ;;  push hl
   jp next
 
-;  PC@  ( pa -- x )
+; PC@  ( pa -- x )
 
   hdr _public,'PC@'    ; FIG P@
 p_c_fetch:
@@ -3815,7 +3812,7 @@ p_c_fetch:
 p_c_fetch.1  equ  $-1
   jp push_a
 
-;  PC!  ( x pa -- )
+; PC!  ( x pa -- )
 
   hdr _public,'PC!'    ; FIG P!
 p_c_store:
@@ -3828,7 +3825,7 @@ p_c_store:
 p_c_store.1  equ  $-1
   jp next
 
-;  ?terminal  ( -- flag )
+; ?TERMINAL  ( -- flag )
 
   hdr _hidden,'?TERMINAL'
 qterm:
@@ -3839,7 +3836,7 @@ qterm:
 ; XXX TODO
   dw exit
 
-;  conin  ( -- c )
+; CONIN  ( -- c )
 ;
 ;       begin key? until 0 3 bios
 ;       (iofn+cw) @ over = if 0 bdos then
@@ -3876,7 +3873,7 @@ bcono:
   ; XXX TODO
   dw exit
 
-;  conout  ( c -- )
+; CONOUT  ( c -- )
 
   hdr _hidden,'CONOUT'
 conout:
@@ -3890,7 +3887,7 @@ conout:
 ;;  jp (hl)
   jp next
 
-;  lstout  ( c -- )
+; LSTOUT  ( c -- )
 
   hdr _hidden,'LSTOUT'
 lstout:
@@ -3939,7 +3936,7 @@ paren_ms.2:
   dec  de
   jp paren_ms.1
 
-;  (BEEP)  ( -- )
+; (BEEP)  ( -- )
 
   hdr _hidden,'(BEEP)'
 paren_beep:
@@ -3947,20 +3944,20 @@ paren_beep:
   ; XXX TODO
   dw exit
 
-;  MS  ( ms -- )
+; MS  ( ms -- )
 
   hdr _public,'MS'
 ms:
   call fetch_execute
   dw paren_ms
 
-;  SOUND  ( freq ms -- )
+; SOUND  ( freq ms -- )
 ;
 ;  header  1,'SOUND'
 ;sound:  call fetch_execute
 ;  dw sound0
 
-;  BEEP  ( -- )
+; BEEP  ( -- )
 
   hdr _public,'BEEP'
 beep:
@@ -3970,7 +3967,7 @@ beep:
 cpbuf:
   ds 16
 
-;  AT-XY  ( u1 u2 -- )  position cursor at col u1, row u2
+; AT-XY  ( u1 u2 -- )  position cursor at col u1, row u2
 
   hdr _public,'AT-XY'
 atxy:
@@ -4054,7 +4051,7 @@ atxy:
 ;;  db 100,10,1
 
 ; XXX NEW
-;  CLS  ( -- )
+; CLS  ( -- )
   hdr _public,'CLS'
 ;  XXX TODO -- call it from 'PAGE'
 
@@ -4074,7 +4071,7 @@ cls:
 ;;  dw atxy.2
 ;;  dw exit
 
-;  NORMAL  ( -- )
+; NORMAL  ( -- )
 
   hdr _public,'NORMAL'
 vnorm:
@@ -4085,7 +4082,7 @@ vnorm:
 ;;  ld de,tceold
 ;;  jp atxy.1
 
-;  HIGHLIGHT  ( -- )
+; HIGHLIGHT  ( -- )
 
   hdr _public,'HIGHLIGHT'
 hilit:
@@ -4094,7 +4091,7 @@ hilit:
 ;;  ld hl,thivid
 ;;  jp vnorm.1
 
-;  CLEAR-LINE  ( -- )
+; CLEAR-LINE  ( -- )
 
   hdr _public,'CLEAR-LINE'
 cleol:
@@ -4103,7 +4100,7 @@ cleol:
 ;;  ld hl,tceol
 ;;  jp vnorm.1
 
-;  INSERT-LINE  ( -- )
+; INSERT-LINE  ( -- )
 
   hdr _public,'INSERT-LINE'
 insln:
@@ -4114,7 +4111,7 @@ insln:
 ;;  ld de,tclsd
 ;;  jp atxy.1
 
-;  DELETE-LINE  ( -- )
+; DELETE-LINE  ( -- )
 
   hdr _public,'DELETE-LINE'
 delln:
@@ -4300,7 +4297,7 @@ cr:
   ld a,cr_char
   jp emit_a
 
-;  PAGE  ( -- )
+; PAGE  ( -- )
 
   hdr _public,'PAGE'
 page:
@@ -5369,7 +5366,7 @@ fbody:
   jp plus_de
 
 ; XXX NEW -- DX-Forth 4.09
-;  n>count  ( nfa -- ha len )  aka (name) n>count
+; N>COUNT  ( nfa -- ha len )  aka (name) n>count
 
   hdr _hidden,'N>COUNT',,paren_name
 ncnt: equ  paren_name
@@ -5389,7 +5386,7 @@ ncnt: equ  paren_name
 ;;  jp push_hl
 
 ; XXX NEW -- DX-Forth 4.09
-;  n>link  ( nfa -- lfa )    n>count +
+; N>LINK  ( nfa -- lfa )    n>count +
 
   hdr _public,'N>LINK'
 nlnk:
@@ -5468,7 +5465,7 @@ dalias:
 ;;  dw exit    ; not found
 
 ; XXX NEW -- DX-Forth 4.09
-;  >name  ( xt -- nfa | 0 )
+; >NAME  ( xt -- nfa | 0 )
 ;        voc-link begin @ dup while tuck cell- w>name
 ;        begin ?dup while -alias if 2dup name> = if
 ;        -rot 2drop exit then then n>name repeat swap
@@ -5518,7 +5515,7 @@ to_name.5:
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-;  (NAME)  ( nfa -- ca u )  count 31 and
+; (NAME)  ( nfa -- ca u )  count 31 and
 
   hdr _public,'(NAME)'
 paren_name:
@@ -5793,7 +5790,7 @@ postp.1:
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09 -- modified
-;  (ACCEPT)  ( ca +n1 -- +n2)
+; (ACCEPT)  ( ca +n1 -- +n2)
 ;        0 begin key dup >r dup bl 127 within 2over -
 ;        and if dup emit over 4 pick + c! 1+ else 2dup
 ;        dup bs_char = swap esc = or and if esc = if
@@ -6028,7 +6025,7 @@ pwa:
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-;  wpack  ( ca1 +n -- ca2 )
+; WPACK  ( ca1 +n -- ca2 )
 ;        255 min (hm-5) over - dup to pwa packed
 ;        bl affix
 
@@ -6051,7 +6048,7 @@ wpack:
   dw bl,affix     ; bl affix \ add a trailing blank
   dw exit
 
-;  WORD  ( c -- ca )
+; WORD  ( c -- ca )
 
   hdr _public,'WORD'
 word:
@@ -6060,7 +6057,7 @@ word:
   dw wpack            ; wpack
   dw exit
 
-;  bl-word  ( -- ca )
+; BL-WORD  ( -- ca )
 
   hdr _hidden,'BL-WORD'
 bl_word:
@@ -6159,7 +6156,7 @@ bslss:
   dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-;  LINK,  ( a -- )    here over @ , swap !
+; LINK,  ( a -- )    here over @ , swap !
 
   hdr _public,'LINK,'
 linkc:
@@ -6191,7 +6188,7 @@ linkc:
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-;  WORDLIST  ( -- wid )  $2001 , here 0 , voc-link link, 0 ,
+; WORDLIST  ( -- wid )  $2001 , here 0 , voc-link link, 0 ,
 
   hdr _hidden,'WORDLIST'
 wlist:
@@ -6967,10 +6964,6 @@ cold:
 ;;  dw sys,off     ; default is APPLICATION
 
 ; ----------------------- XXX TMP -- for testing
-;  dw noop
-;  dw lit,2
-;  dw border
-;  dw decimal     ; default base
 
   ; XXX TEST -- it works:
 ;  dw lit,-10
@@ -6982,6 +6975,7 @@ cold:
 
   dw cls
   dw bootmessage
+  dw decimal     ; default base
 
   ; XXX TEST -- it works:
 ;  dw lit,sys_last_k
@@ -7091,7 +7085,7 @@ do_f_identify_patch:
 ; }}} **********************************************************
 ; Dictionary support {{{
 
-;  FREEZE  ( -- )
+; FREEZE  ( -- )
 
   hdr _public,'FREEZE'
 freeze:
@@ -7121,7 +7115,7 @@ freeze:
 ;;  dw comma
 ;;  dw exit
 
-;  xdp  ( adr -- adr xdp )  dup limit u< if dp else dph then
+; XDP  ( adr -- adr xdp )  dup limit u< if dp else dph then
 
   hdr _hidden,'XDP'
 xdp:
@@ -7184,7 +7178,7 @@ nameq:
   dw question_protected
   dw exit
 
-;  lfind  ( wid nfa -- lfa |0 )  swap begin 2dup @ - while @
+; LFIND  ( wid nfa -- lfa |0 )  swap begin 2dup @ - while @
 ;          dup while n>link repeat then nip
 
   ; find link field containing nfa, 0=none
@@ -7205,7 +7199,7 @@ lfind.2:
   dw nip
   dw exit
 
-;  BEHEAD  ( "name1" "name2" -- )  name? nip name? nip 2dup u< if swap
+; BEHEAD  ( "name1" "name2" -- )  name? nip name? nip 2dup u< if swap
 ;          then n>name get-context rot lfind !
 
   hdr _public,'BEHEAD'
@@ -7224,7 +7218,7 @@ behead.1:
   dw store
   dw exit
 
-;  ?voc  ( flag -- )    abort" invalid vocabulary"
+; ?VOC  ( flag -- )    abort" invalid vocabulary"
 
   hdr _hidden,'?VOC'
 question_voc:
@@ -7259,7 +7253,7 @@ chain:
   dw store
   dw exit
 
-;  (forget)  ( nfa dp -- )  dp ! >r voc-link begin @ dup cell+ @ r@
+; (FORGET)  ( nfa dp -- )  dp ! >r voc-link begin @ dup cell+ @ r@
 ;        u< until dup voc-link ! begin dup cell-
 ;        dup @ begin dup r@ u< 0= while -alias if
 ;        dup name> dp @ umin dp ! then n>name
@@ -7310,7 +7304,7 @@ paren_forget.6:
 ;;  dw pruns    ; run prunes chain ; XXX OLD
   dw exit
 
-;  EMPTY  ( -- )    forth definitions (init_dp) 2@ (forget)
+; EMPTY  ( -- )    forth definitions (init_dp) 2@ (forget)
 
   hdr _public,'EMPTY'
 empty:
@@ -7321,7 +7315,7 @@ empty:
   dw paren_forget
   dw exit
 
-;  FORGET  ( "name" -- )  get-current context ! name? -alias 0=
+; FORGET  ( "name" -- )  get-current context ! name? -alias 0=
 ;        abort" is alias" swap limit over u> if
 ;        drop dp @ then (forget)
 
@@ -7344,7 +7338,7 @@ forget.1:
   dw paren_forget
   dw exit
 
-;  MARKER  ( "name" -- )  sys? system create sys !
+; MARKER  ( "name" -- )  sys? system create sys !
 
   hdr _public,'MARKER'
 marker:
@@ -7620,7 +7614,7 @@ dzx_forth:
 ; }}} **********************************************************
 ; Files {{{
 
-;  RESET-DISKS  ( -- )
+; RESET-DISKS  ( -- )
 
   hdr _public,'RESET-DISKS'
 reset_disks:
@@ -7635,7 +7629,7 @@ reset_disks:
   call bdoss
   jp next
 
-;  >DRIVE  ( u1 -- u2 )  ?dup if 1- else 0 25 bdos then
+; >DRIVE  ( u1 -- u2 )  ?dup if 1- else 0 25 bdos then
 
   hdr _public,'>DRIVE'
 to_drive:
@@ -7645,7 +7639,7 @@ to_drive:
   call m,get_current_drive
   jp push_a
 
-;  PATH  ( u1 -- ca u2 ior )
+; PATH  ( u1 -- ca u2 ior )
 ;        255 32 bdos 0 <# [char] : hold #s rot >drive
 ;        [char] A + hold #> 0
 
@@ -7670,7 +7664,7 @@ path:
   dw zero
   dw exit
 
-;  -PATH  ( a1 u1 -- a2 u2 )
+; -PATH  ( a1 u1 -- a2 u2 )
 ;        2dup [char] : scan dup if 1 /string 2swap
 ;        then 2drop
 
@@ -7688,7 +7682,7 @@ dpath.1:
   dw two_drop
   dw exit
 
-;  filetype?  ( a1 u1 -- u2 )  -path [char] . scan nip
+; FILETYPE?  ( a1 u1 -- u2 )  -path [char] . scan nip
 
   hdr _hidden,'FILETYPE?'  ; get filetype length
 filetype_question:
@@ -7699,7 +7693,7 @@ filetype_question:
   dw scan,nip
   dw exit
 
-;  +EXT  ( a1 u1 a2 u2 -- a3 u3 )
+; +EXT  ( a1 u1 a2 u2 -- a3 u3 )
 ;        2over filetype? if 2drop exit then 3 min
 ;        s" ." 2rot -trailing (filename_size-5) min zbuf
 ;        @ 1+ 0 +string +string +string
@@ -7727,7 +7721,7 @@ plus_ext.1:
   dw pstr
   dw exit
 
-;  -EXT  ( a1 u1 -- a2 u2 )  2dup filetype? -
+; -EXT  ( a1 u1 -- a2 u2 )  2dup filetype? -
 
   hdr _public,'-EXT'
 minus_ext:
@@ -7736,7 +7730,7 @@ minus_ext:
   dw minus
   dw exit
 
-;  SETFCB  ( a u fcb-a -- user# )
+; SETFCB  ( a u fcb-a -- user# )
 
   hdr _public,'SETFCB'
 sfcb:
@@ -7903,14 +7897,14 @@ sfcb.19:
 old_user:
   db 255    ; 255 = ignore
 
-;  GETUSR  ( -- u )  get user
+; GETUSR  ( -- u )  get user
 
   hdr _public,'GETUSR'
 getusr:
   call get_current_user
   jp push_a
 
-;  SETUSR  ( u -- )  set user
+; SETUSR  ( u -- )  set user
 
   hdr _public,'SETUSR'
 setusr:
@@ -7923,14 +7917,14 @@ setusr.1:
   call nz,set_current_user
   jp next
 
-;  RSTUSR  ( -- )    restore user
+; RSTUSR  ( -- )    restore user
 
   hdr _public,'RSTUSR'
 rstusr:
   ld a,(old_user)
   jp setusr.1
 
-;  REC@  ( a -- +d )  dup >r @ r> 2+ c@ 7 0 do d2* loop
+; REC@  ( a -- +d )  dup >r @ r> 2+ c@ 7 0 do d2* loop
 
   hdr _public,'REC@'
 rec_fetch:
@@ -7956,7 +7950,7 @@ rec_fetch:
   push de
   jp next
 
-;  REC!  ( +d a -- )  >r 7 0 do d2/ loop r@ 2+ c! r> !
+; REC!  ( +d a -- )  >r 7 0 do d2/ loop r@ 2+ c! r> !
 
   hdr _public,'REC!'
 rec_store:
@@ -7982,7 +7976,7 @@ rec_store:
   pop bc
   jp next
 
-;  >FNAME  ( a1 u -- a2 )
+; >FNAME  ( a1 u -- a2 )
 ;
 ;   (filename_size-1) min zbuf @ packed 0 affix
 ;   zbuf 2@ swap zbuf 2!
@@ -8001,7 +7995,7 @@ tfnam:
   dw zbuf,two_store
   dw exit
 
-;  fh  ( -- a )
+; FH  ( -- a )
 
   hdr _hidden,'FH'
 fh:
@@ -8009,7 +8003,7 @@ fh:
 fh1:
   dw 0
 
-;  /fh  ( -- )    #fcb (file_handle_size) * hbuf over - swap erase
+; /FH  ( -- )    #fcb (file_handle_size) * hbuf over - swap erase
 
   hdr _hidden,'/FH'
 zfh:
@@ -8022,7 +8016,7 @@ zfh:
   push de
   jp erase
 
-;  use  ( -- a )  fh (file_handle_size) negate * hbuf +
+; USE  ( -- a )  fh (file_handle_size) negate * hbuf +
 
   hdr _hidden,'USE'
 use:
@@ -8034,7 +8028,7 @@ use:
   push hl
   jp next
 
-;  uid  ( -- a )  use 1+
+; UID  ( -- a )  use 1+
 
   hdr _hidden,'UID'
 uid:
@@ -8042,7 +8036,7 @@ uid:
   dw use,one_plus
   dw exit
 
-;  fcb  ( -- a )    use 6 +
+; FCB  ( -- a )    use 6 +
 
   hdr _hidden,'FCB'
 fcb:
@@ -8053,7 +8047,7 @@ fcb:
   dw plus
   dw exit
 
-;  rwp@  ( -- ud )    use 2+ 2@
+; RWP@  ( -- ud )    use 2+ 2@
 
   hdr _hidden,'RWP@'
 rwp_fetch:
@@ -8062,7 +8056,7 @@ rwp_fetch:
   dw two_fetch
   dw exit
 
-;  rwp!  ( ud -- )    use 2+ 2! ;
+; RWP!  ( ud -- )    use 2+ 2! ;
 
   hdr _hidden,'RWP!'
 rwpst:
@@ -8071,7 +8065,7 @@ rwpst:
   dw two_store
   dw exit
 
-;  >IOR  ( err# -- ior )  dup if $fe00 or then
+; >IOR  ( err# -- ior )  dup if $fe00 or then
 
   hdr _public,'>IOR'
 ior:
@@ -8084,7 +8078,7 @@ ior.1:
   push hl
   jp next
 
-;  ?ior  ( flag err# -- ior )  and ior ;
+; ?IOR  ( flag err# -- ior )  and ior ;
 
   hdr _hidden,'?IOR'
 qior:
@@ -8093,7 +8087,7 @@ qior:
   dw ior
   dw exit
 
-;  getfh  ( -- fid | 0 )  #fcb 1+ begin 1- dup while dup to fh
+; GETFH  ( -- fid | 0 )  #fcb 1+ begin 1- dup while dup to fh
 ;        use c@ 0= until then
 
   hdr _hidden,'GETFH'
@@ -8113,7 +8107,7 @@ gtfh.1:
 gtfh.2:
   dw exit
 
-;  setfh  ( fid mask -- 0 | err )  swap dup 1- 0 #fcb within if to fh
+; SETFH  ( fid mask -- 0 | err )  swap dup 1- 0 #fcb within if to fh
 ;          use c@ and 0= 5 and exit then 2drop
 ;          6
 
@@ -8139,7 +8133,7 @@ stfh.1:
   db 6
   dw exit
 
-;  FILE-POSITION  ( fideid -- ud ior )  3 setfh rwp@ rot ior
+; FILE-POSITION  ( fideid -- ud ior )  3 setfh rwp@ rot ior
 
   hdr _public,'FILE-POSITION'
 fpos:
@@ -8150,7 +8144,7 @@ fpos:
   dw ior
   dw exit
 
-;  REPOSITION-FILE  ( ud fid -- ior )  3 setfh dup >r if 2drop else
+; REPOSITION-FILE  ( ud fid -- ior )  3 setfh dup >r if 2drop else
 ;              rwp! then r> ior
 
   hdr _public,'REPOSITION-FILE'
@@ -8168,7 +8162,7 @@ reposf.2:
   dw ior
   dw exit
 
-;  xf5  ( -- )
+; XF5  ( -- )
 ;  $80 fcb 5 + ctoggle
 
   hdr _hidden,'XF5'
@@ -8183,7 +8177,7 @@ xff:
   dw c_toggle
   dw exit
 
-;  FILE-SIZE  ( fid -- ud ior )  3 setfh dup 0= if uid c@ setusr
+; FILE-SIZE  ( fid -- ud ior )  3 setfh dup 0= if uid c@ setusr
 ;          xf5 fcb 16 bdos drop xf5 fcb 35
 ;          bdos drop rstusr then fcb 33 +
 ;          rec@ rot ior
@@ -8217,7 +8211,7 @@ fsiz.1:
   dw ior
   dw exit
 
-;  CLOSE-FILE  ( fid -- ior )  3 setfh dup if ior exit then use c!
+; CLOSE-FILE  ( fid -- ior )  3 setfh dup if ior exit then use c!
 ;          uid c@ setusr fcb 16 bdos rstusr 255
 ;          = 2 ?ior
 
@@ -8246,28 +8240,28 @@ closf.2:
   dw qior
   dw exit
 
-;  R/O  ( -- fam )      aka 0 r/o
+; R/O  ( -- fam )      aka 0 r/o
 
   hdr _public,'R/O',,zero
 rso: equ  zero
 
-;  W/O  ( -- fam )      aka 1 w/o
+; W/O  ( -- fam )      aka 1 w/o
 
   hdr _public,'W/O',,one
 wso: equ  one
 
-;  R/W  ( -- fam )
+; R/W  ( -- fam )
 ;  aka 2 r/w
 
   hdr _public,'R/W',,two
 read_write: equ  two
 
-;  BIN  ( fam1 -- fam2 )    aka noop bin immediate
+; BIN  ( fam1 -- fam2 )    aka noop bin immediate
 
   hdr _public,'BIN',_immediate,noop
 binn: equ  next
 
-;  open1  ( a u fam -- | x ior )
+; OPEN1  ( a u fam -- | x ior )
 ;          getfh 0= if 2drop 4 ior unnest exit
 ;          then 1+ use c! >fname count fcb
 ;          setfcb dup uid c! setusr 0 0 rwp!
@@ -8300,7 +8294,7 @@ open1.1:
   dw rwpst
   dw exit
 
-;  open2  ( fn# -- fid flag )  fh fcb rot bdos 255 = rstusr
+; OPEN2  ( fn# -- fid flag )  fh fcb rot bdos 255 = rstusr
 
   hdr _hidden,'OPEN2'
 open2:
@@ -8315,7 +8309,7 @@ open2:
   dw rstusr
   dw exit
 
-;  open3  ( flag err -- | ior )  ?ior ?dup if 0 use c! unnest then
+; OPEN3  ( flag err -- | ior )  ?ior ?dup if 0 use c! unnest then
 
   hdr _hidden,'OPEN3'
 open3:
@@ -8333,7 +8327,7 @@ open3:
 open3.1:
   dw exit
 
-;  OPEN-FILE  ( a u fam -- fid ior )
+; OPEN-FILE  ( a u fam -- fid ior )
 ;          open1 15 open2 2 open3 fcb 9 + c@
 ;          6 rshift use c@ and 1 > 5 open3 0
 
@@ -8359,7 +8353,7 @@ open_file:
   dw open3,zero
   dw exit
 
-;  CREATE-FILE  ( a u fam -- fid ior )
+; CREATE-FILE  ( a u fam -- fid ior )
 ;          open1 fcb 19 bdos drop 22 open2
 ;          5 open3 0
 
@@ -8380,7 +8374,7 @@ creatf:
   dw zero
   dw exit
 
-;  >FCB  ( a u -- fcb usr )  2dup >fname 18 + -rot 2 pick setfcb
+; >FCB  ( a u -- fcb usr )  2dup >fname 18 + -rot 2 pick setfcb
 
   hdr _public,'>FCB'
 tfcb:
@@ -8394,7 +8388,7 @@ tfcb:
   dw sfcb
   dw exit
 
-;  DELETE-FILE  ( a u -- ior )  >fcb setusr 19 bdos rstusr 255 = 2
+; DELETE-FILE  ( a u -- ior )  >fcb setusr 19 bdos rstusr 255 = 2
 ;          ?ior
 
   hdr _public,'DELETE-FILE'
@@ -8405,7 +8399,7 @@ delf:
   db 19
   dw branch,closf.2
 
-;  RENAME-FILE  ( a1 u1 a2 u2 -- ior )
+; RENAME-FILE  ( a1 u1 a2 u2 -- ior )
 ;          2swap >fcb setusr >r >fcb drop r@ c@
 ;          over c! dup 15 bdos 255 = if r@ 16 +
 ;          16 cmove r> 23 bdos 255 = 2 ?ior else
@@ -8448,14 +8442,14 @@ renf.1:
   dw rstusr
   dw exit
 
-;  offs  ( -- x )      0 value offs
+; OFFS  ( -- x )      0 value offs
 
   hdr _hidden,'OFFS'
 offs:
   call do_value
   dw 0
 
-;  setsiz  ( -- size )    rwp@ over $7F and to offs fcb 33 +
+; SETSIZ  ( -- size )    rwp@ over $7F and to offs fcb 33 +
 ;          rec! (recsiz) offs -
 
   hdr _hidden,'SETSIZ'
@@ -8475,7 +8469,7 @@ setsiz:
   dw offs,minus
   dw exit
 
-;  SETDMA  ( a -- )    26 bdos drop
+; SETDMA  ( a -- )    26 bdos drop
 
   hdr _public,'SETDMA'
 setdma:
@@ -8484,7 +8478,7 @@ setdma:
   call bdoss
   jp next
 
-;  ranrw  ( a size fn# -- a size | a u' )
+; RANRW  ( a size fn# -- a size | a u' )
 ;          fcb swap bdos if drop unnest r> then
 
   hdr _hidden,'RANRW'
@@ -8502,7 +8496,7 @@ ranrw:
 ranrw.1:
   dw exit
 
-;  rdini  ( a u fid mask -- u a u | u ior )
+; RDINI  ( a u fid mask -- u a u | u ior )
 ;          setfh ?dup if nip ior unnest exit
 ;          then tuck
 
@@ -8523,7 +8517,7 @@ rdini.1:
   dw tuck
   dw exit
 
-;  fread  ( a u1 -- a u2 )    begin dup while >r setsiz r@ umin
+; FREAD  ( a u1 -- a u2 )    begin dup while >r setsiz r@ umin
 ;          dup (recsiz) = if over setdma 33
 ;          ranrw else hbuf setdma 33 ranrw 2dup
 ;          hbuf offs + -rot cmove then dup >r +
@@ -8567,7 +8561,7 @@ fread.3:
 fread.4:
   dw exit
 
-;  wrini  ( a u fid mask -- a u | ior )
+; WRINI  ( a u fid mask -- a u | ior )
 ;          setfh ?dup if nip nip ior unnest          then
 
   hdr _hidden,'WRINI'
@@ -8585,7 +8579,7 @@ wrini:
 wrini.1:
   dw exit
 
-;  fwrite  ( a u1 -- a u2 )  begin dup while >r setsiz r@ umin dup
+; FWRITE  ( a u1 -- a u2 )  begin dup while >r setsiz r@ umin dup
 ;          (recsiz) = if over setdma else hbuf
 ;          (recsiz) $1A fill hbuf setdma fcb 33
 ;          bdos drop 2dup hbuf offs + swap cmove
@@ -8645,7 +8639,7 @@ fwrit:
 ;;fwrit.4:
 ;;  dw exit
 
-;  READ-FILE  ( a u1 fid -- u2 ior )  1 rdini uid c@ setusr fread
+; READ-FILE  ( a u1 fid -- u2 ior )  1 rdini uid c@ setusr fread
 ;          rstusr nip - 0
 
   hdr _public,'READ-FILE'
@@ -8661,7 +8655,7 @@ readf:
   dw zero
   dw exit
 
-;  WRITE-FILE  ( a u fid -- ior )  2 wrini uid c@ setusr fwrite
+; WRITE-FILE  ( a u fid -- ior )  2 wrini uid c@ setusr fwrite
 ;          rstusr nip 0<> 255 ?ior
 
   hdr _public,'WRITE-FILE'
@@ -8679,7 +8673,7 @@ writf:
   dw qior
   dw exit
 
-;  WRITE-LINE  ( ca u fileid -- ior )
+; WRITE-LINE  ( ca u fileid -- ior )
 ;        dup >r write-file ?dup if r> drop exit
 ;        then (crlf) 2 r> write-file
 
@@ -8698,7 +8692,7 @@ writl.1:
   dw writf
   dw exit
 
-;  eol?  ( a -- 2|1|0 )    c@ $0D of 2 exit then $0A of 1 exit
+; EOL?  ( a -- 2|1|0 )    c@ $0D of 2 exit then $0A of 1 exit
 ;          then drop 0
 
   hdr _hidden,'EOL?'
@@ -8711,7 +8705,7 @@ eolq:
   jp z,one
   jp zero
 
-;  READ-LINE  ( a u1 fid -- u2 flag ior )  >r over swap r> read-file
+; READ-LINE  ( a u1 fid -- u2 flag ior )  >r over swap r> read-file
 ;          ?dup if exit then 2dup over + swap
 ;          ?do i dup c@ $1A = if rot - fh
 ;          file-size drop rwp! leave then eol?
@@ -8770,7 +8764,7 @@ readl:
 fdtab:
   gfdb      ; fdb table
 
-;  sfp  ( -- a )
+; SFP  ( -- a )
 
   hdr _hidden,'SFP'
 sfp:
@@ -8780,7 +8774,7 @@ sfp.1:
 sfp.2:
   dw fdtab+cw  ; swap-file
 
-;  SWAP-FILE  ( -- )  scr @ scr# ! sfp 2@ swap sfp 2!
+; SWAP-FILE  ( -- )  scr @ scr# ! sfp 2@ swap sfp 2!
 ;        scr# @ scr ! empty-buffers
 
   hdr _public,'SWAP-FILE'
@@ -8796,7 +8790,7 @@ swapf:
   dw empty_buffers
   dw exit
 
-;  FDB  ( -- a )  (fdtab) (nfd) 0 do dup @ @ 0= if unloop exit
+; FDB  ( -- a )  (fdtab) (nfd) 0 do dup @ @ 0= if unloop exit
 ;        then cell+ loop abort" too many files"
 
   hdr _public,'FDB'
@@ -8830,7 +8824,7 @@ fdb.3:
 ;  SCR#  cell    current SCR#
 ;  FNB  'filename_size' bytes  file name
 
-;  fd  ( -- a )
+; FD  ( -- a )
 
   hdr _hidden,'FD'
 fd:
@@ -8838,7 +8832,7 @@ fd:
   dw sfp,fetch,fetch
   dw exit
 
-;  fid  ( -- a )
+; FID  ( -- a )
 
   hdr _hidden,'FID'
 fid:
@@ -8850,35 +8844,35 @@ fid.1:
   dw fd,plus
   dw exit
 
-;  blks  ( -- a )
+; BLKS  ( -- a )
 
   hdr _hidden,'BLKS'
 blks:
   ld e,cw*2    ; file size field
   jp fid.1
 
-;  scr#  ( -- a )
+; SCR#  ( -- a )
 
   hdr _hidden,'SCR#'
 snum:
   ld e,cw*3    ; current SCR# field
   jp fid.1
 
-;  fnb  ( -- a )
+; FNB  ( -- a )
 
   hdr _hidden,'FNB'
 fnb:
   ld e,cw*4    ; file name field
   jp fid.1
 
-;  buf  ( -- a )
+; BUF  ( -- a )
 
   hdr _hidden,'BUF'
 buf:
   call do_constant    ; file buffer address
   dw block_buffer
 
-;  blk#  ( -- a )
+; BLK#  ( -- a )
 
   hdr _hidden,'BLK#'
 bnum:
@@ -8886,7 +8880,7 @@ bnum:
 bnum.1:
   ds cw
 
-;  FILE?  ( -- flag )
+; FILE?  ( -- flag )
 
   hdr _public,'FILE?'
 gcfile_question:
@@ -8895,7 +8889,7 @@ gcfile_question:
   dw zero_not_equals ; 0<>
   dw exit
 
-;  LOADFILE  ( -- ca u )  fnb count
+; LOADFILE  ( -- ca u )  fnb count
 
   hdr _public,'LOADFILE'
 loadfile:
@@ -8903,7 +8897,7 @@ loadfile:
   dw fnb,count
   dw exit
 
-;  ?open  ( -- )    file? 0= abort" no file open"
+; ?OPEN  ( -- )    file? 0= abort" no file open"
 
   hdr _hidden,'?OPEN'
 qopen:
@@ -8914,7 +8908,7 @@ qopen:
   dcs 'no file open'
   dw exit
 
-;  #SCREENS  ( -- +n )  ?open blks @
+; #SCREENS  ( -- +n )  ?open blks @
 
   hdr _public,'#SCREENS'
 nscr:
@@ -8923,7 +8917,7 @@ nscr:
   dw blks,fetch
   dw exit
 
-;  EMPTY-BUFFERS  ( -- )  $7fff blk# !
+; EMPTY-BUFFERS  ( -- )  $7fff blk# !
 
   hdr _public,'EMPTY-BUFFERS'
 empty_buffers:
@@ -8931,7 +8925,7 @@ empty_buffers:
   ld (bnum.1),hl
   jp next
 
-;  UPDATE  ( -- )    ?open blk# @ $8000 or blk# !
+; UPDATE  ( -- )    ?open blk# @ $8000 or blk# !
 
   hdr _public,'UPDATE'
 update:
@@ -8943,7 +8937,7 @@ update:
   dw bnum,store
   dw exit
 
-;  blkerr  ( flag -- )  abort" block r/w error"
+; BLKERR  ( flag -- )  abort" block r/w error"
 
   hdr _hidden,'BLKERR'
 blkerr:
@@ -8952,7 +8946,7 @@ blkerr:
   dcs 'block r/w error'
   dw exit
 
-;  blk-rw  ( +n mode -- )  >r b/buf um* fid @ reposition-file blkerr
+; BLK-RW  ( +n mode -- )  >r b/buf um* fid @ reposition-file blkerr
 ;        buf b/buf fid @ r> if write-file else
 ;        read-file blkerr b/buf < then blkerr
 
@@ -8978,7 +8972,7 @@ blkrw.2:
   dw blkerr
   dw exit
 
-;  ?blk  ( +n -- +n )  dup #screens 0 within
+; ?BLK  ( +n -- +n )  dup #screens 0 within
 ;        abort" block out of range"
 
   hdr _hidden,'?BLK'
@@ -8991,7 +8985,7 @@ qblk:
   dcs 'block out of range'
   dw exit
 
-;  SAVE-BUFFERS  ( -- )  ?open blk# @ 0< if blk# @ $7fff and
+; SAVE-BUFFERS  ( -- )  ?open blk# @ 0< if blk# @ $7fff and
 ;        dup blk# ! ?blk 1 blk-rw then
 
   hdr _public,'SAVE-BUFFERS'
@@ -9011,7 +9005,7 @@ save_buffers:
 savbuf.1:
   dw exit
 
-;  FLUSH  ( -- )    save-buffers empty-buffers
+; FLUSH  ( -- )    save-buffers empty-buffers
 
   hdr _public,'FLUSH'
 flush:
@@ -9019,7 +9013,7 @@ flush:
   dw save_buffers,empty_buffers
   dw exit
 
-;  BUFFER  ( +n -- a )  save-buffers ?blk blk# ! buf
+; BUFFER  ( +n -- a )  save-buffers ?blk blk# ! buf
 
   hdr _public,'BUFFER'
 buffer:
@@ -9030,7 +9024,7 @@ buffer:
   dw buf
   dw exit
 
-;  BLOCK  ( +n -- a )  ?open blk# @ $7fff and over - if dup
+; BLOCK  ( +n -- a )  ?open blk# @ $7fff and over - if dup
 ;        buffer drop 0 blk-rw else drop then buf
 
   hdr _public,'BLOCK'
@@ -9050,7 +9044,7 @@ block.2:
   dw buf
   dw exit
 
-;  -->  ( -- )    blk @ 0= abort" loading only" (refill) drop
+; -->  ( -- )    blk @ 0= abort" loading only" (refill) drop
 ;        ;immediate
 
   hdr _public,'-->',_immediate
@@ -9063,7 +9057,7 @@ next_block:
   dw paren_refill,drop
   dw exit
 
-;  (thru)  ( +n1 +n2 -- )  1+ swap ?do i block b/buf i (evaluate) loop
+; (THRU)  ( +n1 +n2 -- )  1+ swap ?do i block b/buf i (evaluate) loop
 
   hdr _hidden,'(THRU)'
 paren_thru:
@@ -9078,7 +9072,7 @@ paren_thru.1:
 paren_thru.2:
   dw exit
 
-;  THRU  ( +n1 +n2 -- )  (thru) ?block
+; THRU  ( +n1 +n2 -- )  (thru) ?block
 
   hdr _public,'THRU'
 thru:
@@ -9087,7 +9081,7 @@ thru:
   dw question_block
   dw exit
 
-;  LOAD  ( +n -- )   dup thru
+; LOAD  ( +n -- )   dup thru
 
   hdr _public,'LOAD'
 load:
@@ -9096,14 +9090,14 @@ load:
   push hl
   jp thru
 
-;  fnbuf  ( -- a )
+; FNBUF  ( -- a )
 
   hdr _hidden,'FNBUF'
 fnbuf:
   call do_create    ; current file handle
   ds filename_size
 
-;  (fbk)  ( +n -- )  #screens 2dup u< if drop dup loadfile -ext
+; (FBK)  ( +n -- )  #screens 2dup u< if drop dup loadfile -ext
 ;        s" $$$" +ext fnbuf place fnbuf count w/o
 ;        create-file throw over 0 ?do dup i block
 ;        b/buf rot write-file throw loop close-file
@@ -9157,7 +9151,7 @@ pfbk.4:
 pfbk.5:
   dw exit
 
-;  FILEBLOCKS  ( +n -- )  ['] (fbk) catch abort" can't resize file"
+; FILEBLOCKS  ( +n -- )  ['] (fbk) catch abort" can't resize file"
 
   hdr _public,'FILEBLOCKS'
 fbloc:
@@ -9168,7 +9162,7 @@ fbloc:
   dcs "can't resize file"
   dw exit
 
-;  CLOSE  ( -- )
+; CLOSE  ( -- )
 ;  file? if flush fid @ close-file drop
 ;        fd off then empty-buffers
 ;
@@ -9188,7 +9182,7 @@ close.1:
   dw empty_buffers
   dw exit
 
-;  CLOSE-ALL  ( -- )  close (fdtab) nfd 0 do dup sfp ! close
+; CLOSE-ALL  ( -- )  close (fdtab) nfd 0 do dup sfp ! close
 ;        cell+ loop drop
 
   hdr _public,'CLOSE-ALL'
@@ -9210,7 +9204,7 @@ closa.2:
   dw drop
   dw exit
 
-;  lastfile  ( -- ca u )  zbuf cell+ @ count
+; LASTFILE  ( -- ca u )  zbuf cell+ @ count
 
   hdr _hidden,'LASTFILE'
 lastfile:
@@ -9219,7 +9213,7 @@ lastfile:
   dw fetch,count
   dw exit
 
-;  .lastfile  ( -- )  beep cr lastfile type space
+; .LASTFILE  ( -- )  beep cr lastfile type space
 
   hdr _hidden,'.LASTFILE'
 dot_lastfile:
@@ -9229,7 +9223,7 @@ dot_lastfile:
   dw space
   dw exit
 
-;  ?create  ( ca u -- fileid )
+; ?CREATE  ( ca u -- fileid )
 ;        r/o open-file 0= tuck if close-file then
 ;        drop if .lastfile ." exists - delete it? "
 ;        y/n 0= if abort then then lastfile r/w
@@ -9257,7 +9251,7 @@ question_create.2:
   dcs "can't create file"
   dw exit
 
-;  init-scr  ( fileid ior -- )  if drop exit then fdb sfp ! fd on
+; INIT-SCR  ( fileid ior -- )  if drop exit then fdb sfp ! fd on
 ;          dup fid ! file-size drop b/buf
 ;          um/mod nip blks ! lastfile fnb
 ;          place loadfile upper empty-buffers
@@ -9280,7 +9274,7 @@ init_scr.1:
   dw empty_buffers
   dw exit
 
-;  OPEN  ( ca u fam -- ior )
+; OPEN  ( ca u fam -- ior )
 ; open a screen file
 ;         fdb drop >r s" scr" +ext r>
 ;         open-file tuck init-scr
@@ -9298,7 +9292,7 @@ open:
   dw init_scr
   dw exit
 
-;  (open)  ( ca u -- )    r/w open abort" can't open file"
+; (OPEN)  ( ca u -- )    r/w open abort" can't open file"
 
   hdr _hidden,'(OPEN)'
 popen:
@@ -9308,7 +9302,7 @@ popen:
   dcs "can't open file"
   dw exit
 
-;  GETFILENAME  ( -- ca u )  token dup 0= abort" specify filename"
+; GETFILENAME  ( -- ca u )  token dup 0= abort" specify filename"
 
   hdr _public,'GETFILENAME'
 getfilename:
@@ -9319,7 +9313,7 @@ getfilename:
   dcs 'specify filename'
   dw exit
 
-;  USING  ( "filename[.SCR]" -- )
+; USING  ( "filename[.SCR]" -- )
 ;         close getfilename r/w open ?dup if
 ;          .lastfile -507 = if ." access denied"
 ;          0 else ." not found - create it? "
@@ -9356,7 +9350,7 @@ using.4:
   dw zero,zero,scr,two_store
   dw exit
 
-;  LOADED  ( +n1 +n2 ca u -- )  sfp @ >r (open) (thru) close r>
+; LOADED  ( +n1 +n2 ca u -- )  sfp @ >r (open) (thru) close r>
 ;          sfp ! ?block
 
   hdr _public,'LOADED'
@@ -9372,7 +9366,7 @@ loaded:
   dw question_block
   dw exit
 
-;  FLOAD  ( +n "filename[.SCR]" -- )  dup getfilename loaded
+; FLOAD  ( +n "filename[.SCR]" -- )  dup getfilename loaded
 
   hdr _public,'FLOAD'
 fload:
@@ -9382,7 +9376,7 @@ fload:
   dw loaded
   dw exit
 
-;  SAVE  ( "filename[.COM]" -- )
+; SAVE  ( "filename[.COM]" -- )
 ;        0 0 freeze getfilename s" com" +ext
 ;        ?create >r over swap boot 2! (cold.6) (zb1)
 ;        dup (zbsiz*2) erase (cold.7-cold.6) cmove
@@ -9434,7 +9428,7 @@ save:
 ;;  dcs  "can't save file"
   dw exit
 
-;  TURNKEY  ( "bootword" "filename[.COM]" -- )
+; TURNKEY  ( "bootword" "filename[.COM]" -- )
 
   hdr _public,'TURNKEY'
 turnkey:
@@ -9447,7 +9441,7 @@ turnkey:
 ;;  dw tick
 ;;  dw branch,save.1
 
-;  TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
+; TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
 
   hdr _public,'TURNKEY-SYSTEM'
 turnkey_system:
@@ -9523,7 +9517,7 @@ normal:
 
   if floating_point_support
 
-;  -FP  ( -- a )    marker -FP
+; -FP  ( -- a )    marker -FP
 
   hdr _public,'-FP'
 dfp:
@@ -9549,7 +9543,7 @@ floats:
   push hl
   jp next
 
-;  FALIGN  ( -- )      aka noop falign immediate
+; FALIGN  ( -- )      aka noop falign immediate
 
   hdr _public,'FALIGN',_immediate,noop
 falign: equ  next
@@ -9559,7 +9553,7 @@ falign: equ  next
   hdr _public,'FALIGNED',_immediate,noop
 falignd: equ  next
 
-;  F,  (F: r -- ) or ( r -- )  , ,
+; F,  (F: r -- ) or ( r -- )  , ,
 
   hdr _public,'F,'
 fcomm:
@@ -9567,14 +9561,14 @@ fcomm:
   dw comma,comma
   dw exit
 
-;  FLITERAL  ( -- r )
+; FLITERAL  ( -- r )
   ; aka fliteral 2literal immediate
 
   hdr _public,'FLITERAL',_immediate,two_literal
 f_literal equ  two_literal
 f_lit:    equ  two_lit
 
-;  FCONSTANT  ( -- r )
+; FCONSTANT  ( -- r )
   ; aka 2constant fconstant
 
   hdr _public,'FCONSTANT',,two_constant
@@ -9582,7 +9576,7 @@ f_constant: equ  two_constant
 
 do_f_constant: equ  two_fetch
 
-;  FVARIABLE  ( -- fa )
+; FVARIABLE  ( -- fa )
 ;  aka 2variable fvariable
 
   hdr _public,'FVARIABLE',,two_variable
@@ -9597,52 +9591,52 @@ fdepth:
   dw two_slash
   dw exit
 
-;  FDROP  ( r -- )
+; FDROP  ( r -- )
 
   hdr _public,'FDROP',,two_drop  ; aka 2drop fdrop
 f_drop: equ  two_drop
 
-;  FDUP  ( r -- r r )
+; FDUP  ( r -- r r )
 
   hdr _public,'FDUP',,two_dup    ; aka 2dup fdup
 f_dup: equ  two_dup
 
-;  FSWAP  ( r1 r2 -- r2 r1 )
+; FSWAP  ( r1 r2 -- r2 r1 )
 
   hdr _public,'FSWAP',,two_swap  ; aka 2swap fswap
 f_swap: equ  two_swap
 
-;  FOVER  ( r1 r2 -- r1 r2 r1 )
+; FOVER  ( r1 r2 -- r1 r2 r1 )
 
   hdr _public,'FOVER',,two_over  ; aka 2over fover
 f_over: equ  two_over
 
-;  FROT  ( r1 r2 r3 -- r2 r3 r1 )
+; FROT  ( r1 r2 r3 -- r2 r3 r1 )
 
   hdr _public,'FROT',,two_rot    ; aka 2rot frot
 f_rot: equ  two_rot
 
-;  F@  ( fa -- r )
+; F@  ( fa -- r )
 
   hdr _public,'F@',,two_fetch    ; aka 2@ f@
 f_fetch: equ  two_fetch
 
-;  F!  ( r fa -- )
+; F!  ( r fa -- )
 
   hdr _public,'F!',,two_store    ; aka 2! f!
 f_store: equ  two_store
 
-;  FPICK  ( +n -- r )  floats sp@ cell+ + f@
+; FPICK  ( +n -- r )  floats sp@ cell+ + f@
 
   hdr _public,'FPICK'
 fpick:
   call do_colon
   dw floats
-;   if  fstack
-;  dw fsp,fetch
-;   else
-  dw sp_fetch,cell_plus
-;   endif
+  if  separated_f_stack
+    dw fsp,fetch
+  else
+    dw sp_fetch,cell_plus
+  endif
   dw plus,f_fetch
   dw exit
 
@@ -10630,7 +10624,7 @@ rnd:
   call fad
   jp flr.1
 
-;  FABS  ( r1 -- r2 )
+; FABS  ( r1 -- r2 )
 
   hdr _public,'FABS'
 f_abs:
@@ -10638,7 +10632,7 @@ f_abs:
   call fab
   jp svop
 
-;  FNEGATE  ( r1 -- r2 )
+; FNEGATE  ( r1 -- r2 )
 
   hdr _public,'FNEGATE'
 fneg:
@@ -10646,7 +10640,7 @@ fneg:
   call chs
   jp svop
 
-;  D>F  ( d -- r )
+; D>F  ( d -- r )
 
   hdr _public,'D>F'
 d_to_f:
@@ -10658,7 +10652,7 @@ d_to_f:
   call flt0
   jp svop
 
-;  F>D  ( r -- d )
+; F>D  ( r -- d )
 
   hdr _public,'F>D'
 f_to_d:
@@ -10672,7 +10666,7 @@ f_to_d:
   push de
   jp next
 
-;  S>F  ( n -- r )    s>d d>f
+; S>F  ( n -- r )    s>d d>f
 
   hdr _public,'S>F'
 s_to_f:
@@ -10680,7 +10674,7 @@ s_to_f:
   dw s_to_d,d_to_f
   dw exit
 
-;  F>S  ( r -- n )    f>d d>s
+; F>S  ( r -- n )    f>d d>s
 
   hdr _public,'F>S'
 f_to_s:
@@ -10688,7 +10682,7 @@ f_to_s:
   dw f_to_d,d_to_s
   dw exit
 
-;  F0=  ( r -- flag )
+; F0=  ( r -- flag )
 
   hdr _public,'F0='
 f_zero_equals:
@@ -10697,7 +10691,7 @@ f_zero_equals:
   ex (sp),hl
   jp zero_equals
 
-;  F=  ( r1 r2 -- flag )
+; F=  ( r1 r2 -- flag )
 
   hdr _public,'F='
 f_equals:
@@ -10707,7 +10701,7 @@ f_equals:
   jp nz,false
   jp true
 
-;  F0<  ( r -- flag )
+; F0<  ( r -- flag )
 
   hdr _public,'F0<'
 f_zero_less_than:
@@ -10721,7 +10715,7 @@ f_zero_less_than:
   jp c,true    ; negative
   jp false
 
-;  F<  ( r1 r2 -- flag )
+; F<  ( r1 r2 -- flag )
 
   hdr _public,'F<'
 f_less_than:
@@ -10731,7 +10725,7 @@ f_less_than:
   jp m,true
   jp false
 
-;  F0>  ( r -- flag )
+; F0>  ( r -- flag )
 
   hdr _public,'F0>'
 f_zero_greater_than:
@@ -10742,7 +10736,7 @@ f_zero_greater_than.1:
   jp m,false
   jp true
 
-;  F>  ( r1 r2 -- flag )
+; F>  ( r1 r2 -- flag )
 
   hdr _public,'F>'
 f_greater_than:
@@ -10750,7 +10744,7 @@ f_greater_than:
   call fcmp
   jp f_zero_greater_than.1
 
-;  FMIN  ( r1 r2 -- r1 | r2 )  fover fover f< 0= if fswap then fdrop
+; FMIN  ( r1 r2 -- r1 | r2 )  fover fover f< 0= if fswap then fdrop
 
   hdr _public,'FMIN'
 f_min:
@@ -10761,7 +10755,7 @@ f_min:
   call p,lod    ; r1 >= r2
   jp svop
 
-;  FMAX  ( r1 r2 -- r1 | r2 )  fover fover f< if fswap then fdrop
+; FMAX  ( r1 r2 -- r1 | r2 )  fover fover f< if fswap then fdrop
 
   hdr _public,'FMAX'
 f_max:
@@ -10772,7 +10766,7 @@ f_max:
   call m,lod    ; r1 < r2
   jp svop
 
-;  FLOOR  ( r1 -- r2 )
+; FLOOR  ( r1 -- r2 )
 
   hdr _public,'FLOOR'
 floor:
@@ -10780,7 +10774,7 @@ floor:
   call flr
   jp svop
 
-;  FROUND  ( r1 -- r2 )
+; FROUND  ( r1 -- r2 )
 
   hdr _public,'FROUND'
 f_round:
@@ -10788,7 +10782,7 @@ f_round:
   call rnd
   jp svop
 
-;  F+  ( r1 r2 -- r3 )
+; F+  ( r1 r2 -- r3 )
 
   hdr _public,'F+'
 f_plus:
@@ -10796,7 +10790,7 @@ f_plus:
   call fad
   jp svop
 
-;  F-  ( r1 r2 -- r3 )
+; F-  ( r1 r2 -- r3 )
 
   hdr _public,'F-'
 f_minus:
@@ -10804,7 +10798,7 @@ f_minus:
   call fsu
   jp svop
 
-;  F*  ( r1 r2 -- r3 )
+; F*  ( r1 r2 -- r3 )
 
   hdr _public,'F*'
 f_star:
@@ -10812,7 +10806,7 @@ f_star:
   call fmu
   jp svop
 
-;  F/  ( r1 r2 -- r3 )
+; F/  ( r1 r2 -- r3 )
 
   hdr _public,'F/'
 f_slash:
@@ -10820,7 +10814,7 @@ f_slash:
   call fdi
   jp svop
 
-;  FRANDOM  ( r1 -- r2 )
+; FRANDOM  ( r1 -- r2 )
 
   hdr _public,'FRANDOM'
 f_random:
@@ -11060,7 +11054,7 @@ fin.18:
   ccf
   ret
 
-;  >FLOAT  ( ca u -- r true | false )
+; >FLOAT  ( ca u -- r true | false )
 
   hdr _public,'>FLOAT'
 to_float:
@@ -11088,7 +11082,7 @@ exsn:
   call do_create    ; exponent, sign
   ds 2*cw
 
-;  REPRESENT  ( r ca n -- exp sign flag )
+; REPRESENT  ( r ca n -- exp sign flag )
 ;        2dup max-precision max [char] 0 fill
 ;        max-precision min 2>r fdup f0< 0 exsn 2!
 ;        fabs fdup f0= 0= if begin fdup 1.0e f<
@@ -11162,14 +11156,14 @@ represent.7:
   dw true
   dw exit
 
-;  PRECISION  ( -- u )
+; PRECISION  ( -- u )
 
   hdr _public,'PRECISION'
 prec:
   call do_value
   dw maxsig    ; default
 
-;  SET-PRECISION  ( u -- )   1 max max-precision min to precision
+; SET-PRECISION  ( u -- )   1 max max-precision min to precision
 
   hdr _public,'SET-PRECISION'
 setpr:
@@ -11210,7 +11204,7 @@ pln:
   call do_value    ; places after decimal point
   ds cw
 
-;  (f1)  ( r -- r exp )
+; (F1)  ( r -- r exp )
 ;        fdup fbuf max-precision represent 2drop
 
   hdr _hidden,'(F1)'  ; get exponent
@@ -11221,7 +11215,7 @@ pf1:
   dw represent,two_drop  ; never error
   dw exit
 
-;  (f2)  ( exp -- offset exp' )  s>d ef# fm/mod ef# *
+; (F2)  ( exp -- offset exp' )  s>d ef# fm/mod ef# *
 
   hdr _hidden,'(F2)'  ; apply exponent factor
 pf2:
@@ -11231,7 +11225,7 @@ pf2:
   dw efn,star
   dw exit
 
-;  (f3)  ( r places -- ca u )
+; (F3)  ( r places -- ca u )
 ;                               dup to pl# 0< if precision else (f1) ef# 0>
 ;                               if 1- (f2) drop 1+ then pl# + max-precision
 ;                               min then fbuf swap represent drop to sn# to
@@ -11268,7 +11262,7 @@ pf33:
   dw bdigs
   dw exit
 
-;  (f4)  ( exp -- )  pl# 0< >r dup abs s>d r@ 0= if # then #s
+; (F4)  ( exp -- )  pl# 0< >r dup abs s>d r@ 0= if # then #s
 ;        2drop dup sign 0< r> d0= if [char] + hold
 ;        then [char] E hold
 
@@ -11299,7 +11293,7 @@ pf42:
   dw hold
   dw exit
 
-;  (f5)  ( n -- +n|0 )  0max dup fdp 2+ +!
+; (F5)  ( n -- +n|0 )  0max dup fdp 2+ +!
 
   hdr _hidden,'(F5)'  ; conditionally set flag
 pf5:
@@ -11310,7 +11304,7 @@ pf5:
   dw plus_store
   dw exit
 
-;  (f6)  ( ca u -- )  (f5) shold
+; (F6)  ( ca u -- )  (f5) shold
 
   hdr _hidden,'(F6)'  ; insert string
 pf6:
@@ -11318,7 +11312,7 @@ pf6:
   dw pf5,shold
   dw exit
 
-;  (f7)  ( n -- )    (f5) [char] 0 nhold
+; (F7)  ( n -- )    (f5) [char] 0 nhold
 
   hdr _hidden,'(F7)'  ; insert '0's
 pf7:
@@ -11329,7 +11323,7 @@ pf7:
   dw nhold
   dw exit
 
-;  (f8)  ( -- )    sn# sign 0 0 #>
+; (F8)  ( -- )    sn# sign 0 0 #>
 
   hdr _hidden,'(F8)'  ; insert sign
 pf8:
@@ -11339,7 +11333,7 @@ pf8:
   dw edigs
   dw exit
 
-;  (f9)  ( ca u1 -- ca u2 )
+; (F9)  ( ca u1 -- ca u2 )
 ;        pl# 0< if begin dup while 1- 2dup
 ;        + c@ [char] 0 - until 1+ then then
 
@@ -11361,7 +11355,7 @@ pf91:
 pf92:
   dw exit
 
-;  (fa)  ( u1 -- u1 u2 )  pl# 0< if dup else pl# then
+; (FA)  ( u1 -- u1 u2 )  pl# 0< if dup else pl# then
 
   hdr _hidden,'(FA)'
 pfaa:
@@ -11375,7 +11369,7 @@ pfaa.1:
 pfaa.2:
   dw exit
 
-;  (fb)  ( ca u n -- )  fdp cell+ off >r (f9) r@ + (fa) over -
+; (FB)  ( ca u n -- )  fdp cell+ off >r (f9) r@ + (fa) over -
 ;        (f7) (fa) min r@ - (f6) r> (fa) min (f7)
 ;        fdp 2@ or if [char] . hold then
 
@@ -11404,7 +11398,7 @@ pfbb:
 pfbb.1:
   dw exit
 
-;  (fc)  ( ca u n -- )
+; (FC)  ( ca u n -- )
 ;        >r 2dup r@ min 2swap r> /string 0 (fb) (f6)
 
   hdr _hidden,'(FC)'  ; split into int/frac and insert
@@ -11419,7 +11413,7 @@ pfcc:
   dw pf6
   dw exit
 
-;  (fd)  ( r n factor -- ca u )
+; (FD)  ( r n factor -- ca u )
 ;        to ef# (f3) ex# 1- (f2) (f4) 1+ (fc) (f8)
 
   hdr _hidden,'(FD)'  ; exponent form
@@ -11434,7 +11428,7 @@ pfdd:
   dw pf8
   dw exit
 
-;  (FS.)  ( r n -- ca u )  1 (fd)
+; (FS.)  ( r n -- ca u )  1 (fd)
 
   hdr _public,'(FS.)'
 pfsd:
@@ -11442,7 +11436,7 @@ pfsd:
   push hl
   jp pfdd
 
-;  FS.R  ( r n1 n2 -- )
+; FS.R  ( r n1 n2 -- )
 ;        >r (fs.) r> s.r
 
   hdr _public,'FS.R'
@@ -11452,7 +11446,7 @@ fsdr:
   dw pfsd
   dw branch,d_dot_r.1
 
-;  FS.  ( r -- )    -1 0 fs.r space
+; FS.  ( r -- )    -1 0 fs.r space
 
   hdr _public,'FS.'
 fsdot:
@@ -11464,7 +11458,7 @@ fsdot:
 
    if  fp_engineering_output_functions
 
-;  (FE.)  ( r -- ca u )  3 (fd)
+; (FE.)  ( r -- ca u )  3 (fd)
 
   hdr _public,'(FE.)'
 pfse:
@@ -11472,7 +11466,7 @@ pfse:
   push hl
   jp pfdd
 
-;  FE.R  ( r n1 n2 -- )  >r (fe.) r> s.r
+; FE.R  ( r n1 n2 -- )  >r (fe.) r> s.r
 
   hdr _public,'FE.R'
 fedr:
@@ -11481,7 +11475,7 @@ fedr:
   dw pfse
   dw branch,d_dot_r.1
 
-;  FE.  ( r -- )    -1 0 fe.r space
+; FE.  ( r -- )    -1 0 fe.r space
 
   hdr _public,'FE.'
 fedot:
@@ -11493,7 +11487,7 @@ fedot:
 
    endif ; fp_engineering_output_functions
 
-;  (F.)  ( r n -- ca u )
+; (F.)  ( r n -- ca u )
 ;        0 to ef# (f3) ex# dup max-precision > if
 ;        fbuf 0 0 (fb) max-precision - (f7) (f6)
 ;        else dup 0> if (fc) else abs (fb) 1 (f7)
@@ -11527,7 +11521,7 @@ paren_f_dot.3:
   dw pf8    ; then then
   dw exit
 
-;  F.R  ( r n1 n2 -- )  >r (f.) r> s.r
+; F.R  ( r n1 n2 -- )  >r (f.) r> s.r
 
   hdr _public,'F.R'
 f_dot_r:
@@ -11536,7 +11530,7 @@ f_dot_r:
   dw paren_f_dot
   dw branch,d_dot_r.1
 
-;  F.  ( r -- )    -1 0 f.r space
+; F.  ( r -- )    -1 0 f.r space
 
   hdr _public,'F.'
 f_dot:
@@ -11546,7 +11540,7 @@ f_dot:
   dw space
   dw exit
 
-;  (G.)  ( r n -- ca u )  >r (f1) -3 7 within  r> swap if (f.) else
+; (G.)  ( r n -- ca u )  >r (f1) -3 7 within  r> swap if (f.) else
 ;        (fs.) then
 
   hdr _public,'(G.)'
@@ -11567,7 +11561,7 @@ paren_g_dot.1:
 paren_g_dot.2:
   dw exit    ; then
 
-;  G.R  ( r n1 n2 -- )  >r (g.) r> s.r
+; G.R  ( r n1 n2 -- )  >r (g.) r> s.r
 
   hdr _public,'G.R'
 g_dot_r:
@@ -11575,7 +11569,7 @@ g_dot_r:
   dw to_r,paren_g_dot
   dw branch,d_dot_r.1
 
-;  G.  ( r -- )    -1 0 g.r space
+; G.  ( r -- )    -1 0 g.r space
 
   hdr _public,'G.'
 g_dot:
@@ -11857,7 +11851,7 @@ atan.10:
 atan.11:
   ds fw
 
-;  FSQRT  ( r1 -- r2 )
+; FSQRT  ( r1 -- r2 )
 
   hdr _public,'FSQRT'
 fsqr:
@@ -11865,7 +11859,7 @@ fsqr:
   call sqr
   jp svop
 
-;  FEXP  ( r1 -- r2 )
+; FEXP  ( r1 -- r2 )
 
   hdr _public,'FEXP'
 f_exp:
@@ -11873,7 +11867,7 @@ f_exp:
   call exp
   jp svop
 
-;  FLN  ( r1 -- r2 )
+; FLN  ( r1 -- r2 )
 
   hdr _public,'FLN'
 f_ln:
@@ -11881,7 +11875,7 @@ f_ln:
   call log
   jp svop
 
-;  F**  ( r1 r2 -- r3 )  fswap fln f* fexp
+; F**  ( r1 r2 -- r3 )  fswap fln f* fexp
 
   hdr _public,'F**'
 f_star_star:
@@ -11890,7 +11884,7 @@ f_star_star:
   dw f_star,f_exp
   dw exit
 
-;  FSIN  ( r1 -- r2 )
+; FSIN  ( r1 -- r2 )
 
   hdr _public,'FSIN'
 f_sin:
@@ -11898,7 +11892,7 @@ f_sin:
   call sin
   jp svop
 
-;  FCOS  ( r1 -- r2 )
+; FCOS  ( r1 -- r2 )
 
   hdr _public,'FCOS'
 f_cos:
@@ -11906,7 +11900,7 @@ f_cos:
   call cos
   jp svop
 
-;  FATAN  ( r1 -- r2 )
+; FATAN  ( r1 -- r2 )
 
   hdr _public,'FATAN'
 f_atan:
@@ -11914,14 +11908,14 @@ f_atan:
   call atan
   jp svop
 
-;  PI  ( -- r )
+; PI  ( -- r )
 
   hdr _public,'PI'
 f_pi:
   call do_f_constant
   db 0x82,0x49,0fh,0xdb  ; pi
 
-;  finit  ( -- )    max-precision set-precision fdp on
+; FINIT  ( -- )    max-precision set-precision fdp on
 
   hdr _hidden,'FINIT'
 f_init:
@@ -11930,7 +11924,7 @@ f_init:
   dw fdp,on
   dw exit
 
-;  fidentify  ( -- )
+; FIDENTIFY  ( -- )
 
   hdr _hidden,'FIDENTIFY'
 f_identify:
@@ -11939,16 +11933,16 @@ f_identify:
   dw paren_dot_quote
   db f_identify.1-$-1
   db 'Software floating-point ('
-;   if  fstack
-;  db 'separate'
-;   else
-  db 'common'
-;   endif
+  if  separated_f_stack
+    db 'separate'
+  else
+    db 'common'
+  endif
   db ' stack)'
 f_identify.1:
   dw exit
 
-;  fnumber  ( ca u -- [r] flag )
+; FNUMBER  ( ca u -- [r] flag )
 ;        2dup s" E" caps search -rot 2drop decimal?
 ;        and if >float else 2drop 0 then dup >r
 ;        state? and if postpone fliteral then r>
@@ -11964,7 +11958,7 @@ f_number:
    endif
   dw search
   dw drot,two_drop
-  dw dcmq    ; decimal base?
+  dw decimal_question ; decimal base?
   dw and_
   dw question_branch,f_number.2
 f_number.1:
