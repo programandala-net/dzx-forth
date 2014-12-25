@@ -8,8 +8,11 @@
 
 ; XXX TODO Doc: Programación en Ensamblador, by Tony Woods, p. 168, ROM routines.
 
+; XXX FIXME Problems with 'hdr' macro.
+; The last working copy is 2014122516
+
 version: macro
-  dcs 'A-00-201412252104'
+  dcs 'A-00-201412252354'
   endm
 
 ; }}} **********************************************************
@@ -24,20 +27,29 @@ yes: equ not no
 ;;rev:  equ 00  ; revision #
 ;;beta: equ no  ; beta release
 
-; Equates for conditional assembly
+; ------------------------------
+; Conditional assembly
 
-debug: equ no  ; debugging messages
-case_insensitive_names: equ yes ; forth names case insensitive
-fpeng: equ yes ; engineering output functions
-control_flow_stack_extensions:   equ yes
-warning_options:  equ yes ; warning options
+debug:                            equ no  ; debugging messages
+case_insensitive_names:           equ yes
+control_flow_stack_extensions:    equ yes
+warning_options:                  equ yes
 
-floord: equ no  ; integer division method
-floating_point_support:  equ yes ; floating point support
+floord:                           equ no  ; integer division method
+floating_point_support:           equ yes
+fp_engineering_output_functions:  equ yes
 ;fstack equ yes ; separate floating point stack XXX TODO -- try
-nfd:    equ 6   ; max open source files (min = 2)
-retro:  equ no  ; classic forth behaviours
 
+classic_Forth_behaviours:         equ no
+
+; ------------------------------
+; Config
+
+nfd:                    equ 6   ; max open source files (min = 2)
+max_open_file_handles:  equ 10
+toppru:                 defl 0  ; top prunes
+
+; ------------------------------
 ; Memory 
 
 start: equ 0x8000 ; start of DZX-Forth in memory
@@ -45,6 +57,7 @@ start: equ 0x8000 ; start of DZX-Forth in memory
 cw: equ 2 ; cell size (bytes)
 fw: equ 4 ; floating point number size (bytes)
 
+; ------------------------------
 ; Buffer sizes
 
 block_size:                   equ 1024
@@ -59,18 +72,14 @@ tib_size:                     equ 80        ; (Terminal Input Buffer)
 user_data_size:               equ 128
 word_buffer_size:             equ 31+5
 
+; ------------------------------
 ; DOS and memory ; XXX OLD
+
 dosfcb: equ 0x005c   ; default file control block
 dosbuf: equ 0x0080   ; default DTA and command-line buffer
 recsiz: equ 128   ; CP/M record size
 
-; Equates ; XXX TODO rename, organize
-
-max_open_file_handles: equ 10
-
-
-toppru: defl 0 ; top prunes
-
+; ------------------------------
 ; Floating point
 
 f_init_patch:     defl noop
@@ -96,11 +105,13 @@ f_stack_size:     defl 0 ; bytes
 
   endif
 
+; ------------------------------
 ; ZX Spectrum
 
   include zx_spectrum_system_variables.z80s
   include zx_spectrum_rom_routines.z80s
 
+; ------------------------------
 ; ASCII characters
 
 ; XXX TODO adapt
@@ -118,6 +129,7 @@ sp_char:      equ 0x20 ; space
 ; }}} **********************************************************
 ; Description {{{
 
+; ------------------------------
 ; Forth Registers
 ;
 ; Forth Z80  Forth preservation rules
@@ -130,6 +142,7 @@ sp_char:      equ 0x20 ; space
 ;       DE   Input only when push_de called.
 ;       HL   Input only when push_hl called.
 
+; ------------------------------
 ; Stack comment conventions:
 ;
 ; a       = address
@@ -153,11 +166,13 @@ sp_char:      equ 0x20 ; space
 ; orig    = address of a control structure origin
 ; fam     = file access method
 
+; ------------------------------
 ; Non Forth-83 Standard word definitions:
 ;
 ; FIG Fig-FORTH model
 ; ANS ANS FORTH Standard (document dpANS-6, June 1993)
 
+; ------------------------------
 ; Memory allocation ; XXX OLD
 
 ; The memory above LIMIT is used only by the interpreter.  This space
@@ -193,6 +208,7 @@ sp_char:      equ 0x20 ; space
 ; |   application dictionary
 ; 0x0100 |-------------
 
+; ------------------------------
 ; Header structure
 
 ; nfa db length+flags     ; length = 1..31
@@ -201,6 +217,7 @@ sp_char:      equ 0x20 ; space
 ; cfa dw code_address
 ; pfa ds ...              ; data or code
 
+; ------------------------------
 ; Memory map ; XXX TODO -- in progress
 
 ; ----- end of memory
@@ -227,30 +244,40 @@ sp_char:      equ 0x20 ; space
 ; Macros {{{
 
 ; ------------------------------
-; Macro for generating word headers
+; Word header
 
-_public:  equ true
-_hidden:  equ false ; make all hidden words public?
+alias_bit:          equ 7
+alias_mask:         equ 1 << alias_bit
+immediate_bit:      equ 6
+immediate_mask:     equ 1 << immediate_bit
+smudge_bit:         equ 5
+smudge_mask:        equ 1 << smudge_bit
+
+_public:      equ true
+_hidden:      equ false ; make all hidden words public?
+_immediate:   equ true
 
 previous_nfa: defl 0   ; initial link pointer (end of chain)
 
-hdr: macro enabled,name,immediate,fl,alias_xt
-  ; enabled  = enable the header? (0=disable)
-  ; name = name string
-  ; immediate  = immediate
-  ; fl  = application/system flag ; XXX OLD not used anymore
-  ; XXX TODO remove 'fl' from the macro header calls
-  ; alias_xt = alias xt
+hdr: macro enabled,name,immediate,alias_xt
+
+  ; enabled     = enable the header? (true,false; _public,_hidden)
+  ; name        = name string
+  ; immediate   = immediate?
+  ; alias_xt    = alias xt
+
   if enabled
 
     ; the name field
     last_nfa: defl $ ; link address for next word
     bits: defl 0
     if not nul immediate
-      bits: defl bits+0x40  ; set immediate bit
+      ; set immediate bit
+      bits: defl bits | immediate_mask
     endif
     if not nul alias_xt
-      bits: defl bits+0x80  ; set alias bit
+      ; set alias bit
+      bits: defl bits | alias_mask
     endif
     local _first ; address of the first char of the name
     local _next  ; address after the last char of the name
@@ -275,7 +302,7 @@ hdr: macro enabled,name,immediate,fl,alias_xt
 endm
 
 ; ------------------------------
-; Macro to generate a counted string
+; Counted string
 
 dcs: macro string.1,string.2,string.3,string.4 ; allow comma separated strings
   local _first,_next
@@ -294,29 +321,7 @@ dcs: macro string.1,string.2,string.3,string.4 ; allow comma separated strings
 endm
 
 ; ------------------------------
-; Macro to ignore next 1 bytes
-
-; XXX OLD -- not needed anymore
-; XXX TODO -- how does it worked?
-;;ignore.1:  macro
-;;  db 0x00fe  ; cp n
-;;   endm
-
-; ------------------------------
-; Macro to generate fdb table
-
-; XXX OLD
-;;gfdb:   macro
-;;  local _a
-;;_a: defl fdbs
-;;   rept nfd
-;;  dw _a
-;;_a: defl _a+file_descriptor_size
-;;   endm
-;;   endm
-
-; ------------------------------
-; Macro to save the IP
+; Save the IP
 
 ; This is used by words that call ROM routines.
 ; 'saved_ip' is defined in the word 'type'.
@@ -352,7 +357,7 @@ stack_0:
   ds return_stack_size
 return_stack_0:
 parsed_string_buffer:
-   if retro
+   if classic_Forth_behaviours
   ds parsed_string_buffer_size   ; buffer S"
    else
   ds parsed_string_buffer_size+word_buffer_size ; buffer S" WORD
@@ -384,9 +389,10 @@ return_stack_pointer:
   dw return_stack_0
 
 ; cpu speed (TURBO PASCAL compatible)
-speed:
+speed: ; XXX OLD -- not needed, unless the OS is not used
   dw 4   ; 1..8191 MHz
 
+; ------------------------------
 ; Init user variables
 
 ; They are copied by 'COLD' into the user data area
@@ -396,7 +402,7 @@ init_user_variables: ; start of data
 
                 ds 3*cw     ; reserved for multitasking
 init_s0:        dw stack_0
-init_r0:        ds return_stack_0
+init_r0:        dw return_stack_0
 init_dp:        dw initdp   ; dp
 init_dph:       dw initdph  ; dph ; XXX OLD
 init_voc_link:  dw forth.2  ; voc-link
@@ -404,6 +410,8 @@ init_fs0:       ds cw       ; fs0 ; XXX TODO
                 ds cw       ; reserved
 
 init_user_variables.end:  ; end of data
+
+; ------------------------------
 
 system_stack_pointer:
   ds cw
@@ -656,9 +664,9 @@ fetch_execute:
   jp z,next
   jp (hl)
 
-; clit  ( -- c )
+; CLIT  ( -- c )
 
-  hdr _hidden,'CLIT'  ; FIG
+  hdr _hidden,'CLIT'
 c_lit:
   ld a,(bc)
   inc bc
@@ -671,9 +679,9 @@ push_hl:
   push hl
   jp next
 
-; lit  ( -- n )
+; LIT  ( -- n )
 
-  hdr _hidden,'LIT'   ; FIG
+  hdr _hidden,'LIT'
 lit:
   ld a,(bc)
   ld l,a
@@ -684,7 +692,7 @@ lit:
   push hl
   jp next
 
-; 2lit  ( -- d )
+; 2LIT  ( -- d )
 
   hdr _hidden,'2LIT'
 two_lit:
@@ -995,7 +1003,7 @@ two_dup:
 ;  2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 
   hdr _public,'2SWAP'
-tswap:
+two_swap:
 ; XXX OLD -- DX-Forth 4.00
 ;;  pop de
 ;;  pop hl
@@ -1037,7 +1045,7 @@ two_over:
 ;  5 roll 5 roll
 
   hdr _public,'2ROT'
-trot:
+two_rot:
   call do_colon
   dw c_lit
   db 5
@@ -1050,7 +1058,7 @@ trot:
 ;  2NIP  ( x1 x2 x3 x4 -- x3 x4 )
 
   hdr _public,'2NIP'
-tnip:
+two_nip:
   pop hl
   pop de
   inc  sp
@@ -1068,7 +1076,7 @@ depth:
   dw sp_fetch
   dw s0,fetch
   dw swap,minus
-  dw twodiv
+  dw two_slash
   dw exit
 
 ; }}} **********************************************************
@@ -1167,7 +1175,7 @@ plus_store.1:
 
 ; MOVE  ( a1 a2 u -- )
 
-  hdr _public,'MOVE'  ; ANS
+  hdr _public,'MOVE'
 move:
   ld l,c
   ld h,b
@@ -1227,27 +1235,26 @@ off_hl:
   jp store_de_into_hl_pointer
 
 ; XXX OLD -- DX-Forth 4.00
-; TOGGLE  ( ca x -- )
-
-  hdr _public,'TOGGLE'
-toggle:
-  pop de
-  pop hl
-toggle.1:
-  ld a,(hl)
-  xor e
-  ld (hl),a
-  jp next
+;;; TOGGLE  ( ca x -- )
+;;
+;;  hdr _public,'TOGGLE'
+;;toggle:
+;;  pop de
+;;  pop hl
+;;toggle.1:
+;;  ld a,(hl)
+;;  xor e
+;;  ld (hl),a
+;;  jp next
 
 ; XXX NEW -- DX-Forth 4.09
 ; CTOGGLE  ( x ca -- )
 
   hdr _public,'CTOGGLE'
-ctog:
+c_toggle:
   pop hl
   pop de
-ctog.1:
-  ; XXX TODO jp toggle.1
+c_toggle.1:
   ld a,(hl)
   xor e
   ld (hl),a
@@ -1259,7 +1266,7 @@ ctog.1:
 ; ><  ( x1 -- x2 )
 
   hdr _public,'><'
-bswp:
+byte_swap:
   pop de
   ld h,e
   ld l,d
@@ -1370,7 +1377,7 @@ invert:
 
 ; NOT  ( x1 -- x2 )   aka 0= not
 
-  hdr _public,'NOT',,,zero_equals    ; F79 NOT
+  hdr _public,'NOT',,zero_equals    ; F79 NOT
 not_: equ zero_equals
 
 ; S>D  ( n -- d )
@@ -1389,7 +1396,7 @@ s_to_d.1:
 
 ; D>S  ( d -- n )     aka drop d>s
 
-  hdr _public,'D>S',,,drop
+  hdr _public,'D>S',,drop
 d_to_s: equ drop
 
 ; NEGATE  ( n1 -- n2 )
@@ -1487,7 +1494,7 @@ d_minus:
 
 ; M+  ( xd1 n -- xd2 )  s>d d+
 
-  hdr _public,'M+'    ; ANS
+  hdr _public,'M+'
 m_plus:
   call do_colon
   dw s_to_d,d_plus
@@ -1531,22 +1538,23 @@ two_minus:
   push hl
   jp next
 
-; multiplication primitives
+; ------------------------------
+; Multiplication primitives
 
 ; AHL <- A * DE
 
-mpyx:
+a_by_de_to_ahl:
   ld hl,0
   ld c,8
-mpyx.1:
+a_by_de_to_ahl.1:
   add hl,hl
   rla
-  jp nc,mpyx.2
+  jp nc,a_by_de_to_ahl.2
   add hl,de
   adc a,0
-mpyx.2:
+a_by_de_to_ahl.2:
   dec c
-  jp nz,mpyx.1
+  jp nz,a_by_de_to_ahl.1
   ret
 
 ; Unsigned 16*16 multiply, 32 bit result
@@ -1557,12 +1565,12 @@ hl_by_de_to_hlde_unsigned:
   push bc    ; save IP
   ld b,h
   ld a,l
-  call mpyx
+  call a_by_de_to_ahl
   push hl
   ld h,a
   ld a,b
   ld b,h
-  call mpyx
+  call a_by_de_to_ahl
   pop de
   ld c,d
   add hl,bc
@@ -1600,9 +1608,10 @@ umstr:
   push de
   jp next
 
-; M*  ( n1 n2 -- d )  2dup xor >r abs swap abs um* r> ?dnegate
+; M*  ( n1 n2 -- d )
+; 2dup xor >r abs swap abs um* r> ?dnegate
 
-  hdr _public,'M*'    ; ANS
+  hdr _public,'M*'
 mstar:
   pop de
   pop hl
@@ -1610,7 +1619,8 @@ mstar:
   push de
   jp next
 
-; *  ( x1 x2 -- x3 )  um* drop
+; *  ( x1 x2 -- x3 )
+; um* drop
 
   hdr _public,'*'
 star:
@@ -1620,7 +1630,8 @@ star:
   push de
   jp next
 
-; division primitives
+; ------------------------------
+; Division primitives
 
 usl.1:
   sub c
@@ -1754,15 +1765,15 @@ smrem.1:
 
 ; FM/MOD  ( d n1 -- n2 n3 )
 
-  hdr _public,'FM/MOD'  ; ANS
-fmmod:
+  hdr _public,'FM/MOD'
+fm_slash_mod:
   ld l,c
   ld h,b
   pop bc
   pop de
   ex (sp),hl
   ex de,hl
-fmmod.1:
+fm_slash_mod.1:
   call msm
   ld a,d
   or e
@@ -1778,22 +1789,22 @@ fmmod.1:
 ; M/MOD  ( d n1 -- n2 n3 )  fm/mod or sm/rem
 
 ; XXX OLD -- DX-Forth 4.00 -- but kept
-  hdr _hidden,'M/MOD',,,msmod
+  hdr _hidden,'M/MOD',,m_slash_mod
 
    if floord
-msmod: equ fmmod
+m_slash_mod: equ fm_slash_mod
    else
-msmod: equ smrem
+m_slash_mod: equ smrem
    endif
 
 ; /MOD  ( n1 n2 -- n3 n4 )  >r s>d r> m/mod
 
 ; XXX NEW -- DX-Forth 4.09 -- instead of 'M/MOD'
   hdr _public,'/MOD'
-slmod:
+slash_mod:
   call do_colon
   dw to_r,s_to_d
-  dw from_r,msmod
+  dw from_r,m_slash_mod
   dw exit
 
 ; /  ( n1 n2 -- n3 )    /mod nip
@@ -1801,7 +1812,7 @@ slmod:
   hdr _public,'/'
 slash:
   call do_colon
-  dw slmod,nip
+  dw slash_mod,nip
   dw exit
 
 ; MOD  ( n1 n2 -- n3 )    /mod drop
@@ -1809,23 +1820,23 @@ slash:
   hdr _public,'MOD'
 modd:
   call do_colon
-  dw slmod,drop
+  dw slash_mod,drop
   dw exit
 
 ; XXX OLD -- DX-Forth 4.00
 ;;; */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> m/mod
 ;;
 ;;  header 1,'*/MOD'
-;;ssmod:
+;;star_slash_mod:
 ;;  call do_colon
 ;;  dw to_r,mstar
-;;  dw from_r,msmod
+;;  dw from_r,m_slash_mod
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
 ;  */MOD  ( n1 n2 n3 -- n4 n5 )  >r m* r> sm/rem
   hdr _public,'*/MOD'
-ssmod:
+star_slash_mod:
   call do_colon
   dw to_r,mstar
   dw from_r,smrem
@@ -1834,9 +1845,9 @@ ssmod:
 ; */  ( n1 n2 n3 -- n4 )    */mod nip
 
   hdr _public,'*/'
-ssla:
+star_slash:
   call do_colon
-  dw ssmod,nip
+  dw star_slash_mod,nip
   dw exit
 
 ; M*/  ( d1 n1 +n2 -- d2 )  abs >r 2dup xor swap abs >r -rot
@@ -1844,8 +1855,8 @@ ssla:
 ;         r@ um/mod -rot r> um/mod nip swap
 ;         rot 0< if dnegate then
 
-  hdr _public,'M*/'   ; ANS
-mssl:
+  hdr _public,'M*/'
+m_star_slash:
   call do_colon
   dw abs,to_r
   dw two_dup,xor_
@@ -1858,15 +1869,15 @@ mssl:
   dw drot,from_r
   dw umslm,nip
   dw swap,rot,zero_less_than
-  dw question_branch,mssl.1
+  dw question_branch,m_star_slash.1
   dw d_negate
-mssl.1:
+m_star_slash.1:
   dw exit
 
 ; 2*  ( x1 -- x2 )
 
-  hdr _public,'2*'    ; ANS
-tstar:
+  hdr _public,'2*'
+two_star:
   pop hl
   add hl,hl
   push hl
@@ -1875,7 +1886,7 @@ tstar:
 ; 2/  ( n1 -- n2 )
 
   hdr _public,'2/'
-twodiv:
+two_slash:
   pop hl
   call sra_hl
   push hl
@@ -1884,7 +1895,7 @@ twodiv:
 ; U2/  ( x1 -- x2 )
 
   hdr _public,'U2/'
-utdiv:
+u_two_slash:
   pop hl
   or a
   ld a,h
@@ -1894,8 +1905,8 @@ utdiv:
 
 ; D2*  ( xd1 -- xd2 )
 
-  hdr _public,'D2*'   ; ANS
-dtstr:
+  hdr _public,'D2*'
+d_two_star:
   pop de
   pop hl
   add hl,hl
@@ -1912,7 +1923,7 @@ dtstr:
 ; D2/  ( d1 -- d2 )
 
   hdr _public,'D2/'
-dtdiv:
+d_two_slash:
   pop hl
   pop de
   call sra_hl
@@ -1927,33 +1938,31 @@ dtdiv:
 
 ; LSHIFT  ( x1 u -- x2 )
 
-  hdr _public,'LSHIFT'    ; ANS
-lsh:
+  hdr _public,'LSHIFT'
+lshift:
   pop de
   pop hl
   inc e
-lsh.1:
+lshift.1:
   dec e
   jp z,push_hl
   add hl,hl
-  jp lsh.1
+  jp lshift.1
 
 ; RSHIFT  ( x1 u -- x2 )
 
-  hdr _public,'RSHIFT'    ; ANS
+  hdr _public,'RSHIFT'
 rshift:
   pop de
   pop hl
   inc e
-rsh.1:
+rshift.1:
   dec e
   jp z,push_hl
   or a
   ld a,h
   call sra_hl.1
-  jp rsh.1
-
-; end
+  jp rshift.1
 
 ; }}} **********************************************************
 ; Comparison {{{ 
@@ -2058,7 +2067,7 @@ u_greater_than.1:
   pop de
   jp u_less_than.1
 
-; 0max  ( n1 -- n2 )  0 max
+; 0MAX  ( n1 -- n2 )  0 max
 
   hdr _hidden,'0MAX'
 zero_max:
@@ -2111,7 +2120,7 @@ u_min:
 
 ; WITHIN  ( n1|u1 n2|u2 n3|u3 -- flag )  over - >r - r> u<
 
-  hdr _public,'WITHIN'  ; ANS
+  hdr _public,'WITHIN'
 within:
   pop hl
   pop de
@@ -2157,7 +2166,7 @@ d_equals:
 
 ; D0<  ( d -- flag )  swap drop 0<
 
-  hdr _public,'D0<'   ; ANS
+  hdr _public,'D0<'
 d_zero_less_than:
   pop hl
   pop de
@@ -2202,7 +2211,7 @@ d_min:
   dw d_less_than,zero_equals
 d_min.1:
   dw question_branch,d_min.2
-  dw tswap
+  dw two_swap
 d_min.2:
   dw two_drop
   dw exit
@@ -2267,17 +2276,17 @@ digit.1:
 ;        um* d+ 2swap 1 /string 1 dpl +! repeat then
 
   hdr _public,'>NUMBER'
-tonum:
+to_number:
   call do_colon
-tonum.1:
+to_number.1:
   dw dup    ; begin
-  dw question_branch,tonum.2  ; while
+  dw question_branch,to_number.2  ; while
   dw over,c_fetch
   dw base,fetch
   dw digit
-  dw question_branch,tonum.2  ; while
+  dw question_branch,to_number.2  ; while
   dw to_r
-  dw tswap,from_r
+  dw two_swap,from_r
   dw swap
   dw base,fetch
   dw umstr,drop
@@ -2285,11 +2294,11 @@ tonum.1:
   dw base,fetch
   dw umstr
   dw d_plus
-  dw tswap
+  dw two_swap
   dw one,sstr
   dw one,dpl,plus_store
-  dw branch,tonum.1  ; repeat
-tonum.2:
+  dw branch,to_number.1  ; repeat
+to_number.2:
   dw exit    ; then
 
 ;  NUMBER?  ( ca u -- d -1 | 0 )
@@ -2301,7 +2310,7 @@ tonum.2:
 ;        dnegate then true then
 
   hdr _public,'NUMBER?'
-numq:
+number_question:
   call do_colon    ; convert string to double number
   dw over,c_fetch
   dw c_lit
@@ -2317,34 +2326,34 @@ numq:
   db '.'
   dw greater_than,and_
   dw zero,zero
-  dw tswap
+  dw two_swap
   dw question_dup
-  dw question_branch,numq.2
-  dw tonum
+  dw question_branch,number_question.2
+  dw to_number
   dw dpl,on
   dw dup
-  dw question_branch,numq.1
+  dw question_branch,number_question.1
   dw one_minus
   dw over,c_fetch
   dw c_lit
   db '.'
   dw minus,or_
   dw dpl,off
-numq.1:
-  dw question_branch,numq.3
-numq.2:
+number_question.1:
+  dw question_branch,number_question.3
+number_question.2:
   dw from_r
   dw two_drop,two_drop
   dw false
-  dw branch,numq.5
-numq.3:
+  dw branch,number_question.5
+number_question.3:
   dw drop
   dw from_r
-  dw question_branch,numq.4
+  dw question_branch,number_question.4
   dw d_negate
-numq.4:
+number_question.4:
   dw true
-numq.5:
+number_question.5:
   dw exit
 
 ;  <#  ( -- )    pad hld !
@@ -2563,7 +2572,7 @@ place:
 ;;  dw c_store
 ;;  dw exit
 
-; affix  ( ca c -- ca )  over count + c!
+; AFFIX  ( ca c -- ca )  over count + c!
 
   ; append char to counted string
   ; count unchanged
@@ -2645,7 +2654,7 @@ dtrai.1:
 
 ; /STRING  ( ca1 u1 n -- ca2 u2 )   rot over + -rot -
 
-  hdr _public,'/STRING' ; ANS
+  hdr _public,'/STRING'
 sstr:
   pop de
   pop hl
@@ -2664,7 +2673,7 @@ caps:
   ld a,1
   jp dcaps.1
 
-; -caps  ( -- )
+; -CAPS  ( -- )
 ;   disable caps COMPARE/SEARCH
 ; XXX TODO use a user variable instead
   hdr _hidden,'-CAPS'
@@ -2729,7 +2738,7 @@ compare_strings_case_sensitive:
 
 ; COMPARE  ( ca1 u1 ca2 u2 -- -1 | 0 | 1 )
 
-  hdr _public,'COMPARE' ; ANS
+  hdr _public,'COMPARE'
 compare:
   pop de
   pop hl
@@ -2790,7 +2799,7 @@ search.1:
   jp z,search.4
 ; XXX commented out in DX-Forth:
 ; ld a,(bc)
-; cp  (hl)
+; CP  (hl)
 ; jp nz,search.1
   push de
   push bc
@@ -2830,7 +2839,7 @@ string_1_addr equ $+1
 ;;  header 1,'+STRING'
 ;;pstr:
 ;;  call do_colon
-;;  dw tswap,swap
+;;  dw two_swap,swap
 ;;  dw two_over,plus
 ;;  dw two,pick
 ;;  dw cmove,plus
@@ -2963,7 +2972,7 @@ lowercase_a:
 ; }}} **********************************************************
 ; Control structures {{{
 
-; (of)  ( n1 n2 -- )
+; (OF)  ( n1 n2 -- )
 
   hdr _hidden,'(OF)'
 paren_of:
@@ -2976,7 +2985,7 @@ paren_of:
   push de
 ; jp branch ; XXX commented out in DX-Forth
 
-; branch  ( -- )
+; BRANCH  ( -- )
 
   hdr _hidden,'BRANCH'
 branch:
@@ -2987,7 +2996,7 @@ branch:
   ld b,(hl)
   jp next
 
-; ?branch  ( flag -- )
+; ?BRANCH  ( flag -- )
 
   hdr _hidden,'?BRANCH'
 question_branch:
@@ -3000,7 +3009,7 @@ question_branch.1:
   inc bc
   jp next
 
-; (loop)  ( -- )
+; (LOOP)  ( -- )
 
   hdr _hidden,'(LOOP)'
 paren_loop:
@@ -3017,7 +3026,7 @@ paren_loop.1:
 
 ; UNLOOP  ( -- )
 
-  hdr _public,'UNLOOP'  ; ANS
+  hdr _public,'UNLOOP'
 unloo:
   ld hl,(return_stack_pointer)  ; discard loop parameters
   ld de,cw*2
@@ -3025,7 +3034,7 @@ unloo:
   ld (return_stack_pointer),hl
   jp next
 
-; (+loop)  ( n -- )
+; (+LOOP)  ( n -- )
 
   hdr _hidden,'(+LOOP)'
 paren_plus_loop:
@@ -3052,7 +3061,7 @@ paren_plus_loop.2:
   jp c,paren_plus_loop.1
   jp paren_loop.1
 
-; (leave)  ( -- )
+; (LEAVE)  ( -- )
 
   hdr _hidden,'(LEAVE)'
 paren_leave:
@@ -3066,7 +3075,7 @@ paren_leave:
   ld b,(hl)
   jp unloo
 
-; (?do)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (do1)
+; (?DO)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (do1)
 
   hdr _hidden,'(?DO)'
 paren_question_do:
@@ -3077,7 +3086,7 @@ paren_question_do:
   dw from_r,fetch,to_r
   dw exit
 
-; (do)  ( n1 n2 -- )    over - r> cell+ -rot 2>r >r
+; (DO)  ( n1 n2 -- )    over - r> cell+ -rot 2>r >r
 
   hdr _hidden,'(DO)'
 paren_do:
@@ -3090,9 +3099,9 @@ paren_do.1: ; '(?do)' jumps here
   dw to_r
   dw exit
 
-; bal  ( -- a )
+; BAL  ( -- a )
 
-  hdr _hidden,'BAL',,1
+  hdr _hidden,'BAL'
 bal:
   call do_create
 bal.1:
@@ -3100,7 +3109,7 @@ bal.1:
 
 ; +BAL  ( -- )      1 bal +!
 
-  hdr _public,'+BAL',,1
+  hdr _public,'+BAL'
 pbal:
   ld de,1
 pbal.1:
@@ -3109,7 +3118,7 @@ pbal.1:
 
 ; -BAL  ( -- )      -1 bal +!
 
-  hdr _public,'-BAL',,1
+  hdr _public,'-BAL'
 dbal:
   ld de,-1
   jp pbal.1
@@ -3117,7 +3126,7 @@ dbal:
 ; ?BAL  ( flag -- )   checking @ 0<> and
 ;         abort" definition unbalanced"
 
-  hdr _public,'?BAL',,1
+  hdr _public,'?BAL'
 qbal:
   call do_colon
   dw check,fetch
@@ -3126,9 +3135,9 @@ qbal:
   dcs 'definition unbalanced'
   dw exit
 
-; ?depth  ( x -- x )    ?comp depth 0= ?bal
+; ?DEPTH  ( x -- x )    ?comp depth 0= ?bal
 
-  hdr _hidden,'?DEPTH',,1
+  hdr _hidden,'?DEPTH'
 qdep:
   call do_colon
   dw question_comp
@@ -3136,9 +3145,9 @@ qdep:
   dw qbal
   dw exit
 
-; ?orig  ( orig -- orig )   ?depth dup @ ?bal
+; ?ORIG  ( orig -- orig )   ?depth dup @ ?bal
 
-  hdr _hidden,'?ORIG',,1
+  hdr _hidden,'?ORIG'
 question_orig:
   call do_colon
   dw qdep
@@ -3146,9 +3155,9 @@ question_orig:
   dw qbal
   dw exit
 
-; ?dest  ( dest -- dest )   ?depth dup @ 0= ?bal
+; ?DEST  ( dest -- dest )   ?depth dup @ 0= ?bal
 
-  hdr _hidden,'?DEST',,1
+  hdr _hidden,'?DEST'
 qdest:
   call do_colon
   dw qdep
@@ -3159,7 +3168,7 @@ qdest:
 
 ; BEGIN  ( -- dest )    ?comp here +bal ;immediate
 
-  hdr _public,'BEGIN',_immediate,1
+  hdr _public,'BEGIN',_immediate
 begin:
   call do_colon
   dw question_comp
@@ -3169,7 +3178,7 @@ begin:
 
 ; >MARK  ( -- orig )    postpone begin 0 ,
 
-  hdr _public,'>MARK',,1
+  hdr _public,'>MARK'
 to_mark:
   call do_colon
   dw begin
@@ -3179,7 +3188,7 @@ to_mark:
 
 ; <RESOLVE  ( dest -- )   ?dest , -bal
 
-  hdr _public,'<RESOLVE',,1
+  hdr _public,'<RESOLVE'
 bresol:
   call do_colon
   dw qdest
@@ -3189,7 +3198,7 @@ bresol:
 
 ; THEN  ( orig -- )   ?orig here swap ! -bal ;immediate
 
-  hdr _public,'THEN',_immediate,1
+  hdr _public,'THEN',_immediate
 then:
   call do_colon
   dw question_orig
@@ -3201,7 +3210,7 @@ then:
 ; IF  ( -- orig )     postpone ?branch >mark
 ;         ;immediate
 
-  hdr _public,'IF',_immediate,1
+  hdr _public,'IF',_immediate
 iff:
   call do_colon
   dw compile,question_branch
@@ -3211,7 +3220,7 @@ iff:
 ; AHEAD  ( -- orig )    postpone branch >mark
 ;         ;immediate
 
-  hdr _public,'AHEAD',_immediate,1
+  hdr _public,'AHEAD',_immediate
 ahead:
   call do_colon
   dw compile,branch
@@ -3221,7 +3230,7 @@ ahead:
 ; ELSE  ( orig1 -- orig2 )  ?orig postpone ahead swap postpone
 ;         then ;immediate
 
-  hdr _public,'ELSE',_immediate,1
+  hdr _public,'ELSE',_immediate
 elsee:
   call do_colon
   dw question_orig
@@ -3233,7 +3242,7 @@ elsee:
 ; UNTIL  ( dest -- )    postpone ?branch <resolve
 ;         ;immediate
 
-  hdr _public,'UNTIL',_immediate,1
+  hdr _public,'UNTIL',_immediate
 until:
   ld hl,question_branch
 until.1:
@@ -3245,14 +3254,14 @@ until.1:
 
 ; AGAIN  ( dest -- )    postpone branch <resolve ;immediate
 
-  hdr _public,'AGAIN',_immediate,1
+  hdr _public,'AGAIN',_immediate
 again:
   ld hl,branch
   jp until.1
 
 ; WHILE  ( x -- orig x )    ?depth postpone if swap ;immediate
 
-  hdr _public,'WHILE',_immediate,1
+  hdr _public,'WHILE',_immediate
 whilee:
   call do_colon
   dw qdep
@@ -3263,16 +3272,16 @@ whilee:
 ; REPEAT  ( orig dest -- )  postpone again postpone then
 ;         ;immediate
 
-  hdr _public,'REPEAT',_immediate,1
+  hdr _public,'REPEAT',_immediate
 repeatt:
   call do_colon
   dw again
   dw then
   dw exit
 
-; lv  ( -- a )     0 value lv
+; LV  ( -- a )     0 value lv
 
-  hdr _hidden,'LV',,1
+  hdr _hidden,'LV'
 lvv:
   call do_value
   dw 0
@@ -3280,7 +3289,7 @@ lvv:
 ; DO  ( -- orig dest )    postpone (do) lv >mark dup to lv
 ;         postpone begin ;immediate
 
-  hdr _public,'DO',_immediate,1
+  hdr _public,'DO',_immediate
 do:
   ld hl,paren_do
 do1:
@@ -3297,7 +3306,7 @@ do1:
 ; ?DO  ( -- orig dest )   postpone (?do) lv >mark dup to lv
 ;         postpone begin ;immediate
 
-  hdr _public,'?DO',_immediate,1
+  hdr _public,'?DO',_immediate
 qdo:
   ld hl,paren_question_do
   jp do1
@@ -3346,7 +3355,7 @@ jdo:
 ; LEAVE  ( -- )     postpone (leave) lv ?orig ,
 ;         ;immediate
 
-  hdr _public,'LEAVE',_immediate,1
+  hdr _public,'LEAVE',_immediate
 leave:
   call do_colon
   dw compile,paren_leave
@@ -3358,7 +3367,7 @@ leave:
 ; LOOP  ( a1 a2 -- )  postpone (loop) <resolve
 ;         postpone then to lv ;immediate
 
-  hdr _public,'LOOP',_immediate,1
+  hdr _public,'LOOP',_immediate
 loopp:
   ld hl,paren_loop
 loopp.1:
@@ -3373,7 +3382,7 @@ loopp.1:
 ; +LOOP  ( a1 a2 -- ) postpone (+loop) <resolve
 ;         postpone then to lv ;immediate
 
-  hdr _public,'+LOOP',_immediate,1
+  hdr _public,'+LOOP',_immediate
 plus_loop:
   ld hl,paren_plus_loop
   jp loopp.1
@@ -3382,7 +3391,7 @@ plus_loop:
 
 ; CS-PICK       pick +bal
 
-  hdr _public,'CS-PICK',,1
+  hdr _public,'CS-PICK'
 cs_pick:
   call do_colon
   dw pick
@@ -3391,27 +3400,27 @@ cs_pick:
 
 ; CS-ROLL       aka roll cs-roll
 
-  hdr _public,'CS-ROLL',,,roll
+  hdr _public,'CS-ROLL',,roll
 csrol: equ roll
 
 ; CS-DROP       drop -bal
 
-  hdr _public,'CS-DROP',,1
+  hdr _public,'CS-DROP'
 csdro:
   pop hl
   jp dbal
 
 ; cf0       control flow stack base
 
-  hdr _hidden,'CF0',,1
+  hdr _hidden,'CF0'
 cfz:
   call do_create
 cfz.1:
   ds 2
 
-; #cs  ( -- cells )   sp@ cf0 @ - negate 2/ 1- 0 max
+; #CS  ( -- cells )   sp@ cf0 @ - negate 2/ 1- 0 max
 
-  hdr _hidden,'#CS',,1
+  hdr _hidden,'#CS'
 ncs:
   ld hl,(cfz.1)
   call negate_hl
@@ -3424,7 +3433,7 @@ ncs:
 
 ; CS-PUSH       #cs -roll
 
-  hdr _public,'CS-PUSH',,1
+  hdr _public,'CS-PUSH'
 cs_push:
   call do_colon
   dw ncs
@@ -3433,7 +3442,7 @@ cs_push:
 
 ; CS-POP        #cs roll
 
-  hdr _public,'CS-POP',,1
+  hdr _public,'CS-POP'
 cs_pop:
   call do_colon
   dw ncs
@@ -3442,7 +3451,7 @@ cs_pop:
 
 ; CS-MARK       0 +bal
 
-  hdr _public,'CS-MARK',,1
+  hdr _public,'CS-MARK'
 cs_mark:
   ld hl,0
   push hl
@@ -3450,7 +3459,7 @@ cs_mark:
 
 ; CS-TEST       ?depth dup 0<>
 
-  hdr _public,'CS-TEST',,1
+  hdr _public,'CS-TEST'
 cs_test:
   call do_colon
   dw qdep
@@ -3460,7 +3469,7 @@ cs_test:
 
 ; COND        ?comp cs-mark immediate
 
-  hdr _public,'COND',_immediate,1
+  hdr _public,'COND',_immediate
 cond:
   call do_colon
   dw question_comp
@@ -3470,7 +3479,7 @@ cond:
 ; THENS       ?comp begin cs-test while postpone
 ;         then repeat cs-drop ;immediate
 
-  hdr _public,'THENS',_immediate,1
+  hdr _public,'THENS',_immediate
 thens:
   call do_colon
   dw question_comp
@@ -3487,7 +3496,7 @@ thens.2:
 
 ; COND        ?comp 0 +bal ;immediate
 
-  hdr _public,'COND',_immediate,1
+  hdr _public,'COND',_immediate
 cond:
   call do_colon
   dw question_comp
@@ -3498,7 +3507,7 @@ cond:
 ; THENS       ?comp begin ?depth ?dup while
 ;         postpone then repeat -bal ;immediate
 
-  hdr _public,'THENS',_immediate,1
+  hdr _public,'THENS',_immediate
 thens:
   call do_colon
   dw question_comp
@@ -3518,7 +3527,7 @@ thens.2  dw dbal
 
 ; OF  ( -- a )     postpone (of) >mark ;immediate
 
-  hdr _public,'OF',_immediate,1
+  hdr _public,'OF',_immediate
 of:
   call do_colon
   dw compile,paren_of
@@ -3527,18 +3536,18 @@ of:
 
 ; ENDOF  ( a1 -- a2 ) aka else endof
 
-  hdr _public,'ENDOF',_immediate,,elsee
+  hdr _public,'ENDOF',_immediate,elsee
 endof: equ elsee
 
 ; CASE  ( -- sys )    aka cond case
 
-  hdr _public,'CASE',_immediate,,cond
+  hdr _public,'CASE',_immediate,cond
 casee: equ cond
 
 ; ENDCASE  ( sys -- )   postpone drop postpone thens
 ;         ;immediate
 
-  hdr _public,'ENDCASE',_immediate,1
+  hdr _public,'ENDCASE',_immediate
 endc:
   call do_colon
   dw compile,drop
@@ -3552,7 +3561,7 @@ endc:
 ;       else 2drop refill and then ?dup 0= until
 ;       ;immediate
 
-  hdr _public,'[ELSE]',_immediate,1
+  hdr _public,'[ELSE]',_immediate
 pels:
   call do_colon
   dw one
@@ -3597,7 +3606,7 @@ pels.7:
 
 ; [IF]  ( flag -- ) 0= if [compile] [else] then ;immediate
 
-  hdr _public,'[IF]',_immediate,1  ; ANS
+  hdr _public,'[IF]',_immediate
 pif:
   pop hl
   ld a,l
@@ -3607,7 +3616,7 @@ pif:
 
 ; [THEN]  ( -- )    aka noop [then] immediate
 
-  hdr _public,'[THEN]',_immediate,,noop
+  hdr _public,'[THEN]',_immediate,noop
 pthen: equ next
 
 ; }}} **********************************************************
@@ -4323,9 +4332,9 @@ printer:
 ; }}} **********************************************************
 ; Compiler functions {{{
 
-; wfind  ( ca wid -- 0 | xt nfa -1 | xt nfa 1 )
+; WFIND  ( ca wid -- 0 | xt nfa -1 | xt nfa 1 )
 
-  hdr _hidden,'WFIND',,1
+  hdr _hidden,'WFIND'
 wfind:
   call do_colon   ; save IP
   dw $+2
@@ -4395,7 +4404,7 @@ wfind.5:
   push de
   push hl
   ld a,(hl)
-  and 0x40   ; immediate?
+  and immediate_mask   ; immediate?
   ld hl,-1
   jp z,wfind.6
   inc hl
@@ -4404,11 +4413,11 @@ wfind.6:
   push hl
   jp exit    ; restore IP
 
-; (find)  ( ca -- ca 0 | xt -1 | xt 1 )
+; (FIND)  ( ca -- ca 0 | xt -1 | xt 1 )
+  hdr _hidden,'(FIND)'; searches CONTEXT CURRENT FORTH
 ;       0 3 0 do over i cells context + @
 ;       wfind ?dup if nip 2nip leave then loop
 
-  hdr _hidden,'(FIND)',,1 ; searches CONTEXT CURRENT FORTH
 paren_find:
   call do_colon
   dw zero
@@ -4421,7 +4430,7 @@ paren_find.1:
   dw cont,plus,fetch
   dw wfind,question_dup
   dw question_branch,paren_find.2
-  dw nip,tnip
+  dw nip,two_nip
   dw paren_leave,paren_find.1-cw
 paren_find.2:
   dw paren_loop,paren_find.1
@@ -4430,7 +4439,7 @@ paren_find.3:
 
 ; FIND  ( ca -- ca 0 | xt -1 | xt 1 )
 
-  hdr _public,'FIND',,1
+  hdr _public,'FIND'
 find:
   call fetch_execute
   dw paren_find
@@ -4440,7 +4449,7 @@ find:
 ; SEARCH-WORDLIST  ( ca u wid -- 0 | xt -1 | xt 1 )
 ;       >r wpack r> wfind dup if nip then
 
-  hdr _public,'SEARCH-WORDLIST',,1
+  hdr _public,'SEARCH-WORDLIST'
 search_wordlist:
   call do_colon
   dw to_r
@@ -4457,9 +4466,11 @@ search_wordlist.1:
 
    if warning_options
 
-; -?  ( -- )    warning @ 0fffe and warning !
+; -?  ( -- ) ; XXX OLD
+; disable warnings for next definition only
+; warning @ 0fffe and warning !
 
-  hdr _public,'-?',,1 ; disable warnings for next definition only
+  hdr _public,'-?'
 dques:
   ld hl,warning.1
   ld a,(hl)
@@ -4467,55 +4478,58 @@ dques:
   ld (hl),a
   jp next
 
-; warning?  ( -- 0|1 )  warning @ dup if dup 1 and tuck if -1
-;       else $7fff and 1 then or warning ! then
+; WARNING?  ( -- 0|1 )
+; get warning flag and apply mask
+;     warning @ dup if dup 1 and tuck if -1
+;     else $7fff and 1 then or warning ! then
 
-  hdr _hidden,'WARNING?',,1 ; get warning flag and apply mask
-qwarn:
+  hdr _hidden,'WARNING?'
+warning_question:
   call do_colon
   dw warning,fetch
   dw dup
-  dw question_branch,qwarn.3
+  dw question_branch,warning_question.3
   dw dup,one,and_ ; test bit 0
   dw tuck
-  dw question_branch,qwarn.1
+  dw question_branch,warning_question.1
   dw true    ; enable all warnings
-  dw branch,qwarn.2
-qwarn.1:
+  dw branch,warning_question.2
+warning_question.1:
   dw lit,07fffh  ; disable compile warning
   dw and_
   dw one   ; enable redefinition warning
-qwarn.2:
+warning_question.2:
   dw or_
   dw warning,store
-qwarn.3:
+warning_question.3:
   dw exit
 
    endif
 
-; IMMEDIATE  ( -- ) $40 xnfa
+; IMMEDIATE  ( -- )
 
-  hdr _public,'IMMEDIATE',,1
+  hdr _public,'IMMEDIATE'
 immediate:
-  ld e,0x40
+  ld e,immediate_mask
   jp smudge.1
 
-; SMUDGE  ( -- )    $20 xnfa
+; SMUDGE  ( -- )
+;   $20 xnfa
 
-  hdr _public,'SMUDGE',,1 ; FIG
+  hdr _public,'SMUDGE'
 smudge:
-  ld e,0x20
+  ld e,smudge_mask
 smudge.1:
   push de
 ; jp xnfa
 
-; xnfa  ( x -- )    toggle nfa bit
+; XNFA  ( x -- )    toggle nfa bit
 
 xnfa:
   ld hl,(last.1)
-  jp ctog.1
+  jp c_toggle.1
 
-; header  ( xt|0 "name" -- )
+; HEADER  ( xt|0 "name" -- )
 ;       warning? 2>r bl-word dup c@ 32 1 within
 ;       abort" invalid name" dup find nip r> and
 ;       if dup count type ."  is redefined "
@@ -4524,11 +4538,11 @@ xnfa:
 ;       dup get-current ! rot r> ?dup 0= if here
 ;       then dup rot ! over last 2! swap cmove
 
-  hdr _hidden,'HEADER',,1
+  hdr _hidden,'HEADER'
 header:
   call do_colon
    if warning_options
-  dw qwarn
+  dw warning_question
    else
   dw warning,fetch
    endif
@@ -4573,7 +4587,7 @@ header.2:
 
 ; ,call ( a -- )  $CD c, ,
 
-  hdr _hidden,',CALL',,1
+  hdr _hidden,',CALL'
 comma_call:
   call do_colon
   dw c_lit
@@ -4584,7 +4598,7 @@ comma_call:
 
 ; BUILD ( xt "name" -- )
 
-  hdr _public,'BUILD',,1
+  hdr _public,'BUILD'
 build:
   call do_colon
   dw zero,header  ; 0 header
@@ -4595,7 +4609,7 @@ build:
 ;       (do_colon) build smudge bal off !csp
 ;       sp@ cf0 ! ]
 
-  hdr _public,':',,1
+  hdr _public,':'
 colon:
   call do_colon
   dw lit,do_colon
@@ -4613,7 +4627,7 @@ colon.1:
 
 ; EXIT  ( -- )    postpone (exit) immediate
 
-  hdr _public,'EXIT',_immediate,1
+  hdr _public,'EXIT',_immediate
 exitt:
   call do_colon
   dw compile,exit
@@ -4622,7 +4636,7 @@ exitt:
 ; ;  ( -- )   postpone exit bal @ ?bal ?csp smudge
 ;       postpone [ ;immediate
 
-  hdr _public,';',_immediate,1
+  hdr _public,';',_immediate
 semic:
   call do_colon
   dw exitt
@@ -4636,11 +4650,11 @@ semic:
 ; :NONAME  ( -- xt )  warning? drop here dup (dnfa) last 2!
 ;       (do_colon) ,call bal off !csp sp@ cf0 ! ]
 
-  hdr _public,':NONAME',,1
+  hdr _public,':NONAME'
 nonam:
   call do_colon
    if warning_options
-  dw qwarn,drop  ; allow -?
+  dw warning_question,drop  ; allow -?
    endif
   dw here
   dw dup    ; allow RECURSE etc
@@ -4652,7 +4666,7 @@ nonam:
 
 ; (;CODE)     r> last cell+ @ 1+ !
 
-  hdr _public,'(;CODE)',,1
+  hdr _public,'(;CODE)'
 paren_semicolon_code:
   ld hl,(last.2)
   inc hl
@@ -4663,7 +4677,7 @@ paren_semicolon_code:
 
 ; DOES>
 
-  hdr _public,'DOES>',_immediate,1
+  hdr _public,'DOES>',_immediate
 does:
   call do_colon
   dw compile,paren_semicolon_code   ; postpone (;code)
@@ -4673,7 +4687,7 @@ does:
 
 ; CREATE  ( -- a ) 'next build
 
-  hdr _public,'CREATE',,1
+  hdr _public,'CREATE'
 creat:
   ld hl,next
   push hl
@@ -4681,7 +4695,7 @@ creat:
 
 ; VARIABLE  ( -- a ) create 2 allot
 
-  hdr _public,'VARIABLE',,1
+  hdr _public,'VARIABLE'
 var:
   call do_colon
   dw creat
@@ -4690,7 +4704,7 @@ var:
 
 ; VALUE  ( -- x )   (dotcon) build ,
 
-  hdr _public,'VALUE',,1
+  hdr _public,'VALUE'
 value:
   call do_colon
 value.1:
@@ -4702,7 +4716,7 @@ value.1:
 ; CONSTANT  ( -- x )  char? if (do_byte_constant) build c,
 ;       else value then
 
-  hdr _public,'CONSTANT',,1
+  hdr _public,'CONSTANT'
 con:
   call do_colon
   dw char_question
@@ -4714,7 +4728,7 @@ con:
 
 ; 2VARIABLE  ( -- a )  create 4 allot
 
-  hdr _public,'2VARIABLE',,1
+  hdr _public,'2VARIABLE'
 two_variable:
   call do_colon
   dw creat
@@ -4727,7 +4741,7 @@ dotvar: equ next
 
 ; 2CONSTANT  ( -- x2 x1 )  (dotcon) build , ,
 
-  hdr _public,'2CONSTANT',,1
+  hdr _public,'2CONSTANT'
 two_constant:
   call do_colon
   dw lit,dotcon
@@ -4739,7 +4753,7 @@ dotcon: equ two_fetch   ; 2@
 
 ; USER  ( -- a )
 
-  hdr _public,'USER',,1 ; FIG
+  hdr _public,'USER'
 user:
   call do_colon
   dw lit,do_user_variable
@@ -4748,8 +4762,9 @@ user:
   dw exit
 
 ; ADDR  ( "name" -- a )
+; immediate, state-smart
 
-  hdr _public,'ADDR',_immediate,1  ; immediate, state-smart
+  hdr _public,'ADDR',_immediate
 addr:
   call do_colon
   dw tick,to_body           ; ' >body
@@ -4759,7 +4774,7 @@ addr:
 addr.1:                     ; then
   dw exit
 
-; (to)  ( x -- )    r> dup cell+ >r @ >body !
+; (TO)  ( x -- )    r> dup cell+ >r @ >body !
 
   hdr _hidden,'(TO)'
 paren_to:
@@ -4776,8 +4791,9 @@ paren_to:
 
 ; TO      ' state? if postpone (to) , else >body !
 ;       then ;immediate
+; state-smart
 
-  hdr _public,'TO',_immediate,1  ; state-smart
+  hdr _public,'TO',_immediate
 to:
   call do_colon
   dw tick
@@ -4799,7 +4815,7 @@ undef:
 
 ; DEFER  ( "name" -- )
 
-  hdr _public,'DEFER',,1
+  hdr _public,'DEFER'
 defer:
   call do_colon
   dw lit,fetch_execute  ; ['] @execute
@@ -4809,7 +4825,7 @@ defer:
 
 ; IS  ( xt "name" -- )
 
-  hdr _public,'IS',_immediate,,to  ; state-smart
+  hdr _public,'IS',_immediate,to  ; state-smart
 is: equ to
 
 paren_is: equ paren_to
@@ -4817,7 +4833,7 @@ paren_is: equ paren_to
 ; AKA  ( "oldname" "newname" -- )  defined tuck ?defined (header)
 ;         $80 xnfa 0> if immediate then
 ; XXX TODO ' alias' too
-  hdr _public,'AKA',,1
+  hdr _public,'AKA'
 aka:
   call do_colon
   dw defined_
@@ -4853,11 +4869,11 @@ false:
 
 ; -1  ( -- -1 )   aka true -1
 
-  hdr _public,'-1',,,true
+  hdr _public,'-1',,true
 
 ; 0  ( -- 0 )   aka false 0
 
-  hdr _public,'0',,,false
+  hdr _public,'0',,false
 zero: equ false
 
 ; 1  ( -- 1 )
@@ -4890,15 +4906,15 @@ bl:
 
 ; B/BUF  ( -- u )  bytes per screen buffer
 
-  hdr _public,'B/BUF',,1  ; FIG
-bbuf:
+  hdr _public,'B/BUF'
+bytes_per_buffer:
   call do_value
-bbuf.1:
+bytes_per_buffer.1:
   dw 128*8 ; default
 
 ; C/L  ( -- u )    chars per screen line
 
-  hdr _public,'C/L',,1  ; FIG
+  hdr _public,'C/L'
 csll:
   call do_value
   dw 64 ; default
@@ -4909,13 +4925,13 @@ csll:
 
 ; LIMIT  ( -- a )
 
-  hdr _public,'LIMIT' ; FIG
+  hdr _public,'LIMIT'
 limit:
   call do_value   ; application word - used by BUF
 limit.1:
   ds cw    ; patched by COLD
 
-; hbuf  ( -- a ) handle r/w buffer
+; HBUF  ( -- a ) handle r/w buffer
 
   hdr _hidden,'HBUF'
 hbuf:
@@ -5001,7 +5017,7 @@ fsp:
 fspp:
   ds cw
 
-; boot  ( -- xt )
+; BOOT  ( -- xt )
 
   hdr _hidden,'BOOT'
 boot:
@@ -5018,9 +5034,10 @@ sys:
 sys.1:
   dw 0
 
-; last  ( -- a ) occupies 2 cells
+; LAST  ( -- a ) occupies 2 cells
+; XXX TODO separate
 
-  hdr _hidden,'LAST',,1
+  hdr _hidden,'LAST'
 last:
   call do_create
 last.1:
@@ -5030,7 +5047,7 @@ last.2:
 
 ; BLK
 
-  hdr _public,'BLK',,1
+  hdr _public,'BLK'
 blk:
   call do_create
 blk.1:
@@ -5038,7 +5055,7 @@ blk.1:
 
 ; >IN
 
-  hdr _public,'>IN',,1
+  hdr _public,'>IN'
 in_:
   call do_create
 in_.1:
@@ -5046,14 +5063,14 @@ in_.1:
 
 ; SCR     occupies 2 cells
 
-  hdr _public,'SCR',,1
+  hdr _public,'SCR'
 scr:
   call do_create
   ds 2*cw
 
 ; STATE
 
-  hdr _public,'STATE',,1
+  hdr _public,'STATE'
 state:
   call do_create
 state.1:
@@ -5061,7 +5078,7 @@ state.1:
 
 ; 'SOURCE     occupies 2 cells
 
-  hdr _public,"'SOURCE",,1
+  hdr _public,"'SOURCE"
 tick_source:
   call do_create
 tick_source.1:
@@ -5069,7 +5086,7 @@ tick_source.1:
 
 ; WARNING
 
-  hdr _public,'WARNING',,1  ; FIG
+  hdr _public,'WARNING'
 warning:
   call do_create
 warning.1:
@@ -5077,7 +5094,7 @@ warning.1:
 
 ; CSP
 
-  hdr _public,'CSP',,1  ; FIG
+  hdr _public,'CSP'
 csp:
   call do_create
 csp.1:
@@ -5085,13 +5102,13 @@ csp.1:
 
 ; CHECKING
 
-  hdr _public,'CHECKING',,1
+  hdr _public,'CHECKING'
 check:
   call do_create
 check.1:
   ds cw
 
-; errmsg  ( -- a ) message holder for abort"
+; ERRMSG  ( -- a ) message holder for abort"
 
   hdr _hidden,'ERRMSG'
 errmsg:
@@ -5101,7 +5118,7 @@ errmsg.1:
 
 ; CONTEXT  ( -- a )
 
-  hdr _public,'CONTEXT',,1
+  hdr _public,'CONTEXT'
 cont:
   call do_create
 acont:
@@ -5110,9 +5127,9 @@ acurr:
   ds cw    ; current
   dw forth.1    ; forth
 
-; get-context  ( -- wid )
+; GET-CONTEXT  ( -- wid )
 
-  hdr _hidden,'GET-CONTEXT',,1
+  hdr _hidden,'GET-CONTEXT'
 getcon:
   ld hl,(acont)
   push hl
@@ -5120,7 +5137,7 @@ getcon:
 
 ; GET-CURRENT  ( -- wid )
 
-  hdr _public,'GET-CURRENT',,1
+  hdr _public,'GET-CURRENT'
 getcur:
   ld hl,(acurr)
   push hl
@@ -5128,12 +5145,12 @@ getcur:
 
 ; SET-CURRENT  ( wid -- )
 
-  hdr _public,'SET-CURRENT',,1
+  hdr _public,'SET-CURRENT'
 setcur:
   ld hl,acurr
   jp store.1
 
-; zbuf  ( -- a )
+; ZBUF  ( -- a )
 ; filename buffer pointers
 
   hdr _hidden,'ZBUF'
@@ -5150,21 +5167,21 @@ zbuf.1:
 
 ; S0
 
-  hdr _public,'S0'    ; FIG
+  hdr _public,'S0'
 s0:
   call do_user_variable
   dw 6
 
 ; R0
 
-  hdr _public,'R0'    ; FIG
+  hdr _public,'R0'
 r0:
   call do_user_variable
   dw 8
 
 ; DP      application dictionary pointer
 
-  hdr _public,'DP'    ; FIG
+  hdr _public,'DP'
 dp:
   call do_user_variable
   dw 10
@@ -5172,7 +5189,8 @@ dp:
 ; XXX OLD
 ;;; dph     system dictionary pointer
 ;;
-;;  hdr _hidden,'DPH',,1  ; must follow DP
+;;  hdr _hidden,'DPH'
+;; must follow DP
 ;;dph:
 ;;  call do_user_variable
 ;;  dw 12
@@ -5180,7 +5198,7 @@ dph: equ dp ; XXX NEW
 
 ; VOC-LINK
 
-  hdr _public,'VOC-LINK',,1 ; FIG
+  hdr _public,'VOC-LINK'
 voc_link:
   call do_user_variable
   dw 14
@@ -5198,14 +5216,14 @@ fs0:
 
 ; DPL
 
-  hdr _public,'DPL'   ; FIG
+  hdr _public,'DPL'
 dpl:
   call do_user_variable
   dw 20
 
 ; hld
 
-  hdr _hidden,'HLD'   ; FIG
+  hdr _hidden,'HLD'
 hld:
   call do_user_variable
   dw 22
@@ -5221,7 +5239,7 @@ base:
 
 ; OUT
 
-  hdr _public,'OUT'   ; FIG
+  hdr _public,'OUT'
 outt:
   call do_user_variable
   dw 28
@@ -5242,7 +5260,7 @@ catcher:
 ; }}} **********************************************************
 ; Forth system {{{
 
-; sys?  ( -- flag ) sys@ 0<>
+; SYS?  ( -- flag ) sys@ 0<>
 
   hdr _hidden,'SYS?'
 sys_question:
@@ -5255,30 +5273,30 @@ sysq.1:
   push de
   jp zero_not_equals
 
-; state?  ( -- flag ) state @ 0<>
+; STATE?  ( -- flag ) state @ 0<>
 
-  hdr _hidden,'STATE?',,1
+  hdr _hidden,'STATE?'
 state_question:
   ld hl,state.1
   jp sysq.1
 
-; check?  ( -- flag ) checking @ 0<>
+; CHECK?  ( -- flag ) checking @ 0<>
 
-  hdr _hidden,'CHECK?',,1
+  hdr _hidden,'CHECK?'
 chkq:
   ld hl,check.1
   jp sysq.1
 
 ; APPLICATION  ( -- ) sys off
 
-  hdr _public,'APPLICATION',,1
+  hdr _public,'APPLICATION'
 app:
   ld hl,sys.1
   jp off_hl
 
 ; SYSTEM  ( -- )    sys on
 
-  hdr _public,'SYSTEM',,1
+  hdr _public,'SYSTEM'
 system:
   ld hl,sys.1
   jp on_hl
@@ -5321,7 +5339,7 @@ here:
 
 ; C,  ( c -- )
 
-  hdr _public,'C,',,1
+  hdr _public,'C,'
 c_comma:
   call do_colon
   dw here,one,allot,c_store
@@ -5329,7 +5347,7 @@ c_comma:
 
 ; ,  ( n -- )
 
-  hdr _public,',',,1
+  hdr _public,','
 comma:
   call do_colon
   dw here,two,allot,store
@@ -5353,8 +5371,8 @@ fbody:
 ; XXX NEW -- DX-Forth 4.09
 ;  n>count  ( nfa -- ha len )  aka (name) n>count
 
-  hdr _hidden,'N>COUNT',,,pname
-ncnt: equ  pname
+  hdr _hidden,'N>COUNT',,paren_name
+ncnt: equ  paren_name
 
 ; XXX OLD -- DX-Forth 4.00
 ;;; n>link  ( nfa -- lfa )
@@ -5373,7 +5391,7 @@ ncnt: equ  pname
 ; XXX NEW -- DX-Forth 4.09
 ;  n>link  ( nfa -- lfa )    n>count +
 
-  hdr _hidden,'N>LINK',,1
+  hdr _public,'N>LINK'
 nlnk:
   call do_colon
   dw ncnt,plus
@@ -5381,15 +5399,15 @@ nlnk:
 
 ; N>NAME  ( nfa1 -- nfa2 | 0 )
 
-  hdr _public,'N>NAME',,1
+  hdr _public,'N>NAME'
 ntnam:
   call do_colon
   dw nlnk,fetch  ; n>link @
   dw exit
 
-; name>  ( nfa -- xt )
+; NAME>  ( nfa -- xt )
 
-  hdr _hidden,'NAME>',,1
+  hdr _public,'NAME>'
 namef:
   call do_colon
   dw nlnk,cell_plus,fetch ; n>link cell+ @
@@ -5397,12 +5415,13 @@ namef:
 
 ; W>NAME  ( wid -- nfa | 0 )  aka @ w>name
 
-  hdr _public,'W>NAME',,,fetch
+  hdr _public,'W>NAME',,fetch
 wtnam: equ fetch
 
-; -alias  ( nfa -- nfa flag )  dup c@ $80 <
+; -ALIAS  ( nfa -- nfa flag )  dup c@ $80 <
 
-  hdr _hidden,'-ALIAS',,1 ; false if alias
+  hdr _hidden,'-ALIAS'
+  ; false if alias
 dalias:
   pop hl
   push hl
@@ -5455,7 +5474,7 @@ dalias:
 ;        -rot 2drop exit then then n>name repeat swap
 ;        repeat nip
 
-  hdr _hidden,'>NAME',,1
+  hdr _public,'>NAME'
 to_name:
   call do_colon
   dw voc_link
@@ -5490,7 +5509,7 @@ to_name.5:
 ;;; (NAME)  ( nfa -- ca u ) count 31 and
 ;;
 ;;  header 1,'(NAME)',,1
-;;pname:
+;;paren_name:
 ;;  call do_colon
 ;;  dw count
 ;;  dw c_lit
@@ -5501,8 +5520,8 @@ to_name.5:
 ; XXX NEW -- DX-Forth 4.09
 ;  (NAME)  ( nfa -- ca u )  count 31 and
 
-  hdr _public,'(NAME)',,1
-pname:
+  hdr _public,'(NAME)'
+paren_name:
   pop de
   ld a,(de)
   inc  de
@@ -5515,12 +5534,12 @@ pname:
 ; .ID  ( nfa | 0 -- )   ?dup if (name) type exit then
 ;         ." [noname]"
 
-  hdr _public,'.ID',,1
+  hdr _public,'.ID'
 dotid:
   call do_colon
   dw question_dup
   dw question_branch,dotid.1
-  dw pname
+  dw paren_name
   dw type
   dw exit
 dotid.1:
@@ -5530,7 +5549,7 @@ dotid.1:
 
 ; .NAME  ( xt -- )  >name .id
 
-  hdr _public,'.NAME',,1
+  hdr _public,'.NAME'
 dotnam:
   call do_colon
   dw to_name,dotid
@@ -5538,7 +5557,7 @@ dotnam:
 
 ; .WID  ( wid -- )  cell+ cell+ @ .id
 ; XXX Renamed to '.VOC' in DX-Forth 4.09
-  hdr _public,'.WID',,1
+  hdr _public,'.WID'
 dotwid:
   call do_colon
   dw cell_plus,cell_plus
@@ -5547,7 +5566,7 @@ dotwid:
 
 ; !CSP  ( -- )    sp@ csp !
 
-  hdr _public,'!CSP',,1 ; FIG
+  hdr _public,'!CSP'
 store_csp:
   ld hl,0
   add hl,sp
@@ -5556,7 +5575,7 @@ store_csp:
 
 ; ?CSP  ( -- )    sp@ csp @ - ?bal
 
-  hdr _public,'?CSP',,1 ; FIG
+  hdr _public,'?CSP'
 question_csp:
   call do_colon
   dw sp_fetch
@@ -5567,7 +5586,7 @@ question_csp:
 
 ; ?COMP  ( -- )   state? 0= abort" compilation only'
 
-  hdr _public,'?COMP',,1  ; FIG
+  hdr _public,'?COMP'
 question_comp:
   call do_colon
   dw state,fetch
@@ -5578,7 +5597,7 @@ question_comp:
 
 ; ?EXEC  ( -- )   state? abort" execution only'
 
-  hdr _public,'?EXEC',,1  ; FIG
+  hdr _public,'?EXEC'
 qexec:
   call do_colon
   dw state_question
@@ -5592,7 +5611,7 @@ qexec:
 ;       or abort" r-stack?" fs0 @ fsp @ u< fsp @
 ;       fs0 @ (nfpm) @ - u< or abort" f-stack?"
 
-  hdr _public,'?STACK',,1 ; FIG
+  hdr _public,'?STACK'
 qstac:
   call do_colon
   dw sp_fetch
@@ -5627,9 +5646,9 @@ qstac:
 ; dcs 'f-stack?'
   dw exit
 
-; ?defined  ( flag -- ) 0= abort" is undefined"
+; ?DEFINED  ( flag -- ) 0= abort" is undefined"
 
-  hdr _hidden,'?DEFINED',,1
+  hdr _hidden,'?DEFINED'
 qdef:
   call do_colon
   dw zero_equals
@@ -5639,14 +5658,14 @@ qdef:
 
 ; [       state off ;immediate
 
-  hdr _public,'[',_immediate,1
+  hdr _public,'[',_immediate
 left_bracket:
   ld hl,state.1
   jp off_hl
 
 ; ]     state on
 
-  hdr _public,']',,1
+  hdr _public,']'
 right_bracket:
   ld hl,state.1 ; must be -1 for INTERPRET to work
   jp on_hl
@@ -5654,7 +5673,7 @@ right_bracket:
 ; COMPILE,  ( xt -- ) warning @ 0< if dup limit u< sys? d0=
 ;       if dup .name ."  is system " then then ,
 
-  hdr _public,'COMPILE,',,1
+  hdr _public,'COMPILE,'
 compile_comma:
   call do_colon
   dw warning,fetch
@@ -5677,7 +5696,7 @@ compile_comma.1:
 
 ; COMPILE  ( -- )   ?comp r> dup cell+ >r @ compile,
 
-  hdr _public,'COMPILE',,1
+  hdr _public,'COMPILE'
 compile:
   call do_colon
   dw question_comp   ; prevent crash if interpreting
@@ -5691,7 +5710,7 @@ compile:
 ; POSTPONE    defined dup ?defined 0< if compile
 ;       compile then compile, ;immediate
 
-  hdr _public,'POSTPONE',_immediate,1
+  hdr _public,'POSTPONE',_immediate
 postp:
   call do_colon
   dw defined_
@@ -5862,24 +5881,24 @@ pad:
 
 ; SOURCE  ( -- ca u )   'source 2@
 
-  hdr _public,'SOURCE',,1
+  hdr _public,'SOURCE'
 source:
   ld hl,tick_source.1
   jp two_fetch.1
 
 ; PARSE  ( c -- ca u ) 0 (parse)
 
-  hdr _public,'PARSE',,1
+  hdr _public,'PARSE'
 parse:
   ld hl,0
   push hl
   jp paren_parse
 
-; (parse)  ( c f -- ca u ) 2>r source >in @ /string r> if tuck
+; (PARSE)  ( c f -- ca u ) 2>r source >in @ /string r> if tuck
 ;         r@ skip over - >in +! then 2dup r>
 ;         scan nip tuck - dup rot 0<> - >in +!
 
-  hdr 0,'(PARSE)',,1
+  hdr 0,'(PARSE)'
 paren_parse:
   call do_colon
   dw two_to_r
@@ -5902,11 +5921,11 @@ paren_parse.1:
   dw in_,plus_store
   dw exit
 
-; +psb  ( a1 n1 n2 -- n3 )
+; +PSB  ( a1 n1 n2 -- n3 )
 ;   >r (parsed_string_buffer_size) r@ - umin r> 2dup + >r
 ;   (parsed_string_buffer) + swap cmove r>
 
-  hdr _hidden,'+PSB',,1
+  hdr _hidden,'+PSB'
 ppsb:
   call do_colon
   dw to_r
@@ -5929,7 +5948,7 @@ ppsb:
 ;         while 1 dup >in +! r> +psb repeat
 ;         then 2drop (parsed_string_buffer) r>
 
-  hdr _public,'PARSE$',,1
+  hdr _public,'PARSE$'
 parss:
   call do_colon
   dw zero
@@ -5957,9 +5976,9 @@ parss.2:
   dw from_r
   dw exit
 
-; pwa  ( -- adr )   parsed word address
+; PWA  ( -- adr )   parsed word address
 
-  hdr _hidden,'PWA',,1
+  hdr _hidden,'PWA'
 pwa:
   call do_value
   ds cw
@@ -5969,13 +5988,14 @@ pwa:
 ;;;       255 min (hm-5) over - dup to pwa place pwa
 ;;;       bl affix
 ;;
-;;  header x,'>WBUF',,1  ; uses WORD's buffer
+;;  header x,'>WBUF'
+  ; uses WORD's buffer
 ;;twbuf:
 ;;  call do_colon
 ;;  dw c_lit
 ;;  db 255
 ;;  dw min
-;;   if retro
+;;   if classic_Forth_behaviours
 ;;  dw dp,fetch
 ;;   else
 ;;  dw lit,hm-5
@@ -6012,14 +6032,14 @@ pwa:
 ;        255 min (hm-5) over - dup to pwa packed
 ;        bl affix
 
-  hdr _hidden,'WPACK',,1
+  hdr _hidden,'WPACK'
   ; pack string in WORD's buffer
 wpack:
   call do_colon
   dw c_lit
   db 255          ; 255
   dw min          ; min
-   if  retro
+   if  classic_Forth_behaviours
   dw dp,fetch     ; dp @
    else
   dw lit,hm-5     ; (hm) 5 -
@@ -6033,7 +6053,7 @@ wpack:
 
 ;  WORD  ( c -- ca )
 
-  hdr _public,'WORD',,1
+  hdr _public,'WORD'
 word:
   call do_colon
   dw true,paren_parse ; true (parse)
@@ -6042,23 +6062,23 @@ word:
 
 ;  bl-word  ( -- ca )
 
-  hdr _hidden,'BL-WORD',,1
+  hdr _hidden,'BL-WORD'
 bl_word:
-  ld hl,0x20
+  ld hl,sp_char
   push hl     ; bl
   jp word     ; word
 
-; token  ( -- ca u )
+; TOKEN  ( -- ca u )
 
-  hdr _public,'TOKEN',,1
+  hdr _public,'TOKEN'
 token:
   call do_colon
   dw bl_word,count ; bl-word count
   dw exit
 
-; defined  ( -- ca 0 | xt -1 | xt 1 )
+; DEFINED  ( -- ca 0 | xt -1 | xt 1 )
 
-  hdr _hidden,'DEFINED',,1
+  hdr _hidden,'DEFINED'
 defined_:
   call do_colon
   dw bl_word,find ; bl-word find
@@ -6066,7 +6086,7 @@ defined_:
 
 ; '  ( -- a )    defined ?defined
 
-  hdr _public,"'",,1
+  hdr _public,"'"
 tick:
   call do_colon
   dw defined_
@@ -6075,7 +6095,7 @@ tick:
 
 ; [UNDEFINED]  ( -- flag )  defined nip 0= ;immediate
 
-  hdr _public,'[UNDEFINED]',_immediate,1
+  hdr _public,'[UNDEFINED]',_immediate
 budef:
   call do_colon
   dw defined_
@@ -6085,7 +6105,7 @@ budef:
 
 ; [DEFINED]  ( -- flag )  postpone [undefined] 0= ;immediate
 
-  hdr _public,'[DEFINED]',_immediate,1
+  hdr _public,'[DEFINED]',_immediate
 bdef:
   call do_colon
   dw budef,zero_equals
@@ -6093,7 +6113,7 @@ bdef:
 
 ; (  ( "ccc<delim>" ) [char] ) parse 2drop ;immediate
 
-  hdr _public,'(',_immediate,1
+  hdr _public,'(',_immediate
 paren:
   call do_colon
   dw c_lit
@@ -6103,7 +6123,7 @@ paren:
 
 ; .(  ( "ccc<delim>" )  [char] ) parse$ type ;immediate
 
-  hdr _public,'.(',_immediate,1
+  hdr _public,'.(',_immediate
 dotp:
   call do_colon
   dw c_lit
@@ -6114,7 +6134,7 @@ dotp:
 ; \  ( "ccc" -- )   source nip blk @ if c/l >in @ over / 1+ *
 ;       min then >in ! ;immediate
 
-  hdr _public,'\',_immediate,1
+  hdr _public,'\',_immediate
 bslas:
   call do_colon
   dw source,nip
@@ -6131,7 +6151,7 @@ bslas.1:
 
 ; \\  ( "ccc" -- )  source nip >in ! ;immediate
 
-  hdr _public,'\\',_immediate,1
+  hdr _public,'\\',_immediate
 bslss:
   call do_colon
   dw source,nip
@@ -6141,7 +6161,7 @@ bslss:
 ; XXX NEW -- DX-Forth 4.09
 ;  LINK,  ( a -- )    here over @ , swap !
 
-  hdr _public,'LINK,',,1
+  hdr _public,'LINK,'
 linkc:
   call do_colon
   dw here
@@ -6154,7 +6174,8 @@ linkc:
 ;;; WORDLIST  ( -- wid )  $2001 , here 0 , here dup voc-link @ , !
 ;;;       0 ,
 ;;
-;;  header 0,'WORDLIST',,1 ; nameless wordlists not supported
+;;  header 0,'WORDLIST'
+  ; nameless wordlists not supported
 ;;wlist:
 ;;  call do_colon
 ;;  dw lit,0x2001
@@ -6172,7 +6193,7 @@ linkc:
 ; XXX NEW -- DX-Forth 4.09
 ;  WORDLIST  ( -- wid )  $2001 , here 0 , voc-link link, 0 ,
 
-  hdr _hidden,'WORDLIST',,1
+  hdr _hidden,'WORDLIST'
 wlist:
   call do_colon
   dw lit,2001h
@@ -6191,7 +6212,7 @@ wlist:
 ;       last @
 ;       swap cell+ cell+ ! sys ! does> @ context !
 
-  hdr _public,'VOCABULARY',,1
+  hdr _public,'VOCABULARY'
 vocabulary:
   call do_colon
   dw sys_question
@@ -6213,7 +6234,7 @@ do_vocabulary:
 
 ; DEFINITIONS  ( -- ) get-context set-current
 
-  hdr _public,'DEFINITIONS',,1
+  hdr _public,'DEFINITIONS'
 defin:
   call do_colon
   dw getcon
@@ -6233,7 +6254,7 @@ forth.2:
 
 ; FORTH     vocabulary forth
 
-  hdr _public,'FORTH',,1
+  hdr _public,'FORTH'
 forth:
   call do_vocabulary
   dw forth.1
@@ -6276,7 +6297,7 @@ unused.2:
 ;       fnumber then r> base ! ?defined then ?stack
 ;       repeat drop
 
-  hdr _public,'INTERPRET',,1
+  hdr _public,'INTERPRET'
 interpret:
   call do_colon
 interpret.1:
@@ -6317,9 +6338,9 @@ interpret.7:
   dw sstr
   dw two_dup
 interpret.8:
-  dw numq    ; NUMBER? patch
+  dw number_question    ; NUMBER? patch
   dw question_branch,interpret.12
-  dw tnip
+  dw two_nip
   dw dpl,fetch,zero_less_than
   dw question_branch,interpret.10
   dw drop
@@ -6347,11 +6368,15 @@ interpret.15:
   dw drop
   dw exit
 
-; (evaluate)  ( ca u blk -- ) blk @ >in @ 2>r source 2>r blk !
+; (EVALUATE)  ( ca u blk -- )
+;
+; does not restore block contents
+;
+;         blk @ >in @ 2>r source 2>r blk !
 ;         'source 2! >in off interpret 2r>
 ;         'source 2! 2r> >in ! blk !
 
-  hdr _hidden,'(EVAL)',,1   ; does not restore block contents
+  hdr _hidden,'(EVALUATE)'
 paren_evaluate:
   call do_colon
   dw blk,fetch
@@ -6368,9 +6393,11 @@ paren_evaluate:
   dw blk,store
   dw exit
 
-; ?BLOCK   ( -- )     blk @ ?dup if block drop then
+; ?BLOCK   ( -- )
+; reload block
+; blk @ ?dup if block drop then
 
-  hdr _hidden,'?BLOCK',,1   ; reload block
+  hdr _hidden,'?BLOCK'
 question_block:
   call do_colon
   dw blk,fetch,question_dup
@@ -6381,20 +6408,21 @@ question_block.1:
 
 ; EVALUATE  ( ca u -- ) 0 (evaluate) ?block
 
-  hdr _public,'EVALUATE',,1
-eval:
+  hdr _public,'EVALUATE'
+evaluate:
   call do_colon
   dw zero,paren_evaluate
   dw question_block
   dw exit
 
-; (refill)  ( -- flag )
+; (REFILL)  ( -- flag )
+; doesn't correctly handle source
 ;       blk @ ?dup if 1+ dup #screens u< and dup
 ;       while dup blk ! block b/buf else (tib)
 ;       dup 80 accept space then 'source 2! >in
 ;       off true then
 
-  hdr _hidden,'(REFILL)',,1   ; doesn't correctly handle source
+  hdr _hidden,'(REFILL)'
 paren_refill:
   call do_colon     ; from EVALUATE
    if debug
@@ -6408,7 +6436,7 @@ paren_refill:
   dw and_,dup
   dw question_branch,paren_refill.3
   dw dup,blk,store
-  dw block,bbuf
+  dw block,bytes_per_buffer
   dw branch,paren_refill.2
 paren_refill.1:
   dw lit,tib
@@ -6426,12 +6454,12 @@ paren_refill.3:
 
 ; REFILL  ( -- flag )
 
-  hdr _public,'REFILL',,1
+  hdr _public,'REFILL'
 refill:
   call fetch_execute
   dw paren_refill
 
-; reset  ( -- )   catcher off -caps console
+; RESET  ( -- )   catcher off -caps console
 
   hdr _hidden,'RESET'
 reset:
@@ -6441,21 +6469,21 @@ reset:
   dw console      ; set EMIT vector
   dw exit
 
-; /interpret  ( -- )  blk off >in off postpone [
+; /INTERPRET  ( -- )  blk off >in off postpone [
 
-  hdr _hidden,'/INTERPRET',,1
+  hdr _hidden,'/INTERPRET'
 slash_interpret:
   ld hl,0
   ld (blk.1),hl
   ld (in_.1),hl
   jp left_bracket
 
-; forth-reset  ( -- )
+; FORTH-RESET  ( -- )
 ;       0 set-limit empty warning on checking
 ;       on (fdbs) (file_descriptor_size*nfd) erase empty-buffers
 ;       /interpret 'source off bl-word drop
 
-  hdr _hidden,'FORTH-RESET',,1
+  hdr _hidden,'FORTH-RESET'
 forth_reset:
   call do_colon
 ; XXX TODO
@@ -6476,7 +6504,7 @@ forth_reset:
 
 ; QUIT  ( -- )
 
-  hdr _public,'QUIT',,1
+  hdr _public,'QUIT'
 quit:
   call do_colon
 quit.1:
@@ -6512,7 +6540,7 @@ return:
 ; BYE  ( -- )
 ; Exit to the BASIC command line.
 
-  hdr _public,'BYE',,1
+  hdr _public,'BYE'
 bye:
   ; XXX TODO restore the stack, etc.
   im 1
@@ -6531,7 +6559,7 @@ if 0
   db 0xff      ; error 0: OK
 endif
 
-; boot?  ( -- xt )
+; BOOT?  ( -- xt )
 
   ; XXX TODO -- convert this into a variable that holds an xt?
   ; XXX TODO -- combine with 'boot'
@@ -6541,7 +6569,7 @@ boot_question:
   push hl
   jp next
 
-; (abort)  ( -- )   s0 @ sp! fs0 @ fsp ! boot? if 1 return then
+; (ABORT)  ( -- )   s0 @ sp! fs0 @ fsp ! boot? if 1 return then
 ;       quit
 
   hdr _hidden,'(ABORT)'
@@ -6565,13 +6593,13 @@ paren_abort.1  dw paren_dot_quote
   dw return
    endif
 
-; .error  ( -- )
+; .ERROR  ( -- )
 ;       cr blk @ ?dup if file? and if filename type
 ;       >in @ 2- 0max blk @ 2dup scr 2! ."  Scr "
 ;       u. c/l / ." Line " . cr then then ." Error: "
 ;       [char] " dup emit pwa count 31 min type emit
 
-  hdr _hidden,'.ERROR',,1
+  hdr _hidden,'.ERROR'
 doterr:
   call do_colon
   dw cr
@@ -6611,7 +6639,7 @@ doterr.1:
   dw emit
   dw exit
 
-; error  ( n -- )
+; ERROR  ( n -- )
 ;       -1 of (abort) then
 ;       -2 of boot cell+ @ 0=
 ;       if .error then space errmsg 2@ type (abort) then
@@ -6699,7 +6727,7 @@ abort.1:
   push hl
   jp throw
 
-; (abort")  ( n -- )  r> count rot if errmsg 2! -2 throw then +
+; (ABORT")  ( n -- )  r> count rot if errmsg 2! -2 throw then +
 ;       >r
 
   hdr _hidden,'(ABORT")'
@@ -6718,7 +6746,7 @@ paren_abort_quote_.1:
 
 ; ABORT"      postpone (abort") ," ;immediate
 
-  hdr _public,'ABORT"',_immediate,1
+  hdr _public,'ABORT"',_immediate
 abort_quote:
   call do_colon
   dw compile,paren_abort_quote
@@ -6853,7 +6881,7 @@ bootmessage:
 
 ; COLD ( -- )
 
-  hdr _public,'COLD'    ; FIG
+  hdr _public,'COLD'
 cold:
 ; XXX TODO
 ; XXX OLD
@@ -7051,7 +7079,7 @@ do_f_identify_patch:
 ; XXX OLD 
 ;;; SET-LIMIT  ( a -- )  $fff0 and (ulimit) !
 ;;
-;;  hdr  1,'SET-LIMIT',,1
+;;  hdr  1,'SET-LIMIT'
 ;;setlim:
 ;;  pop hl
 ;;  ld a,l
@@ -7065,7 +7093,7 @@ do_f_identify_patch:
 
 ;  FREEZE  ( -- )
 
-  hdr _public,'FREEZE',,1
+  hdr _public,'FREEZE'
 freeze:
   call do_colon
   dw udp,fetch ; from
@@ -7077,15 +7105,16 @@ freeze:
 ; XXX OLD
 ;;;  'prune      variable 'prune  'prune off
 ;;
-;;  hdr _hidden,"'PRUNE",,1
+;;  hdr _hidden,"'PRUNE"
 ;;tprun:
 ;;  call do_create
 ;;  dw toppru    ; 0=end
 
 ; XXX OLD
 ;;;  REMEMBER  ( xt -- )  'prune link, ,
+;;; add xt to prunes
 ;;
-;;  hdr _public,'REMEMBER',,1  ; add xt to prunes
+;;  hdr _public,'REMEMBER'
 ;;remember:
 ;;  call do_colon
 ;;  dw tprun,linkc
@@ -7094,7 +7123,7 @@ freeze:
 
 ;  xdp  ( adr -- adr xdp )  dup limit u< if dp else dph then
 
-  hdr _hidden,'XDP',,1
+  hdr _hidden,'XDP'
 xdp:
   pop de
   push de
@@ -7108,7 +7137,7 @@ xdp:
 ;;;  prunes  ( -- )    begin 'prune @ dup while dup xdp @ u< 0=
 ;;;        while 2@ 'prune ! execute repeat then drop
 ;;
-;;  hdr _hidden,'PRUNES',,1
+;;  hdr _hidden,'PRUNES'
 ;;pruns:
 ;;  call do_colon
 ;;pruns.1:
@@ -7130,7 +7159,7 @@ xdp:
 ;  ?protected ( ha -- ha )  (init_dph) @ over u> check? and
 ;          abort" is protected"
 
-  hdr _hidden,'?PROTECTED',,1
+  hdr _hidden,'?PROTECTED'
 question_protected:
   call do_colon
   dw lit,init_dph
@@ -7141,10 +7170,12 @@ question_protected:
   dcs 'is protected'
   dw exit
 
-;  name? ( "name" -- xt nfa )  bl-word get-context wfind ?defined
+;  name? ( "name" -- xt nfa )
+; find name in context wordlist
+;         bl-word get-context wfind ?defined
 ;          ?protected
 
-  hdr _hidden,'NAME?',,1  ; find name in context wordlist
+  hdr _hidden,'NAME?'
 nameq:
   call do_colon
   dw bl_word
@@ -7158,7 +7189,7 @@ nameq:
 
   ; find link field containing nfa, 0=none
 
-  hdr _hidden,'LFIND',,1
+  hdr _hidden,'LFIND'
 lfind:
   call do_colon
   dw swap
@@ -7177,7 +7208,8 @@ lfind.2:
 ;  BEHEAD  ( "name1" "name2" -- )  name? nip name? nip 2dup u< if swap
 ;          then n>name get-context rot lfind !
 
-  hdr _public,'BEHEAD',,1  ; unlink word heads
+  hdr _public,'BEHEAD'
+  ; unlink word heads
 behead:
   call do_colon
   dw nameq,nip
@@ -7194,7 +7226,7 @@ behead.1:
 
 ;  ?voc  ( flag -- )    abort" invalid vocabulary"
 
-  hdr _hidden,'?VOC',,1
+  hdr _hidden,'?VOC'
 question_voc:
   call do_colon
   dw paren_abort_quote
@@ -7206,7 +7238,7 @@ question_voc:
 ;          2dup lfind ?voc swap 0 lfind
 ;          ?protected 2dup u> ?voc !
 
-  hdr _public,'CHAIN',,1
+  hdr _public,'CHAIN'
 chain:
   call do_colon
   dw getcur
@@ -7234,7 +7266,7 @@ chain:
 ;        repeat swap ! @ ?dup 0= until r> dup dp
 ;        cell+ ! (init_dph) @ u< if freeze then prunes
 
-  hdr _hidden,'(FORGET)',,1
+  hdr _hidden,'(FORGET)'
 paren_forget:
   call do_colon
   dw dp,store  ; starting maximums
@@ -7280,7 +7312,7 @@ paren_forget.6:
 
 ;  EMPTY  ( -- )    forth definitions (init_dp) 2@ (forget)
 
-  hdr _public,'EMPTY',,1
+  hdr _public,'EMPTY'
 empty:
   call do_colon
   dw forth,defin  ; switch to a safe vocabulary
@@ -7293,7 +7325,7 @@ empty:
 ;        abort" is alias" swap limit over u> if
 ;        drop dp @ then (forget)
 
-  hdr _public,'FORGET',,1
+  hdr _public,'FORGET'
 forget:
   call do_colon
   dw getcur
@@ -7314,7 +7346,7 @@ forget.1:
 
 ;  MARKER  ( "name" -- )  sys? system create sys !
 
-  hdr _public,'MARKER',,1
+  hdr _public,'MARKER'
 marker:
   call do_colon
   dw sys_question
@@ -7329,7 +7361,7 @@ marker:
 ; S,  ( ca u -- )
 ; 255 min 0max here over 1+ allot place
 
-  hdr _hidden,'S,',,1
+  hdr _hidden,'S,'
 s_comma:
   call do_colon
   dw c_lit
@@ -7343,7 +7375,7 @@ s_comma:
 
 ; ,"  ( "ccc" -- )  [char] " parse$ s,
 
-  hdr _public,',"',,1
+  hdr _public,',"'
 comma_quote:
   call do_colon
   dw c_lit
@@ -7363,7 +7395,7 @@ comma_quote:
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-; (s")  ( -- ca u ) r> count 2dup + >r
+; (S")  ( -- ca u ) r> count 2dup + >r
 
   hdr _hidden,'(S")'
 paren_s_quot:
@@ -7380,7 +7412,7 @@ paren_s_quot:
 
 ; SLITERAL  ( ca u -- )  postpone (s") s, ;immediate
 
-  hdr _public,'SLITERAL',_immediate,1
+  hdr _public,'SLITERAL',_immediate
 s_literal:
   call do_colon
   dw compile,paren_s_quot
@@ -7389,8 +7421,9 @@ s_literal:
 
 ; S"  ( -- ca u ) [char] " parse$ state? if postpone sliteral
 ;       then ;immediate
+; state-smart
 
-  hdr _public,'S"',_immediate,1  ; state-smart
+  hdr _public,'S"',_immediate
 s_quote:
   call do_colon
   dw c_lit
@@ -7431,7 +7464,7 @@ paren_dot_quote:
 
 ; ."      compile (.") ," ;immediate
 
-  hdr _public,'."',_immediate,1
+  hdr _public,'."',_immediate
 dot_quote:
   call do_colon
   dw compile,paren_dot_quote
@@ -7440,7 +7473,7 @@ dot_quote:
 
 ; CHAR?  ( x -- x flag )
 
-  hdr _hidden,'CHAR?',,1
+  hdr _hidden,'CHAR?'
 char_question:
   pop hl
   push hl
@@ -7450,7 +7483,7 @@ char_question:
 ; LITERAL  ( n -- ) char? if postpone c_lit c, exit then
 ;       postpone lit , ;immediate
 
-  hdr _public,'LITERAL',_immediate,1
+  hdr _public,'LITERAL',_immediate
 literal:
   call do_colon
   dw char_question
@@ -7465,7 +7498,7 @@ literal.1:
 
 ; 2LITERAL  ( d -- )  postpone 2lit , , ;immediate
 
-  hdr _public,'2LITERAL',_immediate,1
+  hdr _public,'2LITERAL',_immediate
 two_literal:
   call do_colon
   dw compile,two_lit
@@ -7474,7 +7507,7 @@ two_literal:
 
 ; [']     ' [compile] literal  ;immediate
 
-  hdr _public,"[']",_immediate,1
+  hdr _public,"[']",_immediate
 bracket_tick:
   call do_colon
   dw tick
@@ -7483,7 +7516,7 @@ bracket_tick:
 
 ; [COMPILE]   ' compile,  ;immediate
 
-  hdr _public,'[COMPILE]',_immediate,1
+  hdr _public,'[COMPILE]',_immediate
 bracket_compile:
   call do_colon
   dw tick
@@ -7492,7 +7525,7 @@ bracket_compile:
 
 ; RECURSE  ( -- )   last cell+ @ compile, ;immediate
 
-  hdr _public,'RECURSE',_immediate,1
+  hdr _public,'RECURSE',_immediate
 recurse:
   ld hl,(last.2)
   push hl
@@ -7500,7 +7533,7 @@ recurse:
 
 ; CHAR  ( -- c ) bl word 1+ c@
 
-  hdr _public,'CHAR',,1
+  hdr _public,'CHAR'
 char:
   call do_colon
   dw bl,word
@@ -7509,7 +7542,7 @@ char:
 
 ; [CHAR]  ( -- c ) char [compile] literal
 
-  hdr _public,'[CHAR]',_immediate,1
+  hdr _public,'[CHAR]',_immediate
 bracket_char:
   call do_colon
   dw char
@@ -7541,37 +7574,37 @@ yn2:
 
 ; CHAR+  ( ca1 -- ca2 ) aka 1+ char+
 
-  hdr _public,'CHAR+',,,one_plus
+  hdr _public,'CHAR+',,one_plus
 char_plus: equ one_plus
 
 ; CHARS  ( n1 -- n2 )   aka noop chars immediate
 
-  hdr _public,'CHARS',_immediate,,noop
+  hdr _public,'CHARS',_immediate,noop
 chars: equ next
 
 ; CELL+  ( a1 -- a2 ) aka 2+ cell+
 
-  hdr _public,'CELL+',,,two_plus
+  hdr _public,'CELL+',,two_plus
 cell_plus: equ two_plus
 
 ; CELL-  ( a1 -- a2 ) aka 2- cell-
 
-  hdr _public,'CELL-',,,two_minus
+  hdr _public,'CELL-',,two_minus
 cell_minus: equ two_minus
 
 ; CELLS  ( n1 -- n2 )   aka 2* cells
 
-  hdr _public,'CELLS',,,tstar
-cells: equ tstar
+  hdr _public,'CELLS',,two_star
+cells: equ two_star
 
 ; ALIGN  ( -- )     aka noop align immediate
 
-  hdr _public,'ALIGN',_immediate,,noop
+  hdr _public,'ALIGN',_immediate,noop
 align: equ next
 
 ; ALIGNED  ( a -- aa ) aka noop aligned immediate
 
-  hdr _public,'ALIGNED',_immediate,,noop
+  hdr _public,'ALIGNED',_immediate,noop
 aligned: equ next
 
 ; DZX-FORTH  ( -- minor major )
@@ -7650,7 +7683,7 @@ dpath:
   dw scan,dup
   dw question_branch,dpath.1
   dw one,sstr
-  dw tswap
+  dw two_swap
 dpath.1:
   dw two_drop
   dw exit
@@ -7681,7 +7714,7 @@ plus_ext.1:
   dw three,min
   dw paren_s_quot
   dcs '.'
-  dw trot
+  dw two_rot
   dw dtrai    ; trim trailing blanks
   dw c_lit
   db filename_size-5
@@ -8135,7 +8168,8 @@ reposf.2:
   dw ior
   dw exit
 
-;  xf5  ( -- )    $80 fcb 5 + ctoggle
+;  xf5  ( -- )
+;  $80 fcb 5 + ctoggle
 
   hdr _hidden,'XF5'
 xff:
@@ -8146,7 +8180,7 @@ xff:
   dw c_lit
   db 5
   dw plus
-  dw ctog
+  dw c_toggle
   dw exit
 
 ;  FILE-SIZE  ( fid -- ud ior )  3 setfh dup 0= if uid c@ setusr
@@ -8214,23 +8248,23 @@ closf.2:
 
 ;  R/O  ( -- fam )      aka 0 r/o
 
-  hdr _public,'R/O',,,zero
+  hdr _public,'R/O',,zero
 rso: equ  zero
 
 ;  W/O  ( -- fam )      aka 1 w/o
 
-  hdr _public,'W/O',,,one
+  hdr _public,'W/O',,one
 wso: equ  one
 
 ;  R/W  ( -- fam )
 ;  aka 2 r/w
 
-  hdr _public,'R/W',,,two
+  hdr _public,'R/W',,two
 read_write: equ  two
 
 ;  BIN  ( fam1 -- fam2 )    aka noop bin immediate
 
-  hdr _public,'BIN',_immediate,,noop
+  hdr _public,'BIN',_immediate,noop
 binn: equ  next
 
 ;  open1  ( a u fam -- | x ior )
@@ -8380,7 +8414,7 @@ delf:
   hdr _public,'RENAME-FILE'
 renf:
   call do_colon
-  dw tswap
+  dw two_swap
   dw tfcb,setusr,to_r
   dw tfcb,drop
   dw r_fetch,c_fetch
@@ -8738,7 +8772,7 @@ fdtab:
 
 ;  sfp  ( -- a )
 
-  hdr _hidden,'SFP',,1
+  hdr _hidden,'SFP'
 sfp:
   call do_create
 sfp.1:
@@ -8749,7 +8783,7 @@ sfp.2:
 ;  SWAP-FILE  ( -- )  scr @ scr# ! sfp 2@ swap sfp 2!
 ;        scr# @ scr ! empty-buffers
 
-  hdr _public,'SWAP-FILE',,1
+  hdr _public,'SWAP-FILE'
 swapf:
   call do_colon
   dw scr,fetch
@@ -8765,7 +8799,8 @@ swapf:
 ;  FDB  ( -- a )  (fdtab) (nfd) 0 do dup @ @ 0= if unloop exit
 ;        then cell+ loop abort" too many files"
 
-  hdr _public,'FDB',,1  ; get a free slot
+  hdr _public,'FDB'
+  ; get a free slot
 fdb:
   call do_colon
   dw lit,fdtab
@@ -8797,7 +8832,7 @@ fdb.3:
 
 ;  fd  ( -- a )
 
-  hdr _hidden,'FD',,1
+  hdr _hidden,'FD'
 fd:
   call do_colon    ; file descriptor field
   dw sfp,fetch,fetch
@@ -8805,7 +8840,7 @@ fd:
 
 ;  fid  ( -- a )
 
-  hdr _hidden,'FID',,1
+  hdr _hidden,'FID'
 fid:
   ld e,cw*1    ; file handle field
 fid.1:
@@ -8817,35 +8852,35 @@ fid.1:
 
 ;  blks  ( -- a )
 
-  hdr _hidden,'BLKS',,1
+  hdr _hidden,'BLKS'
 blks:
   ld e,cw*2    ; file size field
   jp fid.1
 
 ;  scr#  ( -- a )
 
-  hdr _hidden,'SCR#',,1
+  hdr _hidden,'SCR#'
 snum:
   ld e,cw*3    ; current SCR# field
   jp fid.1
 
 ;  fnb  ( -- a )
 
-  hdr _hidden,'FNB',,1
+  hdr _hidden,'FNB'
 fnb:
   ld e,cw*4    ; file name field
   jp fid.1
 
 ;  buf  ( -- a )
 
-  hdr _hidden,'BUF',,1
+  hdr _hidden,'BUF'
 buf:
   call do_constant    ; file buffer address
   dw block_buffer
 
 ;  blk#  ( -- a )
 
-  hdr _hidden,'BLK#',,1
+  hdr _hidden,'BLK#'
 bnum:
   call do_create    ; block#, update flag
 bnum.1:
@@ -8853,7 +8888,7 @@ bnum.1:
 
 ;  FILE?  ( -- flag )
 
-  hdr _public,'FILE?',,1
+  hdr _public,'FILE?'
 gcfile_question:
   call do_colon
   dw fd,fetch ; fd @
@@ -8862,7 +8897,7 @@ gcfile_question:
 
 ;  LOADFILE  ( -- ca u )  fnb count
 
-  hdr _public,'LOADFILE',,1
+  hdr _public,'LOADFILE'
 loadfile:
   call do_colon
   dw fnb,count
@@ -8870,7 +8905,7 @@ loadfile:
 
 ;  ?open  ( -- )    file? 0= abort" no file open"
 
-  hdr _hidden,'?OPEN',,1
+  hdr _hidden,'?OPEN'
 qopen:
   call do_colon
   dw gcfile_question
@@ -8881,7 +8916,7 @@ qopen:
 
 ;  #SCREENS  ( -- +n )  ?open blks @
 
-  hdr _public,'#SCREENS',,1
+  hdr _public,'#SCREENS'
 nscr:
   call do_colon
   dw qopen
@@ -8890,7 +8925,7 @@ nscr:
 
 ;  EMPTY-BUFFERS  ( -- )  $7fff blk# !
 
-  hdr _public,'EMPTY-BUFFERS',,1
+  hdr _public,'EMPTY-BUFFERS'
 empty_buffers:
   ld hl,7fffh
   ld (bnum.1),hl
@@ -8898,7 +8933,7 @@ empty_buffers:
 
 ;  UPDATE  ( -- )    ?open blk# @ $8000 or blk# !
 
-  hdr _public,'UPDATE',,1
+  hdr _public,'UPDATE'
 update:
   call do_colon
   dw qopen
@@ -8910,7 +8945,7 @@ update:
 
 ;  blkerr  ( flag -- )  abort" block r/w error"
 
-  hdr _hidden,'BLKERR',,1
+  hdr _hidden,'BLKERR'
 blkerr:
   call do_colon
   dw paren_abort_quote
@@ -8921,15 +8956,15 @@ blkerr:
 ;        buf b/buf fid @ r> if write-file else
 ;        read-file blkerr b/buf < then blkerr
 
-  hdr _hidden,'BLK-RW',,1
+  hdr _hidden,'BLK-RW'
 blkrw:
   call do_colon
   dw to_r
-  dw bbuf,umstr
+  dw bytes_per_buffer,umstr
   dw fid,fetch
   dw reposf
   dw blkerr
-  dw buf,bbuf
+  dw buf,bytes_per_buffer
   dw fid,fetch
   dw from_r
   dw question_branch,blkrw.1
@@ -8938,7 +8973,7 @@ blkrw:
 blkrw.1:
   dw readf
   dw blkerr
-  dw bbuf,less_than
+  dw bytes_per_buffer,less_than
 blkrw.2:
   dw blkerr
   dw exit
@@ -8946,7 +8981,7 @@ blkrw.2:
 ;  ?blk  ( +n -- +n )  dup #screens 0 within
 ;        abort" block out of range"
 
-  hdr _hidden,'?BLK',,1
+  hdr _hidden,'?BLK'
 qblk:
   call do_colon
   dw dup
@@ -8959,7 +8994,7 @@ qblk:
 ;  SAVE-BUFFERS  ( -- )  ?open blk# @ 0< if blk# @ $7fff and
 ;        dup blk# ! ?blk 1 blk-rw then
 
-  hdr _public,'SAVE-BUFFERS',,1
+  hdr _public,'SAVE-BUFFERS'
 save_buffers:
   call do_colon
   dw qopen
@@ -8978,7 +9013,7 @@ savbuf.1:
 
 ;  FLUSH  ( -- )    save-buffers empty-buffers
 
-  hdr _public,'FLUSH',,1
+  hdr _public,'FLUSH'
 flush:
   call do_colon
   dw save_buffers,empty_buffers
@@ -8986,7 +9021,7 @@ flush:
 
 ;  BUFFER  ( +n -- a )  save-buffers ?blk blk# ! buf
 
-  hdr _public,'BUFFER',,1
+  hdr _public,'BUFFER'
 buffer:
   call do_colon
   dw save_buffers
@@ -8998,7 +9033,7 @@ buffer:
 ;  BLOCK  ( +n -- a )  ?open blk# @ $7fff and over - if dup
 ;        buffer drop 0 blk-rw else drop then buf
 
-  hdr _public,'BLOCK',,1
+  hdr _public,'BLOCK'
 block:
   call do_colon
   dw qopen
@@ -9018,8 +9053,8 @@ block.2:
 ;  -->  ( -- )    blk @ 0= abort" loading only" (refill) drop
 ;        ;immediate
 
-  hdr _public,'-->',_immediate,1
-arrow:
+  hdr _public,'-->',_immediate
+next_block:
   call do_colon
   dw blk,fetch
   dw zero_equals
@@ -9030,14 +9065,14 @@ arrow:
 
 ;  (thru)  ( +n1 +n2 -- )  1+ swap ?do i block b/buf i (evaluate) loop
 
-  hdr _hidden,'(THRU)',,1
+  hdr _hidden,'(THRU)'
 paren_thru:
   call do_colon
   dw one_plus,swap
   dw paren_question_do,paren_thru.2
 paren_thru.1:
   dw i_,block
-  dw bbuf
+  dw bytes_per_buffer
   dw i_,paren_evaluate
   dw paren_loop,paren_thru.1
 paren_thru.2:
@@ -9045,7 +9080,7 @@ paren_thru.2:
 
 ;  THRU  ( +n1 +n2 -- )  (thru) ?block
 
-  hdr _public,'THRU',,1
+  hdr _public,'THRU'
 thru:
   call do_colon
   dw paren_thru
@@ -9054,7 +9089,7 @@ thru:
 
 ;  LOAD  ( +n -- )   dup thru
 
-  hdr _public,'LOAD',,1
+  hdr _public,'LOAD'
 load:
   pop hl
   push hl
@@ -9063,7 +9098,7 @@ load:
 
 ;  fnbuf  ( -- a )
 
-  hdr _hidden,'FNBUF',,1
+  hdr _hidden,'FNBUF'
 fnbuf:
   call do_create    ; current file handle
   ds filename_size
@@ -9078,7 +9113,7 @@ fnbuf:
 ;        throw fid ! then over blks ! ?do i buffer
 ;        b/buf blank update save-buffers loop
 
-  hdr _hidden,'(FBK)',,1
+  hdr _hidden,'(FBK)'
 pfbk:
   call do_colon
   dw nscr    ; tests if file open
@@ -9097,7 +9132,7 @@ pfbk:
 pfbk.1:
   dw dup
   dw i_,block
-  dw bbuf
+  dw bytes_per_buffer
   dw rot,writf,throw
   dw paren_loop,pfbk.1
 pfbk.2:
@@ -9116,7 +9151,7 @@ pfbk.3:
   dw paren_question_do,pfbk.5
 pfbk.4:
   dw i_,buffer
-  dw bbuf,blank
+  dw bytes_per_buffer,blank
   dw update,save_buffers
   dw paren_loop,pfbk.4
 pfbk.5:
@@ -9124,7 +9159,7 @@ pfbk.5:
 
 ;  FILEBLOCKS  ( +n -- )  ['] (fbk) catch abort" can't resize file"
 
-  hdr _public,'FILEBLOCKS',,1
+  hdr _public,'FILEBLOCKS'
 fbloc:
   call do_colon
   dw lit,pfbk
@@ -9133,12 +9168,14 @@ fbloc:
   dcs "can't resize file"
   dw exit
 
-;  CLOSE  ( -- )    file? if flush fid @ close-file drop
+;  CLOSE  ( -- )
+;  file? if flush fid @ close-file drop
 ;        fd off then empty-buffers
 ;
+; close current file
 ; NOTE: errors are NOT reported with this function
 
-  hdr _public,'CLOSE',,1  ; close current file
+  hdr _public,'CLOSE'
 close:
   call do_colon
   dw gcfile_question
@@ -9154,7 +9191,7 @@ close.1:
 ;  CLOSE-ALL  ( -- )  close (fdtab) nfd 0 do dup sfp ! close
 ;        cell+ loop drop
 
-  hdr _public,'CLOSE-ALL',,1
+  hdr _public,'CLOSE-ALL'
 closa:
   call do_colon
   dw close    ; ensure buffer flushed
@@ -9175,7 +9212,7 @@ closa.2:
 
 ;  lastfile  ( -- ca u )  zbuf cell+ @ count
 
-  hdr _hidden,'LASTFILE',,1
+  hdr _hidden,'LASTFILE'
 lastfile:
   call do_colon    ; last named file used by open-file etc
   dw zbuf,cell_plus
@@ -9184,7 +9221,7 @@ lastfile:
 
 ;  .lastfile  ( -- )  beep cr lastfile type space
 
-  hdr _hidden,'.LASTFILE',,1
+  hdr _hidden,'.LASTFILE'
 dot_lastfile:
   call do_colon
   dw beep,cr
@@ -9198,7 +9235,7 @@ dot_lastfile:
 ;        y/n 0= if abort then then lastfile r/w
 ;        create-file abort" can't create file"
 
-  hdr _hidden,'?CREATE',,1
+  hdr _hidden,'?CREATE'
 question_create:
   call do_colon
   dw rso,open_file  ; test if file exists
@@ -9225,7 +9262,7 @@ question_create.2:
 ;          um/mod nip blks ! lastfile fnb
 ;          place loadfile upper empty-buffers
 
-  hdr _hidden,'INIT-SCR',,1
+  hdr _hidden,'INIT-SCR'
 init_scr:
   call do_colon    ; init screenfile
   dw question_branch,init_scr.1
@@ -9236,7 +9273,7 @@ init_scr.1:
   dw fd,on
   dw dup,fid,store
   dw file_size,drop
-  dw bbuf,umslm,nip  ; overflow stores $FFFF
+  dw bytes_per_buffer,umslm,nip  ; overflow stores $FFFF
   dw blks,store
   dw lastfile,fnb,place
   dw loadfile,upper
@@ -9244,10 +9281,11 @@ init_scr.1:
   dw exit
 
 ;  OPEN  ( ca u fam -- ior )
+; open a screen file
 ;         fdb drop >r s" scr" +ext r>
 ;         open-file tuck init-scr
 
-  hdr _public,'OPEN',,1  ; open a screen file
+  hdr _public,'OPEN'
 open:
   call do_colon
   dw fdb,drop  ; free slot?
@@ -9262,7 +9300,7 @@ open:
 
 ;  (open)  ( ca u -- )    r/w open abort" can't open file"
 
-  hdr _hidden,'(OPEN)',,1
+  hdr _hidden,'(OPEN)'
 popen:
   call do_colon
   dw read_write,open
@@ -9272,7 +9310,7 @@ popen:
 
 ;  GETFILENAME  ( -- ca u )  token dup 0= abort" specify filename"
 
-  hdr _public,'GETFILENAME',,1
+  hdr _public,'GETFILENAME'
 getfilename:
   call do_colon
   dw token
@@ -9289,7 +9327,7 @@ getfilename:
 ;          ?create 0 init-scr then 0 0 scr 2!
 ; open/make a screen file
 
-  hdr _public,'USING',,1
+  hdr _public,'USING'
 using:
   call do_colon
   dw close
@@ -9321,7 +9359,7 @@ using.4:
 ;  LOADED  ( +n1 +n2 ca u -- )  sfp @ >r (open) (thru) close r>
 ;          sfp ! ?block
 
-  hdr _public,'LOADED',,1
+  hdr _public,'LOADED'
 loaded:
   call do_colon
   dw sfp,fetch
@@ -9336,7 +9374,7 @@ loaded:
 
 ;  FLOAD  ( +n "filename[.SCR]" -- )  dup getfilename loaded
 
-  hdr _public,'FLOAD',,1
+  hdr _public,'FLOAD'
 fload:
   call do_colon
   dw dup
@@ -9353,7 +9391,7 @@ fload:
 ;        and r@ write-file then r> close-file or
 ;        abort" can't save file"
 
-  hdr _public,'SAVE',,1
+  hdr _public,'SAVE'
 save:
   call do_colon
   ; XXX TODO
@@ -9398,7 +9436,7 @@ save:
 
 ;  TURNKEY  ( "bootword" "filename[.COM]" -- )
 
-  hdr _public,'TURNKEY',,1
+  hdr _public,'TURNKEY'
 turnkey:
   call do_colon
   ; XXX TODO
@@ -9411,7 +9449,7 @@ turnkey:
 
 ;  TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
 
-  hdr _public,'TURNKEY-SYSTEM',,1
+  hdr _public,'TURNKEY-SYSTEM'
 turnkey_system:
   call do_colon
   call do_colon
@@ -9487,7 +9525,7 @@ normal:
 
 ;  -FP  ( -- a )    marker -FP
 
-  hdr _public,'-FP',,1
+  hdr _public,'-FP'
 dfp:
   call next
 
@@ -9513,17 +9551,17 @@ floats:
 
 ;  FALIGN  ( -- )      aka noop falign immediate
 
-  hdr _public,'FALIGN',_immediate,,noop
+  hdr _public,'FALIGN',_immediate,noop
 falign: equ  next
 
 ;  FALIGNED ( a -- fa )  aka noop faligned immediate
 
-  hdr _public,'FALIGNED',_immediate,,noop
+  hdr _public,'FALIGNED',_immediate,noop
 falignd: equ  next
 
 ;  F,  (F: r -- ) or ( r -- )  , ,
 
-  hdr _public,'F,',,1
+  hdr _public,'F,'
 fcomm:
   call do_colon
   dw comma,comma
@@ -9532,14 +9570,14 @@ fcomm:
 ;  FLITERAL  ( -- r )
   ; aka fliteral 2literal immediate
 
-  hdr _public,'FLITERAL',_immediate,,two_literal
+  hdr _public,'FLITERAL',_immediate,two_literal
 f_literal equ  two_literal
 f_lit:    equ  two_lit
 
 ;  FCONSTANT  ( -- r )
   ; aka 2constant fconstant
 
-  hdr _public,'FCONSTANT',,,two_constant
+  hdr _public,'FCONSTANT',,two_constant
 f_constant: equ  two_constant
 
 do_f_constant: equ  two_fetch
@@ -9547,7 +9585,7 @@ do_f_constant: equ  two_fetch
 ;  FVARIABLE  ( -- fa )
 ;  aka 2variable fvariable
 
-  hdr _public,'FVARIABLE',,,two_variable
+  hdr _public,'FVARIABLE',,two_variable
 f_variable: equ  two_variable
 
 ;  FDEPTH   ( -- +n )  depth 2/
@@ -9556,42 +9594,42 @@ f_variable: equ  two_variable
 fdepth:
   call do_colon
   dw depth
-  dw twodiv
+  dw two_slash
   dw exit
 
 ;  FDROP  ( r -- )
 
-  hdr _public,'FDROP',,,two_drop  ; aka 2drop fdrop
+  hdr _public,'FDROP',,two_drop  ; aka 2drop fdrop
 f_drop: equ  two_drop
 
 ;  FDUP  ( r -- r r )
 
-  hdr _public,'FDUP',,,two_dup    ; aka 2dup fdup
+  hdr _public,'FDUP',,two_dup    ; aka 2dup fdup
 f_dup: equ  two_dup
 
 ;  FSWAP  ( r1 r2 -- r2 r1 )
 
-  hdr _public,'FSWAP',,,tswap  ; aka 2swap fswap
-f_swap: equ  tswap
+  hdr _public,'FSWAP',,two_swap  ; aka 2swap fswap
+f_swap: equ  two_swap
 
 ;  FOVER  ( r1 r2 -- r1 r2 r1 )
 
-  hdr _public,'FOVER',,,two_over  ; aka 2over fover
+  hdr _public,'FOVER',,two_over  ; aka 2over fover
 f_over: equ  two_over
 
 ;  FROT  ( r1 r2 r3 -- r2 r3 r1 )
 
-  hdr _public,'FROT',,,trot    ; aka 2rot frot
-f_rot: equ  trot
+  hdr _public,'FROT',,two_rot    ; aka 2rot frot
+f_rot: equ  two_rot
 
 ;  F@  ( fa -- r )
 
-  hdr _public,'F@',,,two_fetch    ; aka 2@ f@
+  hdr _public,'F@',,two_fetch    ; aka 2@ f@
 f_fetch: equ  two_fetch
 
 ;  F!  ( r fa -- )
 
-  hdr _public,'F!',,,two_store    ; aka 2! f!
+  hdr _public,'F!',,two_store    ; aka 2! f!
 f_store: equ  two_store
 
 ;  FPICK  ( +n -- r )  floats sp@ cell+ + f@
@@ -11189,7 +11227,7 @@ pf1:
 pf2:
   call do_colon
   dw s_to_d
-  dw efn,fmmod
+  dw efn,fm_slash_mod
   dw efn,star
   dw exit
 
@@ -11375,7 +11413,7 @@ pfcc:
   dw to_r
   dw two_dup
   dw r_fetch,min
-  dw tswap
+  dw two_swap
   dw from_r,sstr
   dw zero,pfbb
   dw pf6
@@ -11424,7 +11462,7 @@ fsdot:
   dw space
   dw exit
 
-   if  fpeng
+   if  fp_engineering_output_functions
 
 ;  (FE.)  ( r -- ca u )  3 (fd)
 
@@ -11453,7 +11491,7 @@ fedot:
   dw space
   dw exit
 
-   endif
+   endif ; fp_engineering_output_functions
 
 ;  (F.)  ( r n -- ca u )
 ;        0 to ef# (f3) ex# dup max-precision > if
@@ -11894,7 +11932,7 @@ f_init:
 
 ;  fidentify  ( -- )
 
-  hdr _hidden,'FIDENTIFY',,1
+  hdr _hidden,'FIDENTIFY'
 f_identify:
   call do_colon
   dw cr
@@ -11915,7 +11953,7 @@ f_identify.1:
 ;        and if >float else 2drop 0 then dup >r
 ;        state? and if postpone fliteral then r>
 
-  hdr _hidden,'FNUMBER',,1
+  hdr _hidden,'FNUMBER'
 f_number:
   call do_colon
   dw two_dup    ; scan 'E'
@@ -11949,7 +11987,7 @@ f_number.4:
 ;        ['] false (interpret.12) ! (nfps) off (nfpm) off
 ;        ; remember
 
-  hdr _hidden,'(-FP)',,1
+  hdr _hidden,'(-FP)'
 fprun:
   ld hl,noop
   ld (do_f_init_patch),hl    ; INIT
