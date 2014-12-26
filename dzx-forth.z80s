@@ -9,7 +9,7 @@
 ; XXX TODO Doc: Programación en Ensamblador, by Tony Woods, p. 168, ROM routines.
 
 version: macro
-  dcs 'A-00-201412260019'
+  db 'A-00-201412261922'
   endm
 
 ; }}} **********************************************************
@@ -27,24 +27,24 @@ yes:    equ not no
 ; ------------------------------
 ; Conditional assembly
 
-debug:                            equ no  ; debugging messages
+debug:                            equ yes  ; debugging messages
 case_insensitive_names:           equ yes
 control_flow_stack_extensions:    equ yes
 warning_options:                  equ yes
 
-floord:                           equ no  ; integer division method
+floored_division:                 equ no  ; integer division method
 floating_point_support:           equ yes
 fp_engineering_output_functions:  equ yes
-separated_f_stack:                equ yes ; XXX TODO -- try
+separated_f_stack:                equ no ; XXX TODO -- not fully implemented in DX-Forth
 
 classic_Forth_behaviours:         equ no
 
 ; ------------------------------
 ; Config
 
-nfd:                    equ 6   ; max open source files (min = 2)
+nfd:                    equ 6  ; max open source files (min = 2)
 max_open_file_handles:  equ 10
-toppru:                 defl 0  ; top prunes
+top_prunes:             defl 0 ; XXX OLD ?
 
 ; ------------------------------
 ; Memory 
@@ -65,12 +65,12 @@ parsed_string_buffer_size:    equ 255
 pictured_numeric_buffer_size: equ 68
 stack_size:                   equ 256
 return_stack_size:            equ 256
-tib_size:                     equ 80        ; (Terminal Input Buffer)
+tib_size:                     equ 80        ; Terminal Input Buffer
 user_data_size:               equ 128
 word_buffer_size:             equ 31+5
 
 ; ------------------------------
-; DOS and memory ; XXX OLD
+; DOS ; XXX OLD
 
 dosfcb: equ 0x005c   ; default file control block
 dosbuf: equ 0x0080   ; default DTA and command-line buffer
@@ -98,7 +98,7 @@ f_stack_size:     defl 0 ; bytes
       f_stack_size:  defl (f_stack_items+5)*fw ; allow extra for fp display etc
     endif
 
-    toppru: defl fprun.1
+    top_prunes: defl fprun.1
 
   endif
 
@@ -258,7 +258,7 @@ previous_nfa: defl 0   ; initial link pointer (end of chain)
 
 hdr: macro enabled,name,immediate,alias_xt
 
-  ; enabled     = enable the header? (yes/no, _public/_hidden)
+  ; enabled     = (yes/no, _public/_hidden)
   ; name        = name string
   ; immediate   = immediate?
   ; alias_xt    = alias xt
@@ -343,22 +343,33 @@ endm
 
 block_buffer:
   ds block_size    ; block buffer
+
 ;;fdbs: ; XXX OLD
 ;;  ds file_descriptor_size*nfd ; file descriptor blocks
+
 tib:
   ds tib_size  ; TIB (terminal input buffer)
+
 user_data:
   ds user_data_size
+
   ds stack_size
 stack_0:
+
   ds return_stack_size
 return_stack_0:
+
+  if separated_f_stack
+    ds float_stack_size
+    float_stack_0:
+  endif
+
 parsed_string_buffer:
-   if classic_Forth_behaviours
-  ds parsed_string_buffer_size   ; buffer S"
-   else
-  ds parsed_string_buffer_size+word_buffer_size ; buffer S" WORD
-   endif
+  if classic_Forth_behaviours
+    ds parsed_string_buffer_size   ; buffer of S"
+  else
+    ds parsed_string_buffer_size+word_buffer_size ; buffer of S" and WORD
+  endif
 
 hm: equ $   ; system definitions and header memory
 dnfa:
@@ -403,8 +414,11 @@ init_r0:        dw return_stack_0 ; r0
 init_dp:        dw initdp   ; dp
 init_dph:       dw initdph  ; dph ; XXX OLD
 init_voc_link:  dw forth.2  ; voc-link
-init_fs0:       dw float_stack_0 ; fs0 ; XXX TODO
+if separated_f_stack
+  init_fs0:       dw float_stack_0 ; fs0 ; XXX TODO
+endif
                 ds cw       ; reserved
+
 
 init_user_variables.end:  ; end of data
 
@@ -420,11 +434,10 @@ default_drive:
   ds 1
 default_user:
   ds 1
-scaps:   ; XXX TODO convert to user variable
-  ds 1   ; COMPARE SEARCH case flag
-command_line_flag: ; XXX OLD
-  ds 1
-bios_paramater_block: ; XXX OLD
+; XXX OLD
+;;scaps:   ; XXX converted to user variable
+;;  ds 1   ; COMPARE SEARCH case flag
+bios_parameter_block: ; XXX OLD
   ds 5
 ; XXX OLD 
 ;;ulimit:
@@ -442,9 +455,9 @@ bios_paramater_block: ; XXX OLD
 ;; sbuf equ $ ; XXX OLD ? -- not used
 
 ; Buffer for temporary filename/fcb ; XXX OLD
-zbsiz:  equ filename_size+1+36
-zb.1:   ds zbsiz
-zb.2:   ds zbsiz
+zb_size:  equ filename_size+1+36
+zb.1:   ds zb_size
+zb.2:   ds zb_size
 
 tmp_stack: equ $-cw ; temp stack for startup ; XXX OLD
 
@@ -881,7 +894,7 @@ rot:
 ; -ROT  ( x1 x2 x3 -- x3 x1 x2 )
 
   hdr _public,'-ROT'
-drot:
+minus_rot:
   pop hl
   pop de
   ex (sp),hl
@@ -1788,7 +1801,7 @@ fm_slash_mod.1:
 ; XXX OLD -- DX-Forth 4.00 -- but kept
   hdr _hidden,'M/MOD',,m_slash_mod
 
-   if floord
+   if floored_division
 m_slash_mod: equ fm_slash_mod
    else
 m_slash_mod: equ smrem
@@ -1858,12 +1871,12 @@ m_star_slash:
   dw abs,to_r
   dw two_dup,xor_
   dw swap,abs,to_r
-  dw drot,d_abs
+  dw minus_rot,d_abs
   dw swap,r_fetch,umstr
   dw rot,from_r,umstr
   dw rot,zero,d_plus
   dw r_fetch,umslm
-  dw drot,from_r
+  dw minus_rot,from_r
   dw umslm,nip
   dw swap,rot,zero_less_than
   dw question_branch,m_star_slash.1
@@ -2463,7 +2476,7 @@ shold:
 nhold:
   call do_colon
   dw over,phld
-  dw drot,fill
+  dw minus_rot,fill
   dw exit
 
 ;  decimal? ( -- flag )  base @ 10 =
@@ -2662,25 +2675,57 @@ sstr:
   push hl
   jp next
 
-; CAPS  ( -- )
-; enable caps COMPARE/SEARCH
-; XXX TODO use a user variable instead
-  hdr _public,'CAPS'
-caps:
-  ld a,1
-  jp dcaps.1
+; XXX OLD 
+;;; CAPS  ( -- )
+;;; enable caps COMPARE/SEARCH
+;;; XXX TODO use a user variable instead
+;;  hdr _public,'CAPS'
+;;caps:
+;;  ld a,1
+;;  jp dcaps.1
+;;
+;;; -CAPS  ( -- )
+;;;   disable caps COMPARE/SEARCH
+;;; XXX TODO use a user variable instead
+;;  hdr _hidden,'-CAPS'
+;;dcaps:
+;;  xor a
+;;dcaps.1:
+;;  ld (scaps),a
+;;  jp next
 
-; -CAPS  ( -- )
-;   disable caps COMPARE/SEARCH
-; XXX TODO use a user variable instead
-  hdr _hidden,'-CAPS'
-dcaps:
-  xor a
-dcaps.1:
-  ld (scaps),a
-  jp next
+patch_compare_strings:
+
+  ; Patch an address with the address of the routine 'compare' and 'search' use
+  ; to compare strings, which depends on a user variable.
+  ;
+  ; This routine is called at the start of 'compare' and 'search', in order to
+  ; patch themselves.
+
+  ; Input:
+  ;   DE = address to patch with the routine address
+
+  push bc
+  ld hl,(user_data_pointer)
+  ld bc,case_sensitive_search_user_variable
+  add hl,bc
+  ld a,(hl)
+  inc hl
+  ld l,(hl)
+  or l ; case sensitive search?
+  ld hl,compare_strings_case_insensitive ; routine
+  jp z,patch_compare_strings.end
+  ld hl,compare_strings_case_sensitive ; routine
+patch_compare_strings.end:
+  ex de,hl
+  ld (hl),e
+  inc hl
+  ld (hl),d
+  pop bc
+  ret
 
 compare_strings_case_insensitive:
+  ; Used by 'compare' and 'search'.
   ; Input:
   ;   HL = a1
   ;   BC = a2
@@ -2704,18 +2749,27 @@ compare_strings_case_insensitive:
   dec de
   jp compare_strings_case_insensitive
 
-compare_strings:
-  ; Input:
-  ;   HL = a1
-  ;   BC = a2
-  ;   DE = len
-  ; Output:
-  ;   Z = match?
-  ld a,(scaps)
-  or a
-  jp nz,compare_strings_case_insensitive
+; XXX OLD -- substituted by 'patch_compare_strings'
+;;compare_strings:
+;;  ; Input:
+;;  ;   HL = a1
+;;  ;   BC = a2
+;;  ;   DE = len
+;;  ; Output:
+;;  ;   Z = match?
+;;  push hl
+;;  push de
+;;  ld hl,(user_data_pointer)
+;;  ld de,case_sensitive_search_user_variable
+;;  add hl,de
+;;  ld a,(hl) ; XXX TODO -- check the whole cell?
+;;  or a
+;;  pop de
+;;  pop hl
+;;  jp nz,compare_strings_case_insensitive
 
 compare_strings_case_sensitive:
+  ; Used by 'compare' and 'search'.
   ; Input:
   ;   HL = a1
   ;   BC = a2
@@ -2737,6 +2791,8 @@ compare_strings_case_sensitive:
 
   hdr _public,'COMPARE'
 compare:
+  ld de,compare.compare_strings
+  call patch_compare_strings
   pop de
   pop hl
   ex (sp),hl
@@ -2754,13 +2810,15 @@ compare.2:
   pop bc
   ex (sp),hl
   push af
-  call compare_strings
+compare.compare_strings: equ $+1
+  call 0 ; modifed
   jp z,compare.4
   pop bc
 compare.3:
   pop bc
-  ld a,0 ; XXX xor a instead?
-  ld (scaps),a
+; XXX OLD -- Why this?:
+;;  ld a,0
+;;  ld (scaps),a
   jp c,one
   jp z,false
   jp true
@@ -2773,6 +2831,8 @@ compare.4:
 
   hdr _public,'SEARCH'
 search:
+  ld de,search.compare_strings
+  call patch_compare_strings
   call do_colon
   dw $+2
   pop hl
@@ -2805,7 +2865,8 @@ search.1:
 string_2_len equ $+1
   ld hl,0  ; length of the second string
   ex de,hl
-  call compare_strings
+search.compare_strings: equ $+1
+  call 0 ; modified
   pop hl
   pop bc
   pop de
@@ -2817,8 +2878,9 @@ search.3:
   push hl
   push de
   push bc
-  xor a
-  ld (scaps),a
+; XXX OLD -- Why this?
+;;  xor a
+;;  ld (scaps),a
   jp exit
 
 search.4:
@@ -3091,7 +3153,7 @@ paren_do:
 paren_do.1: ; '(?do)' jumps here
   dw over,minus
   dw from_r,cell_plus
-  dw drot
+  dw minus_rot
   dw two_to_r
   dw to_r
   dw exit
@@ -3775,9 +3837,9 @@ bios:
 ; XXX OLD
 ;;  pop  de
 ;;  ld a,e
-;;  ld (bios_paramater_block),a
+;;  ld (bios_parameter_block),a
 ;;  pop  hl
-;;  ld (bios_paramater_block+1),hl
+;;  ld (bios_parameter_block+1),hl
 ;;  push  bc
 ;;  call biosj
 ;;  pop  bc
@@ -3790,11 +3852,11 @@ bios:
 ; XXX OLD
 ;;  pop  de
 ;;  ld a,e
-;;  ld (bios_paramater_block),a
+;;  ld (bios_parameter_block),a
 ;;  pop  hl
-;;  ld (bios_paramater_block+1),hl
+;;  ld (bios_parameter_block+1),hl
 ;;  pop  hl
-;;  ld (bios_paramater_block+3),hl
+;;  ld (bios_parameter_block+3),hl
 ;;  push  bc
 ;;  call biosj
 ;;  pop  bc
@@ -4148,11 +4210,11 @@ pause.1: ; XXX TODO rename this label
 
   hdr _public,'KEY?'
 key_question:
-  ld hl,0
+  ld hl,0 ; false
   ld a,(sys_last_k)
   and a
   jp z,push_hl
-  dec hl
+  dec hl  ; true
   jp push_hl
 
 ; XXX OLD
@@ -4169,7 +4231,7 @@ key:
   ld a,(sys_last_k)
   ld (previous_key),a
 key.1
-  call pause
+;  call pause ; XXX FIXME this causes trouble because of the way 'pause' calls 'fetch_execute'
   ; call rom_keyboard ; XXX TODO not needed if system interrupts are on
   ld a,(sys_last_k)
 previous_key equ $+1
@@ -5252,7 +5314,17 @@ catcher:
 
 ; bytes 36-43   reserved
 
-; User area bytes 44 onwards are available for user applications
+; XXX NEW -- this substitutes the old 'scaps', 'caps' and '-caps'
+; CASE-SENSITIVE-SEARCH
+; case flag for 'compare' and 'search'
+
+  hdr _public,'CASE-SENSITIVE-SEARCH'
+case_sensitive_search:
+  call do_user_variable
+case_sensitive_search_user_variable: equ 44
+  dw case_sensitive_search_user_variable
+
+; User area bytes 46 onwards are available for user applications
 
 ; }}} **********************************************************
 ; Forth system {{{
@@ -5452,7 +5524,7 @@ dalias:
 ;;  dw two_dup,namef
 ;;  dw equals
 ;;  dw question_branch,to_name.3
-;;  dw drot,two_drop
+;;  dw minus_rot,two_drop
 ;;  dw exit
 ;;to_name.3:
 ;;  dw ntnam
@@ -5490,7 +5562,7 @@ to_name.2:
   dw two_dup,namef
   dw equals
   dw question_branch,to_name.3
-  dw drot,two_drop
+  dw minus_rot,two_drop
   dw exit
 to_name.3:
   dw ntnam
@@ -5786,54 +5858,89 @@ postp.1:
 ;;  db cr_char
 ;;  dw equals
 ;;  dw question_branch,paren_accept.1
-;;  dw drot,two_drop
+;;  dw minus_rot,two_drop
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09 -- modified
 ; (ACCEPT)  ( ca +n1 -- +n2)
-;        0 begin key dup >r dup bl 127 within 2over -
-;        and if dup emit over 4 pick + c! 1+ else 2dup
-;        dup bs_char = swap esc = or and if esc = if
-;        0 swap else 1- 1 then begin 8 dup emit space
-;        emit 1- dup 0= until then drop then r> 13 =
-;        until -rot 2drop
+
+;  0
+;  begin
+;   key dup >r
+;   dup bl 127 within
+;   2over - and
+;   if
+;     dup emit over 4 pick + c! 1+
+;   else
+;     2dup dup bs_char = swap esc = or and
+;     if
+;       esc = if 0 swap else 1- 1 then
+;       begin
+;         8 dup emit space emit 1- dup 0=
+;       until
+;     then
+;     drop
+;   then
+;   r> 13 =
+;  until
+;  -rot 2drop
 
   hdr _hidden,'(ACCEPT)'
 paren_accept:
   call do_colon
-  dw zero
-paren_accept.1:
+  if debug
+    dw paren_dot_quote
+    dcs '(ACCEPT) '
+  endif
+
+
+  dw c_lit
+  db '"'
+  dw emit
   dw key
-  dw dup,to_r
-  dw dup,bl  ; only accept chars between 32 and 126
+  dw emit
+  dw c_lit
+  db '"'
+  dw emit
+  dw lit,2
+  dw return
+
+
+  dw zero                           ; 0
+paren_accept.1:                     ; begin
+  dw key
+
+  ; XXX TMP
+  dw dup,lit,65535,c_store
+  dw lit,50000,c_store
+  dw bye
+  dw branch,paren_accept.1
+
+  dw dup,to_r,dup                   ;   dup >r dup
+  dw bl
   dw c_lit
   db 127
-  dw within
-  dw two_over,minus
-  dw and_
-  dw question_branch,paren_accept.2
-  dw dup,emit
-  dw over
+  dw within                         ;   bl 127 within
+  dw two_over,minus                 ;   2over -
+  dw and_                           ;   and
+  dw question_branch,paren_accept.2 ;   if
+  dw dup,emit,over                  ;     dup emit over
   dw c_lit
   db 4
-  dw pick
-  dw plus
-  dw c_store
-  dw one_plus
-  dw branch,paren_accept.6
+  dw pick                           ;     4 pick
+  dw plus,c_store,one_plus          ;     + c! 1+
+  dw branch,paren_accept.6          ;   else
 paren_accept.2:
-  dw two_dup
-  dw dup
-  dw lit,bs_char,equals
-  dw swap
+  dw two_dup,dup                    ;     2dup dup
+  dw lit,bs_char,equals             ;     bl_char =
+  dw swap                           ;     swap
   dw c_lit
-  db esc_char    ; escape?
-  dw equals,or_
-  dw and_
-  dw question_branch,paren_accept.5
+  db esc_char
+  dw equals,or_,and_                ;     esc_char = or and
+  dw question_branch,paren_accept.5 ;     if
   dw c_lit
-  db esc_char    ; escape?
-  dw equals
+  db esc_char
+  dw equals                         ;       esc_char =
   dw question_branch,paren_accept.3
   dw zero,swap
   dw branch,paren_accept.4
@@ -5853,19 +5960,20 @@ paren_accept.6:
   dw from_r
   dw c_lit
   db cr_char
-  dw equals
+  dw equals                           
   dw question_branch,paren_accept.1
-  dw drot,two_drop
+  dw minus_rot,two_drop
   dw exit
 
-; ACCEPT  ( ca +n1 -- +n2)
+; ACCEPT  ( ca +n1 -- +n2 )
 
   hdr _public,'ACCEPT'
 accept:
   call fetch_execute
   dw paren_accept
 
-; PAD  ( -- a )  dp @ (npno) @ +
+; PAD  ( -- a )
+; dp @ (npno) @ +
 
   hdr _public,'PAD'
 pad:
@@ -6278,7 +6386,7 @@ unused.2:
   dw plus
   dw two_dup
   dw u_greater_than
-  dw drot
+  dw minus_rot
   dw minus
   dw and_
   dw exit
@@ -6414,18 +6522,23 @@ evaluate:
 
 ; (REFILL)  ( -- flag )
 ; doesn't correctly handle source
-;       blk @ ?dup if 1+ dup #screens u< and dup
-;       while dup blk ! block b/buf else (tib)
-;       dup 80 accept space then 'source 2! >in
-;       off true then
+
+; blk @ ?dup if
+;   1+ dup #screens u< and dup
+;   while
+;     dup blk ! block b/buf
+; else
+;   (tib) dup 80 accept space
+; then
+; 'source 2! >in off true then
 
   hdr _hidden,'(REFILL)'
 paren_refill:
   call do_colon     ; from EVALUATE
-   if debug
-  dw paren_dot_quote
-  dcs '(REFILL) '
-   endif
+  if debug
+    dw paren_dot_quote
+    dcs '(REFILL) '
+  endif
   dw blk,fetch,question_dup
   dw question_branch,paren_refill.1
   dw one_plus,dup
@@ -6456,13 +6569,14 @@ refill:
   call fetch_execute
   dw paren_refill
 
-; RESET  ( -- )   catcher off -caps console
+; RESET  ( -- )
 
   hdr _hidden,'RESET'
 reset:
   call do_colon
   dw catcher,off   ; reset error handler
-  dw dcaps        ; reset COMPARE/SEARCH caps
+  ;; dw dcaps ; XXX OLD
+  dw case_sensitive_search,off ; XXX NEW
   dw console      ; set EMIT vector
   dw exit
 
@@ -6497,6 +6611,7 @@ forth_reset:
 ;;  dw slash_interpret   ; reset interpreter
 ;;  dw tick_source,off  ; clear parsed word buffer
 ;;  dw bl_word,drop ;
+  dw decimal ; XXX NEW -- moved here from cold_boot
   dw exit
 
 ; QUIT  ( -- )
@@ -6509,13 +6624,15 @@ quit.1:
   dw reset                  ; reset
 ;** dw vnorm ; XXX OLD
   dw slash_interpret        ; /interpret
-   if debug
-  dw paren_dot_quote
-  dcs 'QUIT '
-   endif
 quit.2:                          ; begin
   ; XXX FIXME move 'cr' to 'if'?
   dw cr,paren_refill,drop       ;   cr  (refill) drop
+  if debug
+    dw paren_dot_quote
+    dcs 'QUIT '
+    forever:
+    dw branch,forever
+  endif
   dw interpret                  ;   interpret
   dw state_question,zero_equals ;   state? 0=
   dw question_branch,quit.3      ;   if
@@ -6577,18 +6694,18 @@ paren_abort:
   dw fs0,fetch
   dw fsp,store
   dw boot_question
-   if debug
-  dw question_branch,paren_abort.1
-  dw one
-  dw return
-paren_abort.1  dw paren_dot_quote
-  dcs ' (ABORT) '
-  dw quit
-   else
-  dw question_branch,quit.1
-  dw one
-  dw return
-   endif
+  if debug
+    dw question_branch,paren_abort.1
+    dw one
+    dw return
+    paren_abort.1: dw paren_dot_quote
+    dcs ' (ABORT) '
+    dw quit
+  else
+    dw question_branch,quit.1
+    dw one
+    dw return
+  endif
 
 ; .ERROR  ( -- )
 ;       cr blk @ ?dup if file? and if filename type
@@ -6603,7 +6720,7 @@ doterr:
   dw blk,fetch
   dw question_dup
   dw question_branch,doterr.1
-  dw gcfile_question
+  dw file_question
   dw and_    ; screen file open and loading from block?
   dw question_branch,doterr.1
   dw loadfile,type
@@ -6694,14 +6811,14 @@ throw:
   dw question_dup
   dw question_branch,throw.2
   dw catcher,fetch
-   if debug
-  dw paren_dot_quote
-  dcs ' THROW:'
-  dw over,dot
-  dw paren_dot_quote
-  dcs 'CATCHER:'
-  dw dup,u_dot,space,space
-   endif
+  if debug
+    dw paren_dot_quote
+    dcs ' THROW:'
+    dw over,dot
+    dw paren_dot_quote
+    dcs 'CATCHER:'
+    dw dup,u_dot,space,space
+  endif
   dw question_dup,zero_equals
   dw question_branch,throw.1
   dw error
@@ -6834,8 +6951,6 @@ cold_boot:
 ;;  jp cldd.6
 ;;
 ;;cldd.3:
-;;  dec a     ; set command line flag
-;;  ld (command_line_flag),a
 ;;
 ;;  ld hl,(init_dph)   ; move system segment into place
 ;;  ld de,hm
@@ -6865,15 +6980,14 @@ cold_boot:
 bootmessage:
   call do_colon
   dw paren_dot_quote
-  dcs "DZX-Forth "
-  dw paren_dot_quote
+  db bootmessage.end-$  ; length
+  db "DZX-Forth "
   version
-  dw paren_dot_quote
-  dcs cr_char,"Copyright (C) 2014 Marcos Cruz"
-  dw paren_dot_quote
-  dcs cr_char,"(programandala.net)"
-  dw paren_dot_quote
-  dcs cr_char,"Type 'bye' to exit.",cr_char
+  db cr_char,"Copyright (C) 2014 Marcos Cruz"
+; XXX OLD
+;  db cr_char,"(programandala.net)"
+;  db cr_char,"Type 'bye' to exit.",cr_char
+bootmessage.end
   dw exit
 
 ; COLD ( -- )
@@ -6921,12 +7035,9 @@ cold:
   ld bc,init_user_variables.end-init_user_variables
   call move_block_upwards
 
-;  ld a,3
-;  ld (sys_bordcr),a
-;  out (254),a
-
   ld hl,0      ; patch 'pause'
   ld (pause.1),hl
+
   xor a
   ld (sys_last_k),a ; delete the last key; XXX needed by 'key?'?
 
@@ -6935,110 +7046,25 @@ cold:
 ;;  ld c,26
 ;;  call 0x0005
 
-  ; XXX TEST -- it works:
-;;  call rom_chan_s ; set print to screen
-;;  ld bc,9 ; length
-;;  ld de,tmpmsg ; address
-;;  call rom_print_string
-;;  jr tmp
-;;tmpmsg:
-;;  db "DZX-Forth"
-;;tmp:
-
-  ; XXX TEST -- it works:
-;;  ld bc,9 ; length
-;;  ld de,tmpmsg ; address
-;;  push de
-;;  push bc
-;;  call rom_chan_s ; set print to screen
-;;  pop bc
-;;  pop de
-;;  call rom_print_string
-;;  jr tmp
-;;tmpmsg:
-;;  db "DZX-Forth"
-;;tmp:
-
   call do_colon
 ;;  dw zfh     ; reset handles
 ;;  dw sys,off     ; default is APPLICATION
 
-; ----------------------- XXX TMP -- for testing
-
-  ; XXX TEST -- it works:
-;  dw lit,-10
-;  dw return
-
-  ; XXX TEST -- it works:
-;  dw paren_dot_quote
-;  dcs 'DZX-Forth'
-
-  dw cls
-  dw bootmessage
-  dw decimal     ; default base
-
-  ; XXX TEST -- it works:
-;  dw lit,sys_last_k
-;  dw c_fetch
-;  dw return
-
-  ; XXX TEST -- it works:
-;;  dw c_lit
-;;  db '"'
-;;  dw emit
-;;  dw key
-;;  dw emit
-;;  dw c_lit
-;;  db '"'
-;;  dw emit
-;;  dw lit,2
-;;  dw return
-  
-  dw bye  ; XXX works
-
-
-  ; XXX NEW
-;  dw cls
-;  dw bootmessage
-;forever:
-;  dw branch,forever ; XXX INFORMER
-; -----------------------
-
-
-;;  dw reset     ; general reset
+  dw reset     ; general reset
 cold.1:
-;;  dw forth_reset
+  dw forth_reset
 do_f_init_patch:
   dw f_init_patch
+
+; XXX TODO -- user boot
 ;;  dw boot_question
 ;;  dw dup,boot,store     ; restore BOOT
 ;;  dw question_dup
 ;;  dw question_branch,cold.3
 ;;  dw execute      ; run application
-  dw zero,return  ; exit to DOS
+;;  dw zero,return  ; exit to DOS
 
 cold.3:
-; XXX OLD >>>>>>>>>>>>>>>>>>>>>>>> command line parameter
-;;  dw cmdtail     ; process command-line
-;;  dw lit,command_line_flag
-;;  dw c_fetch,and_
-;;  dw tuck
-;;  dw lit,tib     ; copy to tib
-;;  dw zero,pstr
-;;  dw tick_source,two_store
-;;  dw question_branch,cold.5
-;;  dw zero
-;;  dw lit,command_line_flag    ; disable
-;;  dw c_store
-;;  dw bl_word      ; parse first word
-;;  dw fetch
-;;  dw lit
-;;  db 1,'-'     ; skips file open
-;;  dw minus
-;;  dw question_branch,cold.4
-;;  dw in_,off
-;;  dw getfilename,popen
-; XXX OLD <<<<<<<<<<<<<<<<<<<<<<<<
 
 ;;cold.4:
 ;;  dw interpret      ; interpret
@@ -7047,20 +7073,20 @@ cold.3:
 ;;  dw cr,page
 ;;  dw paren_dot_quote
 ;;  db cold.8-$-1
+
 ;;cold.6:
-;;  db 'DZX-Forth '
-;;  version
+  dw cls
+  dw bootmessage
+
 ;;cold.7:
 ;;cold.8:
-;;;;  dw lit,termn   ; show terminal name ; XXX OLD
-;;;;  dw count,type
 ;;  dw paren_dot_quote
 ;;  db do_f_identify_patch-$-1
 ;;  db cr_char,lf_char
 do_f_identify_patch:
   dw f_identify_patch
 ;;  dw cr
-;;  dw gcfile_question
+;;  dw file_question
 ;;  dw question_branch,cold.10
 ;;  dw cr
 ;;  dw paren_dot_quote
@@ -7068,7 +7094,9 @@ do_f_identify_patch:
 ;;  dw loadfile,type
 ;;  dw cr
 ;;cold.10:
-;;  dw quit      ; jump to interpreter
+  dw quit      ; jump to interpreter
+;  dw bye ; XXX TMP
+
 
 ; XXX OLD 
 ;;; SET-LIMIT  ( a -- )  $fff0 and (ulimit) !
@@ -7102,7 +7130,7 @@ freeze:
 ;;  hdr _hidden,"'PRUNE"
 ;;tprun:
 ;;  call do_create
-;;  dw toppru    ; 0=end
+;;  dw top_prunes    ; 0=end
 
 ; XXX OLD
 ;;;  REMEMBER  ( xt -- )  'prune link, ,
@@ -8383,7 +8411,7 @@ tfcb:
   dw c_lit
   db 18
   dw plus
-  dw drot
+  dw minus_rot
   dw two,pick
   dw sfcb
   dw exit
@@ -8549,7 +8577,7 @@ fread.2:
   dw ranrw
   dw two_dup,hbuf
   dw offs,plus
-  dw drot,cmove
+  dw minus_rot,cmove
 fread.3:
   dw dup,to_r
   dw plus
@@ -8883,7 +8911,7 @@ bnum.1:
 ; FILE?  ( -- flag )
 
   hdr _public,'FILE?'
-gcfile_question:
+file_question:
   call do_colon
   dw fd,fetch ; fd @
   dw zero_not_equals ; 0<>
@@ -8902,7 +8930,7 @@ loadfile:
   hdr _hidden,'?OPEN'
 qopen:
   call do_colon
-  dw gcfile_question
+  dw file_question
   dw zero_equals
   dw paren_abort_quote
   dcs 'no file open'
@@ -9172,7 +9200,7 @@ fbloc:
   hdr _public,'CLOSE'
 close:
   call do_colon
-  dw gcfile_question
+  dw file_question
   dw question_branch,close.1
   dw flush
   dw fid,fetch
@@ -9379,7 +9407,7 @@ fload:
 ; SAVE  ( "filename[.COM]" -- )
 ;        0 0 freeze getfilename s" com" +ext
 ;        ?create >r over swap boot 2! (cold.6) (zb1)
-;        dup (zbsiz*2) erase (cold.7-cold.6) cmove
+;        dup (zb_size*2) erase (cold.7-cold.6) cmove
 ;        $100 dp @ over - r@ write-file boot cell+
 ;        off ?dup 0= if (hm) dph @ over - rot 0=
 ;        and r@ write-file then r> close-file or
@@ -9405,7 +9433,7 @@ save:
 ;;  dw lit,zb1
 ;;  dw dup
 ;;  dw c_lit
-;;  db zbsiz*2
+;;  db zb_size*2
 ;;  dw erase
 ;;  dw c_lit
 ;;  db cold.7-cold.6
@@ -11953,11 +11981,14 @@ f_number:
   dw two_dup    ; scan 'E'
   dw paren_s_quot
   dcs 'E'
-   if  case_insensitive_names
-  dw caps
-   endif
+  if  case_insensitive_names
+    ; XXX FIXME -- the logic is wrong, because conditional compilation
+    ; sets a user variable to be modifed.
+    ;; dw caps ; XXX OLD
+    dw case_sensitive_search,off ; XXX NEW
+  endif
   dw search
-  dw drot,two_drop
+  dw minus_rot,two_drop
   dw decimal_question ; decimal base?
   dw and_
   dw question_branch,f_number.2
@@ -12023,3 +12054,62 @@ initdph:  equ $ ; XXX OLD
 ;;  jp (hl)
 
   end start
+
+; ----------------------- XXX TMP -- for testing
+
+  ; XXX TEST -- it works:
+;  dw lit,-10
+;  dw return
+
+  ; XXX TEST -- it works:
+;  dw paren_dot_quote
+;  dcs 'DZX-Forth'
+
+  ; XXX TEST -- it works:
+;  dw lit,sys_last_k
+;  dw c_fetch
+;  dw return
+
+  ; XXX TEST -- it works:
+;;  dw c_lit
+;;  db '"'
+;;  dw emit
+;;  dw key
+;;  dw emit
+;;  dw c_lit
+;;  db '"'
+;;  dw emit
+;;  dw lit,2
+;;  dw return
+  
+  ; XXX TEST -- it works:
+;;  call rom_chan_s ; set print to screen
+;;  ld bc,9 ; length
+;;  ld de,tmpmsg ; address
+;;  call rom_print_string
+;;  jr tmp
+;;tmpmsg:
+;;  db "DZX-Forth"
+;;tmp:
+
+  ; XXX TEST -- it works:
+;;  ld bc,9 ; length
+;;  ld de,tmpmsg ; address
+;;  push de
+;;  push bc
+;;  call rom_chan_s ; set print to screen
+;;  pop bc
+;;  pop de
+;;  call rom_print_string
+;;  jr tmp
+;;tmpmsg:
+;;  db "DZX-Forth"
+;;tmp:
+
+
+  ; XXX NEW
+;  dw cls
+;  dw bootmessage
+;forever:
+;  dw branch,forever ; XXX INFORMER
+; -----------------------
