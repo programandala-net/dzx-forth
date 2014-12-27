@@ -8,17 +8,18 @@
 
 ; 2014-11-03: Start.
 version: macro
-  db 'A-00-201412272034'
+  db 'A-00-201412272106'
   ; XXX Status (most recent first):
   ;
-  ; Fixed the 'dpush' problem!
+  ; 'accept' works!
   ;
-  ; '(accept)' rewritten, but still buggy (the length limit does not work). Problems with backspace (char 8), depending on the ZX Spectrum ROM.
   endm
 
 ; ------------------------------
 ; XXX TODO 
 
+; Check problems with backspace (char 8), depending on the ZX Spectrum ROM.
+;
 ; See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM routines.
 
 ; Convert block update flags 0x7fff and 0x8000 to labels.
@@ -5895,19 +5896,20 @@ postp.1:
   dw compile_comma
   dw exit
 
-; (ACCEPT-DELETE)  ( n -- )
-;   delete n chars at the left of the cursor
+; BACKSPACES  ( +n -- )
+;   delete +n chars at the left of the cursor
 
-  hdr _hidden,'(ACCEPT-DELETE)'
+  hdr _hidden,'BACKSPACES'
 
-paren_accept_delete:
+backspaces:
   call do_colon
-paren_accept_delete.loop:
+backspaces.loop:
   dw c_lit
   db left_char
   dw dup,emit,space,emit
   dw one_minus,dup
-  dw branch_if_not_false,paren_accept_delete.loop
+  dw branch_if_not_false,backspaces.loop
+  dw drop
   dw exit
 
 ; (ACCEPT-CONTROL-CHAR)  ( ca len len2 c -- ca len len2' )
@@ -5917,25 +5919,31 @@ paren_accept_delete.loop:
 paren_accept_control_char:
 
   call do_colon
-  dw dup
 
-  ; check the escape key
-  dw c_lit
-  db esc_char
-  dw equals ; escape?
-  dw branch_if_false,paren_accept_control_char.delete
-  ; do escape
-  dw zero,swap,paren_accept_delete
+  ; check the delete key
+  dw dup,c_lit
+  db delete_char
+  dw equals ; delete?
+  dw branch_if_false,paren_accept_control_char.edit
+  ; delete the last char
+  dw drop ; c
+  dw dup ; something to delete?
+  dw branch_if_zero,paren_accept_control_char.end
+  ; do it
+  dw one_minus,one,backspaces
   dw exit
 
-paren_accept_control_char.delete:
-  ; check the delete key
+paren_accept_control_char.edit:
+  ; check the edit key
   dw c_lit
-  db delete_char
-  dw equals
+  db edit_char
+  dw equals ; edit?
   dw branch_if_false,paren_accept_control_char.end
-  ; do backspace
-  dw one_minus,one,paren_accept_delete
+  ; delete the whole input
+  dw dup ; something to delete?
+  dw branch_if_zero,paren_accept_control_char.end
+  ; do it
+  dw zero,swap,backspaces
 
 paren_accept_control_char.end:
   dw exit
@@ -5948,25 +5956,11 @@ paren_accept_ascii_char:
   call do_colon ; XXX entry not used
 
 paren_accept_ascii_char.0:
-  dw to_r
-  dw two_dup
-  ; XXX TMP
-;  dw lit,50000,store
-;  dw lit,50002,store
-;  dw bye
-  dw minus
-
-  dw from_r,swap ; space left
-  ; XXX TMP
-;  dw dup
-;  dw lit,50000,store
-;  dw bye
-
-
+  dw to_r,two_dup,minus,from_r,swap ; space left
   dw branch_if_0,paren_accept_ascii_char.no
 
   ; there's space left for the char
-  if 0 ; debug
+  if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs '{space left}'
   endif
@@ -5978,7 +5972,7 @@ paren_accept_ascii_char.0:
 
 paren_accept_ascii_char.no:
   ; no space left for the char
-  if debug
+  if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs '{no space left!}'
   endif
@@ -6008,7 +6002,7 @@ paren_accept_key:
   hdr _hidden,'(ACCEPT)'
 paren_accept:
   call do_colon
-  if debug
+  if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs '(ACCEPT)',cr_char
   endif
@@ -6606,7 +6600,7 @@ evaluate:
   hdr _hidden,'(REFILL)'
 paren_refill:
   call do_colon     ; from EVALUATE
-  if debug
+  if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs '(REFILL) '
   endif
@@ -6623,9 +6617,9 @@ paren_refill.1:
   dw lit,tib
   dw dup
   dw c_lit
-  db 8 ; 80 ; XXX TMP 8, for testing
+  db 32 ; XXX TMP -- use 32, ZX Spectrum's chars per line; XXX TODO use a variable instead?
   dw accept
-  dw space
+;  dw space ; XXX OLD -- not needed; it can ruin forms
 paren_refill.2:
   dw tick_source,two_store
   dw in_,off
@@ -6700,15 +6694,15 @@ quit.1:
 quit.2:                          ; begin
   ; XXX FIXME move 'cr' to 'if'?
   dw cr,paren_refill,drop       ;   cr  (refill) drop
-  if debug
+  if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'QUIT '
     forever:
     dw branch,forever
   endif
-  dw interpret                  ;   interpret
-  dw state_question,zero_equals ;   state? 0=
-  dw question_branch,quit.3      ;   if
+;  dw interpret                  ;   interpret
+;  dw state_question,zero_equals ;   state? 0=
+;  dw question_branch,quit.3      ;   if
   dw paren_dot_quote            ;     ."  ok" 
   dcs ' ok'
 quit.3:                          ;   then
@@ -12209,6 +12203,10 @@ initdph:  equ $ ; XXX OLD
 ;;  db "DZX-Forth"
 ;;tmp:
 
+  ; XXX TMP
+;  dw lit,50000,store
+;  dw lit,50002,store
+;  dw bye
 
   ; XXX NEW
 ;  dw cls
