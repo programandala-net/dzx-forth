@@ -8,8 +8,8 @@
 
 ; 2014-11-03: Start.
 version: macro
-  db 'A-00-201412270149'
-  ; XXX Just before rewriting '(accept)' with the new code tested in Gforth.
+  db 'A-00-201412271309'
+  ; XXX Right after rewriting '(accept)' and improving the branch words.
   endm
 
 ; ------------------------------
@@ -956,7 +956,7 @@ if control_flow_stack_extensions
   hdr _public,'-ROLL'
 
 ; XXX OLD -- DX-Forth 4.00
-;;droll:
+;;minus_roll:
 ;;  call do_colon
 ;;  dw cells,two_to_r
 ;;  dw sp_fetch,sp_fetch,tuck
@@ -966,7 +966,7 @@ if control_flow_stack_extensions
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
-droll:
+minus_roll:
   pop hl
   add hl,hl
   ex de,hl
@@ -3078,10 +3078,24 @@ branch:
   ld b,(hl)
   jp next
 
+; <>0BRANCH  ( flag -- )
+
+  hdr _hidden,'?BRANCH'
+not_equals_0_branch:
+branch_if_true:
+branch_if_not_false:
+  pop hl
+  ld a,l
+  or h
+  jp nz,branch
+  jp question_branch.1
+
 ; ?BRANCH  ( flag -- )
 
   hdr _hidden,'?BRANCH'
 question_branch:
+zero_branch:
+branch_if_false:
   pop hl
   ld a,l
   or h
@@ -3192,24 +3206,24 @@ bal.1:
 ; +BAL  ( -- )      1 bal +!
 
   hdr _public,'+BAL'
-pbal:
+plus_bal:
   ld de,1
-pbal.1:
+plus_bal.1:
   ld hl,bal.1
   jp plus_store.1
 
 ; -BAL  ( -- )      -1 bal +!
 
   hdr _public,'-BAL'
-dbal:
+minus_bal:
   ld de,-1
-  jp pbal.1
+  jp plus_bal.1
 
 ; ?BAL  ( flag -- )   checking @ 0<> and
 ;         abort" definition unbalanced"
 
   hdr _public,'?BAL'
-qbal:
+question_bal:
   call do_colon
   dw check,fetch
   dw zero_not_equals,and_
@@ -3224,7 +3238,7 @@ question_depth:
   call do_colon
   dw question_comp
   dw depth,zero_equals
-  dw qbal
+  dw question_bal
   dw exit
 
 ; ?ORIG  ( orig -- orig )   ?depth dup @ ?bal
@@ -3234,7 +3248,7 @@ question_orig:
   call do_colon
   dw question_depth
   dw dup,fetch
-  dw qbal
+  dw question_bal
   dw exit
 
 ; ?DEST  ( dest -- dest )   ?depth dup @ 0= ?bal
@@ -3245,7 +3259,7 @@ qdest:
   dw question_depth
   dw dup,fetch
   dw zero_equals
-  dw qbal
+  dw question_bal
   dw exit
 
 ; BEGIN  ( -- dest )    ?comp here +bal ; immediate
@@ -3255,7 +3269,7 @@ begin:
   call do_colon
   dw question_comp
   dw here
-  dw pbal
+  dw plus_bal
   dw exit
 
 ; >MARK  ( -- orig )    postpone begin 0 ,
@@ -3275,7 +3289,7 @@ backward_resolve:
   call do_colon
   dw qdest
   dw comma
-  dw dbal
+  dw minus_bal
   dw exit
 
 ; THEN  ( orig -- )   ?orig here swap ! -bal ; immediate
@@ -3286,7 +3300,7 @@ then:
   dw question_orig
   dw here
   dw swap,store
-  dw dbal
+  dw minus_bal
   dw exit
 
 ; IF  ( -- orig )     postpone ?branch >mark
@@ -3461,8 +3475,9 @@ loop.1:
   dw paren_to,lv
   dw exit
 
-; +LOOP  ( a1 a2 -- ) postpone (+loop) <resolve
-;         postpone then to lv ; immediate
+; +LOOP  ( a1 a2 -- )
+;   postpone (+loop) <resolve
+;   postpone then to lv ; immediate
 
   hdr _public,'+LOOP',_immediate
 plus_loop:
@@ -3471,40 +3486,45 @@ plus_loop:
 
 if control_flow_stack_extensions
 
-; CS-PICK       pick +bal
+; CS-PICK
+;   pick +bal
 
   hdr _public,'CS-PICK'
 cs_pick:
   call do_colon
   dw pick
-  dw pbal
+  dw plus_bal
   dw exit
 
-; CS-ROLL       aka roll cs-roll
+; CS-ROLL
+;   aka roll cs-roll
 
   hdr _public,'CS-ROLL',,roll
-csrol: equ roll
+cs_roll: equ roll
 
-; CS-DROP       drop -bal
+; CS-DROP
+;   drop -bal
 
   hdr _public,'CS-DROP'
-csdro:
+cs_drop:
   pop hl
-  jp dbal
+  jp minus_bal
 
-; cf0       control flow stack base
+; CS0  ( -- a )
+; control flow stack base
 
-  hdr _hidden,'CF0'
-cfz:
+  hdr _hidden,'CS0'
+cs0:
   call do_create
-cfz.1:
-  ds 2
+cs0.variable:
+  ds cw
 
-; #CS  ( -- cells )   sp@ cf0 @ - negate 2/ 1- 0 max
+; #CS  ( -- cells )
+;   sp@ cs0 @ - negate 2/ 1- 0 max
 
   hdr _hidden,'#CS'
 ncs:
-  ld hl,(cfz.1)
+  ld hl,(cs0.variable)
   call negate_hl
   add hl,sp
   call negate_hl
@@ -3513,13 +3533,14 @@ ncs:
   push hl
   jp zero_max
 
-; CS-PUSH       #cs -roll
+; CS-PUSH
+;   #cs -roll
 
   hdr _public,'CS-PUSH'
 cs_push:
   call do_colon
   dw ncs
-  dw droll
+  dw minus_roll
   dw exit
 
 ; CS-POP        #cs roll
@@ -3531,15 +3552,17 @@ cs_pop:
   dw roll
   dw exit
 
-; CS-MARK       0 +bal
+; CS-MARK
+;   0 +bal
 
   hdr _public,'CS-MARK'
 cs_mark:
   ld hl,0
   push hl
-  jp pbal
+  jp plus_bal
 
-; CS-TEST       ?depth dup 0<>
+; CS-TEST
+;   ?depth dup 0<>
 
   hdr _public,'CS-TEST'
 cs_test:
@@ -3550,7 +3573,7 @@ cs_test:
   dw exit
 
 ; COND
-; ?comp cs-mark ; immediate
+;   ?comp cs-mark ; immediate
 
   hdr _public,'COND',_immediate
 cond:
@@ -3572,7 +3595,7 @@ thens.1:
   dw then
   dw branch,thens.1
 thens.2:
-  dw csdro
+  dw cs_drop
   dw exit
 
 else ; no control_flow_stack_extensions
@@ -3584,7 +3607,7 @@ cond:
   call do_colon
   dw question_comp
   dw zero
-  dw pbal
+  dw plus_bal
   dw exit
 
 ; THENS   
@@ -3602,7 +3625,7 @@ thens.1:
   dw then
   dw branch,thens.1
 thens.2:
-  dw dbal
+  dw minus_bal
   dw exit
 
 endif ; control_flow_stack_extensions
@@ -4711,7 +4734,7 @@ build:
 
 ; :  ( -- )
 ;       (do_colon) build smudge bal off !csp
-;       sp@ cf0 ! ]
+;       sp@ cs0 ! ]
 
   hdr _public,':'
 colon:
@@ -4724,7 +4747,7 @@ colon.1:
   dw store_csp
   if control_flow_stack_extensions
     dw sp_fetch
-    dw cfz,store
+    dw cs0,store
   endif
   dw right_bracket
   dw exit
@@ -4746,14 +4769,14 @@ semic:
   call do_colon
   dw exitt
   dw bal,fetch
-  dw qbal
+  dw question_bal
   dw question_csp
   dw smudge
   dw left_bracket
   dw exit
 
 ; :NONAME  ( -- xt )  warning? drop here dup (dnfa) last 2!
-;       (do_colon) ,call bal off !csp sp@ cf0 ! ]
+;       (do_colon) ,call bal off !csp sp@ cs0 ! ]
 
   hdr _public,':NONAME'
 nonam:
@@ -5273,21 +5296,21 @@ zbuf.1:
 
 ; user variables 0, 2, 4 are reserved for multitasking
 
-; S0
+; S0  ( -- a )
 
   hdr _public,'S0'
 s0:
   call do_user_variable
   dw 6
 
-; R0
+; R0  ( -- a )
 
   hdr _public,'R0'
 r0:
   call do_user_variable
   dw 8
 
-; DP
+; DP  ( -- a )
 
   hdr _public,'DP'
 dp:
@@ -5295,7 +5318,7 @@ dp:
   dw 10
 
 ; XXX OLD
-;;; dph     system dictionary pointer
+;;; DPH     system dictionary pointer
 ;;
 ;;  hdr _hidden,'DPH'
 ;; must follow DP
@@ -5305,14 +5328,14 @@ dp:
 
 dph: equ dp ; XXX NEW
 
-; VOC-LINK
+; VOC-LINK  ( -- a )
 
   hdr _public,'VOC-LINK'
 voc_link:
   call do_user_variable
   dw 14
 
-; FS0
+; FS0  ( -- a )
 
   hdr _public,'FS0'
 fs0:
@@ -5323,21 +5346,21 @@ fs0:
 
 ; End of boot-up literals
 
-; DPL
+; DPL  ( -- a )
 
   hdr _public,'DPL'
 dpl:
   call do_user_variable
   dw 20
 
-; hld
+; HLD  ( -- a )
 
   hdr _hidden,'HLD'
 hld:
   call do_user_variable
   dw 22
 
-; BASE
+; BASE  ( -- a )
 
   hdr _public,'BASE'
 base:
@@ -5346,7 +5369,7 @@ base:
 
 ; bytes 26-27   reserved for locals
 
-; OUT
+; OUT  ( -- a )
 
   hdr _public,'OUT'
 outt:
@@ -5355,7 +5378,7 @@ outt:
 
 ; bytes 30-33   reserved
 
-; CATCHER
+; CATCHER  ( -- a )
 
   hdr _public,'CATCHER'
 catcher:
@@ -5365,7 +5388,7 @@ catcher:
 ; bytes 36-43   reserved
 
 ; XXX NEW -- this substitutes the old 'scaps', 'caps' and '-caps'
-; CASE-SENSITIVE-SEARCH
+; CASE-SENSITIVE-SEARCH  ( -- a )
 ; case flag for 'compare' and 'search'
 
   hdr _public,'CASE-SENSITIVE-SEARCH'
@@ -5702,7 +5725,7 @@ question_csp:
   dw sp_fetch
   dw csp,fetch
   dw minus
-  dw qbal
+  dw question_bal
   dw exit
 
 ; ?COMP  ( -- )   state? 0= abort" compilation only'
@@ -5844,181 +5867,99 @@ postp.1:
   dw compile_comma
   dw exit
 
-; XXX OLD -- DX-Forth 4.00
-;;; (ACCEPT)  ( ca +n1 -- +n2)
-;;;       0 begin key dup >r dup bl 127 within 2over -
-;;;       and if dup emit over 4 pick + c! 1+ else 2dup
-;;;       dup 8 = swap esc = or and if esc = if 0 swap
-;;;       else 1- 1 then begin 8 dup emit space emit 1-
-;;;       dup 0= until then drop then r> 13 = until
-;;;       -rot 2drop
-;;
-;;  header x,'(ACCEPT)'
-;;paren_accept:
-;;  call do_colon
-;;  dw zero
-;;paren_accept.1:
-;;  dw key
-;;  dw dup,to_r
-;;  dw dup,bl  ; only accept chars between 32 and 126
-;;  dw c_lit
-;;  db 127
-;;  dw within
-;;  dw two_over,minus
-;;  dw and_
-;;  dw question_branch,paren_accept.2
-;;  dw dup,emit
-;;  dw over
-;;  dw c_lit
-;;  db 4
-;;  dw pick
-;;  dw plus
-;;  dw c_store
-;;  dw one_plus
-;;  dw branch,paren_accept.6
-;;paren_accept.2:
-;;  dw two_dup
-;;  dw dup
-;;  dw c_lit
-;;  db bs_char    ; backspace?
-;;  dw equals,swap
-;;  dw c_lit
-;;  db esc_char    ; escape?
-;;  dw equals,or_
-;;  dw and_
-;;  dw question_branch,paren_accept.5
-;;  dw c_lit
-;;  db esc_char    ; escape?
-;;  dw equals
-;;  dw question_branch,paren_accept.3
-;;  dw zero,swap
-;;  dw branch,paren_accept.4
-;;paren_accept.3:
-;;  dw one_minus,one
-;;paren_accept.4:
-;;  dw c_lit
-;;  db bs_char
-;;  dw dup,emit
-;;  dw space,emit
-;;  dw one_minus
-;;  dw dup,zero_equals
-;;  dw question_branch,paren_accept.4
-;;paren_accept.5:
-;;  dw drop
-;;paren_accept.6:
-;;  dw from_r
-;;  dw c_lit
-;;  db cr_char
-;;  dw equals
-;;  dw question_branch,paren_accept.1
-;;  dw minus_rot,two_drop
-;;  dw exit
+; (ACCEPT-DELETE)  ( n -- )
+;   delete n chars at the left of the cursor
 
-; XXX NEW -- DX-Forth 4.09 -- modified
-; (ACCEPT)  ( ca +n1 -- +n2)
+  hdr _hidden,'(ACCEPT-DELETE)'
 
-;  0
-;  begin
-;   key dup >r
-;   dup bl 127 within
-;   2over - and
-;   if
-;     dup emit over 4 pick + c! 1+
-;   else
-;     2dup dup bs_char = swap esc = or and
-;     if
-;       esc = if 0 swap else 1- 1 then
-;       begin
-;         8 dup emit space emit 1- dup 0=
-;       until
-;     then
-;     drop
-;   then
-;   r> cr_char =
-;  until
-;  -rot 2drop
+paren_accept_delete:
+  dw do_colon
+paren_accept_delete.loop:
+  dw c_lit
+  db left_char
+  dw dup,emit,space,emit
+  dw one_minus,dup
+  dw branch_if_not_false,paren_accept_delete.loop
+  dw exit
+
+; (ACCEPT-CONTROL-KEY)  ( ca len len2 c -- ca len len2' )
+
+  hdr _hidden,'(ACCEPT-CONTROL-KEY)'
+
+paren_accept_control_key:
+
+  call do_colon
+  dw dup
+
+  ; check the escape key
+  dw c_lit
+  db esc_char
+  dw equals ; escape?
+  dw branch_if_false,paren_accept_control_key.bs
+  ; do escape
+  dw zero,swap,paren_accept_delete
+  dw exit
+
+paren_accept_control_key.bs:
+  ; check the backspace key
+  dw c_lit
+  db bs_char
+  dw equals ; backspace?
+  dw branch_if_false,paren_accept_control_key.end
+  ; do backspace
+  dw one_minus,one,paren_accept_delete
+
+paren_accept_control_key.end:
+  dw exit
+
+; (ACCEPT-KEY)  ( ca len len2 c -- ca len len2' )
+
+  hdr _hidden,'(ACCEPT-KEY)'
+
+paren_accept_key:
+  call do_colon
+  if debug
+    dw paren_dot_quote
+    dcs '(ACCEPT-KEY)',cr_char
+  endif
+  dw dup,bl
+  dw c_lit
+  db 127
+  dw within ; ASCII?
+  dw branch_if_true,paren_accept_key.ascii
+
+  ; it's a control char
+  dw paren_accept_control_key
+  dw exit
+
+paren_accept_key.ascii:
+  ; it's an ASCII char
+  dw dup,emit,over
+  dw c_lit
+  db 4
+  dw pick,plus,c_store,one_plus
+  dw exit
+
+; (ACCEPT)  ( ca len -- len2 )
 
   hdr _hidden,'(ACCEPT)'
 paren_accept:
   call do_colon
   if debug
     dw paren_dot_quote
-    dcs '(ACCEPT) '
+    dcs '(ACCEPT)',cr_char
   endif
-
-
-; XXX TMP
-;;  dw c_lit
-;;  db '"'
-;;  dw emit
-;;  dw key
-;;  dw emit
-;;  dw c_lit
-;;  db '"'
-;;  dw emit
-;;  dw bye
-;;  dw lit,2
-;;  dw return
-
-
-  dw zero                           ; 0  \ count
-paren_accept.begin:                 ; begin
-  dw key
-
-  ; XXX TMP
-;;  dw dup,lit,65535,c_store
-;;  dw lit,50000,c_store
-;;  dw bye
-;;  dw branch,paren_accept.1
-
-  dw dup,to_r,dup                   ;   dup >r dup
-  dw bl
-  dw c_lit
-  db 127
-  dw within                         ;   bl 127 within  \ ascii?
-  dw two_over,minus                 ;   2over -  \ space left?
-  dw and_                           ;   and
-  dw question_branch,paren_accept.2 ;   if
-  dw dup,emit,over                  ;     dup emit over
-  dw c_lit
-  db 4
-  dw pick                           ;     4 pick
-  dw plus,c_store                   ;     + c!  \ store the char
-  dw one_plus                       ;     1+  \ update the count
-  dw branch,paren_accept.6
-paren_accept.2:                     ;   else
-  dw two_dup,dup                    ;     2dup dup
-  dw lit,bs_char,equals             ;     bs_char = \ delete?
-  dw swap                           ;     swap
-  dw c_lit
-  db esc_char
-  dw equals,or_,and_                ;     esc_char = or and
-  dw question_branch,paren_accept.5 ;     if
-  dw c_lit
-  db esc_char
-  dw equals                         ;       esc_char =
-  dw question_branch,paren_accept.3
-  dw zero,swap
-  dw branch,paren_accept.4
-paren_accept.3:
-  dw one_minus,one
-paren_accept.4:
-  dw c_lit
-  db bs_char
-  dw dup,emit
-  dw space,emit
-  dw one_minus
-  dw dup,zero_equals
-  dw question_branch,paren_accept.4
-paren_accept.5:
-  dw drop
-paren_accept.6:
-  dw from_r
+  dw zero ; len2
+paren_accept.loop:
+  dw key,dup
   dw c_lit
   db cr_char
-  dw equals                           
-  dw question_branch,paren_accept.begin
-  dw minus_rot,two_drop
+  dw equals  ; enter key?
+  dw branch_if_true,paren_accept.end
+  dw paren_accept_key
+  dw branch,paren_accept.loop
+paren_accept.end:
+  dw drop,nip,nip
   dw exit
 
 ; ACCEPT  ( ca +n1 -- +n2 )
@@ -6487,23 +6428,28 @@ interpret.4:
   dw count
   dw base,fetch,to_r
   dw over,c_fetch
+
   dw c_lit
   db '$'
   dw paren_of,interpret.5
   dw hex,one
   dw branch,interpret.7
+
 interpret.5:
   dw c_lit
   db '#'
   dw paren_of,interpret.6
   dw decimal,one
   dw branch,interpret.7
-interpret.6:
+
+interpret.6: ; endcase
   dw zero,swap
   dw drop
+
 interpret.7:
   dw sstr
   dw two_dup
+
 interpret.8:
   dw number_question    ; NUMBER? patch
   dw question_branch,interpret.12
@@ -7090,7 +7036,7 @@ cold:
 ;;  ld sp,hl     ; set cpu stack pointer
 ;;  ld (init_s0),hl    ; patch S0
 ;;   if control_flow_stack_extensions
-;;  ld (cfz.1),hl   ; init CF0 with safe value
+;;  ld (cs0.variable),hl   ; init CS0 with safe value
 ;;   endif
 
   ; init the user data
