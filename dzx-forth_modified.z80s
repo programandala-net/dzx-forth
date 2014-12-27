@@ -3078,10 +3078,24 @@ branch:
   ld b,(hl)
   jp next
 
+; <>0BRANCH  ( flag -- )
+
+  hdr _hidden,'?BRANCH'
+not_equals_0_branch:
+branch_if_true:
+branch_if_not_false:
+  pop hl
+  ld a,l
+  or h
+  jp nz,branch
+  jp question_branch.1:
+
 ; ?BRANCH  ( flag -- )
 
   hdr _hidden,'?BRANCH'
 question_branch:
+zero_branch:
+branch_if_false:
   pop hl
   ld a,l
   or h
