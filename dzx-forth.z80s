@@ -9,7 +9,7 @@
 ; 2014-11-03: Start.
 version: macro
   db 'A-00-201412271309'
-  ; XXX Right after rewriting '(accept)' and improving the branch words.
+  ; XXX Status: '(accept)' just rewritten, but still buggy (the length limit does not work). Problems with backspace (char 8), depending on the ZX Spectrum ROM.
   endm
 
 ; ------------------------------
@@ -118,13 +118,13 @@ f_stack_size:     defl 0 ; bytes
 ; XXX TODO complete
 caps_char:      equ 0x06 ; toggle caps lock
 edit_char:      equ 0x07 ; edit
-left_char:      equ 0x08 ; cursor left
+left_char:      equ 0x08 ; cursor left (backspace)
+bs_char:        equ 0x08 ; backspace (cursor left)
 right_char:     equ 0x09 ; cursor right
 down_char:      equ 0x0a ; cursor down
 up_char:        equ 0x0b ; cursor up
 lf_char:        equ 0x0a ; line feed ; XXX OLD
 delete_char:    equ 0x0c ; delete (backspace)
-bs_char:        equ 0x0c ; backspace
 ff_char:        equ 0x0c ; form feed (printer only)
 cr_char:        equ 0x0d ; carriage return (enter key)
 graphics_char:  equ 0x0f ; toggle graphics mode
@@ -3084,6 +3084,8 @@ branch:
 not_equals_0_branch:
 branch_if_true:
 branch_if_not_false:
+branch_if_not_0:
+branch_if_not_zero:
   pop hl
   ld a,l
   or h
@@ -3096,6 +3098,7 @@ branch_if_not_false:
 question_branch:
 zero_branch:
 branch_if_false:
+branch_if_0:
   pop hl
   ld a,l
   or h
@@ -4917,8 +4920,9 @@ paren_to:
   inc hl
   jp store.1
 
-; TO      ' state? if postpone (to) , else >body !
-;       then ; immediate
+; TO  ( x "name" -- )
+;
+;   ' state? if postpone (to) , else >body !  then ; immediate
 ; state-smart
 
   hdr _public,'TO',_immediate
@@ -4926,15 +4930,15 @@ to:
   call do_colon
   dw tick
   dw state_question
-  dw question_branch,to1
-  dw compile,paren_to
-  dw comma
-  dw branch,to2
-to1:
+  dw question_branch,to.1
+  dw compile,paren_to,comma
+  dw branch,to.end
+to.1:
   dw to_body,store
-to2:
+to.end:
   dw exit
 
+  ; XXX TODO rewrite
 undef:
   call do_colon
   dw one
@@ -5873,7 +5877,7 @@ postp.1:
   hdr _hidden,'(ACCEPT-DELETE)'
 
 paren_accept_delete:
-  dw do_colon
+  call do_colon
 paren_accept_delete.loop:
   dw c_lit
   db left_char
@@ -5882,11 +5886,11 @@ paren_accept_delete.loop:
   dw branch_if_not_false,paren_accept_delete.loop
   dw exit
 
-; (ACCEPT-CONTROL-KEY)  ( ca len len2 c -- ca len len2' )
+; (ACCEPT-CONTROL-CHAR)  ( ca len len2 c -- ca len len2' )
 
-  hdr _hidden,'(ACCEPT-CONTROL-KEY)'
+  hdr _hidden,'(ACCEPT-CONTROL-CHAR)'
 
-paren_accept_control_key:
+paren_accept_control_char:
 
   call do_colon
   dw dup
@@ -5895,21 +5899,41 @@ paren_accept_control_key:
   dw c_lit
   db esc_char
   dw equals ; escape?
-  dw branch_if_false,paren_accept_control_key.bs
+  dw branch_if_false,paren_accept_control_char.delete
   ; do escape
   dw zero,swap,paren_accept_delete
   dw exit
 
-paren_accept_control_key.bs:
-  ; check the backspace key
+paren_accept_control_char.delete:
+  ; check the delete key
   dw c_lit
-  db bs_char
-  dw equals ; backspace?
-  dw branch_if_false,paren_accept_control_key.end
+  db delete_char
+  dw equals
+  dw branch_if_false,paren_accept_control_char.end
   ; do backspace
   dw one_minus,one,paren_accept_delete
 
-paren_accept_control_key.end:
+paren_accept_control_char.end:
+  dw exit
+
+; (ACCEPT-ASCII-CHAR)  ( ca len len2 c -- ca len len2' )
+
+  hdr _hidden,'(ACCEPT-ASCII-CHAR)'
+
+paren_accept_ascii_char:
+  call do_colon
+paren_accept_ascii_char.0:
+  dw to_r,two_dup,minus,from_r,swap ; space left
+  dw branch_if_not_zero,paren_accept_ascii_char.valid
+  dw drop
+  dw exit
+
+paren_accept_ascii_char.valid:
+  ; there's space left for the char
+  dw dup,emit,over
+  dw c_lit
+  db 4
+  dw pick,plus,c_store,one_plus
   dw exit
 
 ; (ACCEPT-KEY)  ( ca len len2 c -- ca len len2' )
@@ -5918,27 +5942,15 @@ paren_accept_control_key.end:
 
 paren_accept_key:
   call do_colon
-  if debug
-    dw paren_dot_quote
-    dcs '(ACCEPT-KEY)',cr_char
-  endif
   dw dup,bl
   dw c_lit
   db 127
   dw within ; ASCII?
-  dw branch_if_true,paren_accept_key.ascii
-
-  ; it's a control char
-  dw paren_accept_control_key
+  dw branch_if_true,paren_accept_ascii_char.0
+  ; not ASCII
+  dw paren_accept_control_char
   dw exit
 
-paren_accept_key.ascii:
-  ; it's an ASCII char
-  dw dup,emit,over
-  dw c_lit
-  db 4
-  dw pick,plus,c_store,one_plus
-  dw exit
 
 ; (ACCEPT)  ( ca len -- len2 )
 
@@ -6560,7 +6572,7 @@ paren_refill.1:
   dw lit,tib
   dw dup
   dw c_lit
-  db 80
+  db 8 ; 80 ; XXX TMP 8, for testing
   dw accept
   dw space
 paren_refill.2:
