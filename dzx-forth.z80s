@@ -8,8 +8,12 @@
 
 ; 2014-11-03: Start.
 version: macro
-  db 'A-00-201412271309'
-  ; XXX Status: '(accept)' just rewritten, but still buggy (the length limit does not work). Problems with backspace (char 8), depending on the ZX Spectrum ROM.
+  db 'A-00-201412272034'
+  ; XXX Status (most recent first):
+  ;
+  ; Fixed the 'dpush' problem!
+  ;
+  ; '(accept)' rewritten, but still buggy (the length limit does not work). Problems with backspace (char 8), depending on the ZX Spectrum ROM.
   endm
 
 ; ------------------------------
@@ -732,7 +736,6 @@ two_lit:
   inc bc
   ld a,(bc)
   ld h,a
-  ; XXX FIXME DX-Forth bug? HL is not pushed!
   inc bc
   ld a,(bc)
   ld e,a
@@ -740,8 +743,7 @@ two_lit:
   ld a,(bc)
   ld d,a
   inc bc
-  push de
-  jp next
+  jp push_de_hl
 
 ; }}} **********************************************************
 ; Stack pointer manipulation {{{
@@ -899,8 +901,7 @@ over:
   pop de
   pop hl
   push hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; ROT  ( x1 x2 x3 -- x2 x3 x1 )
 
@@ -909,8 +910,7 @@ rot:
   pop de
   pop hl
   ex (sp),hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; -ROT  ( x1 x2 x3 -- x3 x1 x2 )
 
@@ -920,8 +920,7 @@ minus_rot:
   pop de
   ex (sp),hl
   ex de,hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; ROLL  ( xu xn .. x0 u -- xn .. x0 xu )
 
@@ -1017,8 +1016,7 @@ tuck:
   pop hl
   pop de
   push hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; 2DUP  ( x1 x2 -- x1 x2 x1 x2 )
 
@@ -1028,8 +1026,7 @@ two_dup:
   pop de
   push de
   push hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; 2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 
@@ -1061,8 +1058,7 @@ two_swap:
   ld (hl),e
   ld e,a
   pop hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; 2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
 
@@ -1096,10 +1092,13 @@ two_nip:
   inc  sp
   inc  sp
   inc  sp
+push_de_hl: ; XXX this is DX-Forth's dpush
   push de
+  push hl
   jp next
 
-; DEPTH  ( -- u )   sp@ s0 @ swap - 2/
+; DEPTH  ( -- u )
+;   sp@ s0 @ swap - 2/
 
   hdr _public,'DEPTH'
 depth:
@@ -1108,6 +1107,39 @@ depth:
   dw s0,fetch
   dw swap,minus
   dw two_slash
+  dw exit
+
+; MAXDEPTH-.S  ( -- a )
+; XXX NEW -- after Gforth
+; max items shown by '.s'
+
+  hdr _public,'MAXDEPTH-.S'
+maxdepth_dot_s:
+  call do_create
+  dw 9 ; default
+
+; .S  ( -- )
+; XXX NEW -- after Gforth
+
+  ; XXX TODO -- finish and test
+  hdr _public,'.S'
+dot_s:
+  call do_colon
+  ; show the depth:
+  dw depth,c_lit
+  db '<'
+  dw emit,dot,c_lit
+  db '>'
+  dw emit,space
+  ; calculate the depth to show:
+  dw depth,zero,max,maxdepth_dot_s,fetch,min
+  ; do it:
+  dw dup,zero,paren_question_do,dot_s.end
+dot_s.loop:
+  dw dup,i_,minus,pick,dot
+  dw paren_loop,dot_s.loop
+dot_s.end:
+  dw drop
   dw exit
 
 ; }}} **********************************************************
@@ -1185,8 +1217,7 @@ two_fetch.hl:
   ld h,(hl)
   ld l,a
   ex de,hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; +!  ( x aa -- )
 
@@ -1420,11 +1451,9 @@ s_to_d:
   pop de
   ld a,d
   or a
-  jp p,s_to_d.1
+  jp p,push_de_hl
   dec hl
-s_to_d.1:
-  push de
-  jp next
+  jp push_de_hl
 
 ; D>S  ( d -- n )
 ;   aka drop d>s
@@ -1457,8 +1486,7 @@ d_negate:
   pop hl
   pop de
   call negate_hlde
-  push de
-  jp next
+  jp push_de_hl
 
 ; DABS  ( d -- +d )
 
@@ -1467,8 +1495,7 @@ d_abs:
   pop hl
   pop de
   call abs_hlde
-  push de
-  jp next
+  jp push_de_hl
 
 ; +  ( x1 x2 -- x3 )
 
@@ -1514,8 +1541,7 @@ d_plus:
   adc a,b
   ld h,a
   pop bc
-  push de
-  jp next
+  jp push_de_hl
 
 ; D-  ( xd1 xd2 -- xd3 )  dnegate d+
 
@@ -1638,8 +1664,7 @@ umstr:
   pop de
   pop hl
   call hl_by_de_to_hlde_unsigned
-  push de
-  jp next
+  jp push_de_hl
 
 ; M*  ( n1 n2 -- d )
 ; 2dup xor >r abs swap abs um* r> ?dnegate
@@ -1649,8 +1674,7 @@ mstar:
   pop de
   pop hl
   call hl_by_de_to_hlde_signed
-  push de
-  jp next
+  jp push_de_hl
 
 ; *  ( x1 x2 -- x3 )
 ; um* drop
@@ -1741,8 +1765,7 @@ umslm:
   ex de,hl
   call mum
   pop bc
-  push de
-  jp next
+  jp push_de_hl
 
 ; Signed 32/16 divide - floored
 ;
@@ -2410,7 +2433,7 @@ edigs:
   dw minus
   dw exit
 
-;  +hld ( +n -- ca )  negate hld +! hld @ dup dp @ u<
+; +HLD  ( +n -- ca )  negate hld +! hld @ dup dp @ u<
 ;        abort" HOLD buffer overflow"
 
   hdr _hidden,'+HLD'
@@ -2423,7 +2446,7 @@ phld:
   dcs 'HOLD buffer overflow'
   dw exit
 
-;  HOld ( c -- )  1 +hld c!
+; HOLD  ( c -- )  1 +hld c!
 
   hdr _public,'HOLD'
 hold:
@@ -2484,7 +2507,7 @@ digs.1:
   dw question_branch,digs.1
   dw exit
 
-;  SHOld ( ca u -- )  dup +hld swap move
+; SHOLD  ( ca u -- )  dup +hld swap move
 
   hdr _public,'SHOLD'  ; hold string
 shold:
@@ -2493,7 +2516,7 @@ shold:
   dw swap,move
   dw exit
 
-;  NHOld ( n c -- )  over +hld -rot fill
+; NHOLD  ( n c -- )  over +hld -rot fill
 
   hdr _public,'NHOLD'  ; hold n characters
 nhold:
@@ -2502,9 +2525,9 @@ nhold:
   dw minus_rot,fill
   dw exit
 
-;  decimal? ( -- flag )  base @ 10 =
+; DECIMAL?  ( -- flag )  base @ 10 =
 
-  hdr _hidden,'DECIMAL?'
+  hdr _public,'DECIMAL?'
 decimal_question:
   call do_colon
   dw base,fetch    ; decimal base?
@@ -3065,7 +3088,7 @@ paren_of:
   or h ; hl equal de?
   jp z,question_branch.1
   push de
-; jp branch ; XXX commented out in DX-Forth
+  jp branch
 
 ; BRANCH  ( -- )
 
@@ -3082,10 +3105,10 @@ branch:
 
   hdr _hidden,'?BRANCH'
 not_equals_0_branch:
-branch_if_true:
-branch_if_not_false:
 branch_if_not_0:
+branch_if_not_false:
 branch_if_not_zero:
+branch_if_true:
   pop hl
   ld a,l
   or h
@@ -3097,8 +3120,9 @@ branch_if_not_zero:
   hdr _hidden,'?BRANCH'
 question_branch:
 zero_branch:
-branch_if_false:
 branch_if_0:
+branch_if_false:
+branch_if_zero:
   pop hl
   ld a,l
   or h
@@ -3121,12 +3145,12 @@ paren_loop:
 paren_loop.1:
   inc bc    ; skip over branch
   inc bc
-; jp unloo
+; jp unloop
 
 ; UNLOOP  ( -- )
 
   hdr _public,'UNLOOP'
-unloo:
+unloop:
   ld hl,(return_stack_pointer)  ; discard loop parameters
   ld de,cw*2
   add hl,de
@@ -3172,7 +3196,7 @@ paren_leave:
   ld c,(hl)
   inc hl
   ld b,(hl)
-  jp unloo
+  jp unloop
 
 ; (?DO)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (do1)
 
@@ -3818,12 +3842,12 @@ dot_r:
 u_dot:
   ld hl,0
   push hl
-  jp ddot
+  jp d_dot
 
 ; D.  ( d -- )    0 d.r space
 
   hdr _public,'D.'
-ddot:
+d_dot:
   call do_colon
   dw zero,d_dot_r
   dw space
@@ -3856,7 +3880,7 @@ ques:
 ;;  header 1,'.'
 ;;dot:
 ;;  call do_colon
-;;  dw s_to_d,ddot
+;;  dw s_to_d,d_dot
 ;;  dw exit
 
 ; XXX NEW -- DX-Forth 4.09
@@ -3865,11 +3889,12 @@ ques:
   hdr _public,'.'
 dot:
   call do_colon
-;  dw decimal_question ; XXX FIXME -- undefined
-  dw question_branch,dot.1
-  dw s_to_d,ddot
+  dw decimal_question
+  dw branch_if_false,dot.not_decimal_base
+  ; decimal base
+  dw s_to_d,d_dot
   dw exit
-dot.1:
+dot.not_decimal_base:
   dw u_dot
   dw exit
 
@@ -5676,8 +5701,7 @@ paren_name:
   and 0x1f
   ld l,a
   ld h,0
-  push de
-  jp next
+  jp push_de_hl
 
 ; .ID  ( nfa | 0 -- )   ?dup if (name) type exit then
 ;         ." [noname]"
@@ -5921,20 +5945,46 @@ paren_accept_control_char.end:
   hdr _hidden,'(ACCEPT-ASCII-CHAR)'
 
 paren_accept_ascii_char:
-  call do_colon
-paren_accept_ascii_char.0:
-  dw to_r,two_dup,minus,from_r,swap ; space left
-  dw branch_if_not_zero,paren_accept_ascii_char.valid
-  dw drop
-  dw exit
+  call do_colon ; XXX entry not used
 
-paren_accept_ascii_char.valid:
+paren_accept_ascii_char.0:
+  dw to_r
+  dw two_dup
+  ; XXX TMP
+;  dw lit,50000,store
+;  dw lit,50002,store
+;  dw bye
+  dw minus
+
+  dw from_r,swap ; space left
+  ; XXX TMP
+;  dw dup
+;  dw lit,50000,store
+;  dw bye
+
+
+  dw branch_if_0,paren_accept_ascii_char.no
+
   ; there's space left for the char
+  if 0 ; debug
+    dw paren_dot_quote
+    dcs '{space left}'
+  endif
   dw dup,emit,over
   dw c_lit
   db 4
   dw pick,plus,c_store,one_plus
   dw exit
+
+paren_accept_ascii_char.no:
+  ; no space left for the char
+  if debug
+    dw paren_dot_quote
+    dcs '{no space left!}'
+  endif
+  dw drop
+  dw exit
+
 
 ; (ACCEPT-KEY)  ( ca len len2 c -- ca len len2' )
 
@@ -5946,6 +5996,7 @@ paren_accept_key:
   dw c_lit
   db 127
   dw within ; ASCII?
+  ; ASCII
   dw branch_if_true,paren_accept_ascii_char.0
   ; not ASCII
   dw paren_accept_control_char
@@ -7120,6 +7171,11 @@ do_f_identify_patch:
 ;;  dw loadfile,type
 ;;  dw cr
 ;;cold.10:
+
+; XXX TMP for debugging
+;  dw dot_s
+;  dw bye
+
   dw quit      ; jump to interpreter
 ;  dw bye ; XXX TMP
 
@@ -7204,7 +7260,7 @@ xdp:
 ;;  dw drop
 ;;  dw exit
 
-;  ?protected ( ha -- ha )  (init_dph) @ over u> check? and
+; ?PROTECTED  ( ha -- ha )  (init_dph) @ over u> check? and
 ;          abort" is protected"
 
   hdr _hidden,'?PROTECTED'
@@ -7218,7 +7274,7 @@ question_protected:
   dcs 'is protected'
   dw exit
 
-;  name? ( "name" -- xt nfa )
+; NAME?  ( "name" -- xt nfa )
 ; find name in context wordlist
 ;         bl-word get-context wfind ?defined
 ;          ?protected
@@ -7666,9 +7722,6 @@ aligned: equ next
 
   hdr _public,'DZX-FORTH'
 dzx_forth:
-; XXX OLD
-;;  ld hl,(dxver)
-;;  jp dosver.1
 ; XXX TODO
   jp next
 
@@ -8008,8 +8061,7 @@ rec_fetch:
   rra
   ld l,a
   ex de,hl
-  push de
-  jp next
+  jp push_de_hl
 
 ; REC!  ( +d a -- )  >r 7 0 do d2/ loop r@ 2+ c! r> !
 
@@ -8816,7 +8868,7 @@ read_line:
 ;;  dw rwp_fetch,d_plus,rwpst
 ;;  dw i_,swap,minus
 ;;  dw true,zero
-;;  dw unloo,exit
+;;  dw unloop,exit
 ;;read_line.4:
 ;;  dw paren_loop,read_line.2
 ;;read_line.5:
@@ -8872,7 +8924,7 @@ fdb.1:
   dw dup,fetch,fetch
   dw zero_equals
   dw question_branch,fdb.2
-  dw unloo
+  dw unloop
   dw exit
 fdb.2:
   dw cell_plus
@@ -9257,21 +9309,21 @@ close.1:
 ;        cell+ loop drop
 
   hdr _public,'CLOSE-ALL'
-closa:
+close_all:
   call do_colon
   dw close    ; ensure buffer flushed
   dw lit,fdtab
   dw c_lit
   db nfd
   dw zero
-  dw paren_do,closa.2
-closa.1:
+  dw paren_do,close_all.end
+close_all.loop:
   dw dup
   dw sfp,store
   dw close
   dw cell_plus
-  dw paren_loop,closa.1
-closa.2:
+  dw paren_loop,close_all.loop
+close_all.end:
   dw drop
   dw exit
 
@@ -9594,7 +9646,7 @@ normal:
 dfp:
   call next
 
-;  FLOAT+ ( f-a1 -- f-a2 )  4 +
+; FLOAT+  ( f-a1 -- f-a2 )  4 +
 
   hdr _public,'FLOAT+'
 floatp:
@@ -9604,7 +9656,7 @@ floatp:
   push hl
   jp next
 
-;  FLOATS ( n1 -- n2 )    4 *
+; FLOATS  ( n1 -- n2 )    4 *
 
   hdr _public,'FLOATS'
 floats:
@@ -9620,7 +9672,7 @@ floats:
   hdr _public,'FALIGN',_immediate,noop
 falign: equ  next
 
-;  FALIGNED ( a -- fa )
+; FALIGNED  ( a -- fa )
 ;   aka noop faligned immediate
 
   hdr _public,'FALIGNED',_immediate,noop
@@ -9659,10 +9711,9 @@ f_variable: equ  two_variable
 ;   depth 2/
 
   hdr _public,'FDEPTH'
-fdepth:
+f_depth:
   call do_colon
-  dw depth
-  dw two_slash
+  dw depth,two_slash
   dw exit
 
 ; FDROP  ( r -- )
@@ -9798,8 +9849,7 @@ svop:
   ld h,b
   ld e,c
   pop bc
-  push de
-  jp next
+  jp push_de_hl
 
 ; str  store registers to accum
 
@@ -10745,8 +10795,7 @@ f_to_d:
   ld l,b
   ld h,a
   pop bc
-  push de
-  jp next
+  jp push_de_hl
 
 ; S>F  ( n -- r )    s>d d>f
 
