@@ -1,93 +1,84 @@
-# DZX-Forth Glossary
+= DZX-Forth Glossary
+:author: Marcos Cruz (programandala.net)
+:revdate: 2014-12-28
+:toc: left
+:toc-placement!:
 
-# History of this document:
-# 2014-12-18: copied from DX-Forth for CP/M (v4.09)
-# 2014-12-27: backuped before moving all descriptions to the main source.
+// History of this document
+//
+// 2014-12-18: Copied from CP/M DX-Forth v4.09.
+//
+// 2014-12-28: Start convertion to Asciidoctor.  The next goal will be
+// to combine this document with the Z80 source.  This way the source
+// will be fully documented, and there will be no duplicated or
+// outdated info.  In order to build the package, a Vim program will
+// extract the glossary documentation from the source and will include
+// it into the main manual.
 
-DX-Forth Extension Wordset Glossary for CP/M
---------------------------------------------
+toc::[]
 
-The DX-Forth Extension Wordset is provided in addition to the FORTH-94
-Standard words.
+== Stack notation
 
+.Numbers
 
-Attributes:
+|===
+| Number    | Type                           | Cells | Range
 
-I    Words that have the immediate flag set
-A    Words residing in the DX-Forth APPLICATION dictionary
-S    Words residing in the DX-Forth SYSTEM dictionary
-94   Words defined in the Forth-94 Standard
-83   Words defined in the Forth-83 Standard
-79   Words defined in the Forth-79 Standard
-FIG  Words defined in the fig-Forth model
-C    Words requiring custom installation
+| a         | address                        | 1     | 0..65535
+| aa        | aligned address                | 1     | 0..65535
+| ca        | character-aligned address      | 1     | 0..65535
+| fa        | float-aligned address          | 1     | 0..65535
+| pa        | CPU port address               | 1     | 0..255
 
-Stack notation:
+| true      | boolean true -1                | 1     | -1
+| false     | boolean false 0                | 1     | 0
+| flag      | boolean true or false          | 1     | -1 or 0
+| ior       | input/output result            | 1     | 0..255
 
-Note: The following naming conventions for addresses are used to
-maintain compatibility with the ANS FORTH document.  As DX-Forth does
-not currently execute on architectures requiring address alignment,
-all address types may be used interchangeably.
+| n         | signed number                  | 1     | -32768..32767
+| +n        | positive number                | 1     | 0..32767
+| u         | unsigned number                | 1     | 0..65535
+| len       | unsigned number, a zone length | 1     | 0..65535
+| x         | unspecified number             | 1     | -32768..65535
+| d         | signed double number           | 1     | -2147483648..2147483647
+| +d        | positive double number         | 2     | 0..2147483647
+| ud        | unsigned double number         | 2     | 0..4294697295
+| xd        | unspecified double number      | 2     | -2147483648..4294697295
+| r         | real number                    | 2     | +-5E-39..1E38
+| c         | character or byte              | 1     | 0..255
 
-number    type                          cells      range
------     ----                          -----      -----
-a      address                       1         0..65535
-aa    aligned address               1         0..65535
-ca    character-aligned address     1         0..65535
-fa    float-aligned address         1         0..65535
-pa    CPU port address              1         0..255
+|===
 
-true      boolean true -1               1         -1
-false     boolean false 0               1         0
-flag      boolean true or false         1         -1 or 0
-ior       input/output result           1         0..255
+NOTE: As DZX-Forth does not executes on an architecture requiring
+address alignment, all address types may be used interchangeably.
 
-n         signed number                 1         -32768..32767
-+n        positive number               1         0..32767
-u         unsigned number               1         0..65535
-x         unspecified number            1         -32768..65535
-d         signed double number          1         -2147483648..
-                                                    2147483647
-+d        positive double number        2         0..2147483647
-ud        unsigned double number        2         0..4294697295
-xd        unspecified double number     2         -2147483648..
-                                                    4294697295
-r         real number                   2         +-5E-39..1E38
-c         character or byte             1         0..255
+.Input stream
 
-ccc       any arbitrary blank-delimited character string or word name
-          parsed from the input stream
+ccc ::
+any arbitrary blank-delimited character string or word name
+parsed from the input stream
 
-"ccc"     same as for ccc; typically shown within a stack comment but
-          represents characters parsed from the input stream.
+"ccc"::
+same as for ccc; typically shown within a stack comment but
+represents characters parsed from the input stream.
 
+== Attributes
 
-Contents
+[horizontal]
+I       :: Words that have the immediate flag set
+79      :: Words defined in the Forth-79 Standard
+83      :: Words defined in the Forth-83 Standard
+94      :: Words defined in the Forth-94 Standard (also known as ANS Forth or ISO Forth)
+Gforth  :: Words defined in Gforth
+FIG     :: Words defined in the fig-Forth model
 
- 1. Disk File Interface
- 2. Screen Files
- 3. Tools
- 4. DOS Interface
- 5. Input/Output
- 6. Arithmetic and Stack
- 7. Conversion
- 8. Strings and Memory
- 9. Dictionary
-10. Facility
-11. Miscellaneous
-12. Floating Point
-13. Compiler Security
-14. Control Flow Stack
-
-
-1. Disk File Interface
-----------------------
+== Disk File Interface
 
 Note: When a file function returns a non-zero ior then an error has
 occurred.  Refer to DXFORTH.TXT for a list of ior values and their
 corresponding DOS error.
 
- #FCB  ( -- u )                                        A
+ #FCB  ( -- u )
 
      A VALUE indicating the maximum number of file handles available.
      The default is 10.  #FCB represents the maximum number of files
@@ -98,7 +89,7 @@ corresponding DOS error.
 
      The above would change the maximum number of handles to 20.
 
- +EXT  ( ca1 u1 ca2 u2 -- ca3 u3 )         A
+ +EXT  ( ca1 u1 ca2 u2 -- ca3 u3 )
 
      Conditionally append the file extension ca2 u2 to the filename
      string ca1 u1 to produce ca3 u3.  If a1 u1 does not
@@ -111,22 +102,22 @@ corresponding DOS error.
 
      See: >FNAME
 
- -EXT  ( ca u1 -- ca u2 )                      A
+ -EXT  ( ca u1 -- ca u2 )
 
      Delete any extension from the filename string ca u1.  The
      resulting string is ca u2.  Formerly named -FILENAME .
 
- -PATH  ( ca u1 -- ca u2 )                     A
+ -PATH  ( ca u1 -- ca u2 )
 
      Delete any path from the filename string ca u1.  The resulting
      string is ca u2.
 
- >DRIVE  ( n1 -- n2 )                                  A
+ >DRIVE  ( n1 -- n2 )
 
      Convert logical drive number (0=default, 1=A, 2=B, etc) to absolute
      drive number (0=A, 1=B, 2=C, etc).  Formerly named >DISK .
 
- >FCB  ( ca1 u1 -- a2 u2 )                      A
+ >FCB  ( ca1 u1 -- a2 u2 )
 
      Parse the filename string ca1 u1 into a temporary 36-byte file
      control block.  A maximum of two such FCB's can exist in the buffer
@@ -136,11 +127,11 @@ corresponding DOS error.
      Note: The temporary file control block resides in a transient
      region and may be overwritten by subsequent operations.
 
-     DX-Forth functions that use >FCB include: DELETE-FILE RENAME-FILE
+     DZX-Forth functions that use >FCB include: DELETE-FILE RENAME-FILE
 
      See: >FNAME SETFCB
 
- >FNAME  ( ca1 u -- ca2 )                      A
+ >FNAME  ( ca1 u -- ca2 )
 
      Convert the string ca1 u to a zero-terminated counted string
      ca2 in the filename buffer.  A maximum of two filenames can
@@ -150,27 +141,27 @@ corresponding DOS error.
      Note: The returned string resides in a transient region which may
      be overwritten by subsequent operations.
 
-     DX-Forth functions that use >FNAME or the filename buffer include:
+     DZX-Forth functions that use >FNAME or the filename buffer include:
      PATH +EXT OPEN-FILE CREATE-FILE DELETE-FILE RENAME-FILE >FCB
 
- >IOR  ( n -- ior )                                    A
+ >IOR  ( n -- ior )
 
-     Convert a DOS error code n to a DX-Forth I/O result code by
+     Convert a DOS error code n to a DZX-Forth I/O result code by
      replacing the high-byte of n with $FE.  If n was zero then no error
      is assumed and ior is zero.
 
- BIN  ( fam1 -- fam2 )                                 A I 94
+ BIN  ( fam1 -- fam2 )  I 94
 
      Modify the file access method fam1 to additionally select a binary
      - i.e. not line oriented - file access method, giving access method
      fam2.  BIN has no effect under CP/M.
 
- CLOSE-FILE  ( fid -- ior )                            A 94
+ CLOSE-FILE  ( fid -- ior )  94
 
      If open, close the disk file associated with the current file-
      handle.  If the file could not be closed, ior is non-zero.
 
- CREATE-FILE  ( ca u fam -- fid ior )              A 94
+ CREATE-FILE  ( ca u fam -- fid ior )  94
 
      Create and open a disk file specified by the filename ca u
      using file access method fam.  Valid fam are R/W (read/write)
@@ -180,37 +171,37 @@ corresponding DOS error.
      The file-pointer is set to the start of the file.  If the file
      could not be created, ior is non-zero.
 
- DELETE-FILE  ( ca u -- ior )                      A 94
+ DELETE-FILE  ( ca u -- ior )  94
 
      Delete the disk file specified by the string ca u.  If the
      file could not be deleted, ior is non-zero.
 
      Note: DELETE-FILE must not be performed on an open file.
 
- FILE-POSITION  ( fid -- ud ior )                      A 94
+ FILE-POSITION  ( fid -- ud ior )  94
 
      Return the current position the file-pointer of the disk file
      associated with the handle fid.  If an error occurs ior is
      non-zero and ud is undefined.
 
- FILE-SIZE  ( fid -- ud ior )                          A 94
+ FILE-SIZE  ( fid -- ud ior )  94
 
      Return the current size in bytes of the disk file associated
      with handle fid.  For CP/M this number will be a multiple of
      128.  If an error occurs ior is non-zero and ud is undefined.
 
- GETUSR  ( -- u )                                      A
+ GETUSR  ( -- u )
 
      Return the current CP/M disk user number.
 
- OPEN-FILE  ( ca u fam -- fid ior )                A 94
+ OPEN-FILE  ( ca u fam -- fid ior )  94
 
      Open the existing disk file specified by the filename ca u
      using file access method fam.  Valid fam are R/W (read/write)
      R/O (read-only) and W/O (write-only).  If the file could not be
      opened, ior is non-zero.
 
- PATH  ( u1 -- ca u2 ior )                         A
+ PATH  ( u1 -- ca u2 ior )
 
      Get the full directory path for disk drive u1.  If an error occurs,
      ior is non-zero.  The returned string ca u2 includes the drive
@@ -221,14 +212,14 @@ corresponding DOS error.
      Note: The returned string resides in a transient region which may
      be overwritten by subsequent operations.
 
- READ-FILE  ( ca u1 fid -- u2 ior )                A 94
+ READ-FILE  ( ca u1 fid -- u2 ior )  94
 
      Read u1 bytes from the disk file associated with the current file-
      handle into memory starting at c-addr.  If ior is zero, u2 is the
      number of bytes received.  If end of file is reached before any
      bytes are read u2 is zero.
 
- READ-LINE  ( ca u1 fid -- u2 flag ior )           A 94
+ READ-LINE  ( ca u1 fid -- u2 flag ior )  94
 
      Read a line of text from the disk file associated with file-handle
      fid into memory starting at address c-addr.  At most u1 characters
@@ -239,7 +230,7 @@ corresponding DOS error.
      before any other character is read then flag is false.  The line
      terminator may be CRLF (CP/M) or LF (UNIX).
 
- REC!  ( d a -- )                                   A
+ REC!  ( d a -- )
 
     Convert double number d to an integral number of 128-byte records
     and store in a 3-byte field at address a (least significant
@@ -248,7 +239,7 @@ corresponding DOS error.
 
     See: REC@
 
- REC@  ( a -- d )                                   A
+ REC@  ( a -- d )
 
     Fetch the number of 128-byte records stored in the 3-byte field
     at address a (least significant byte first) and convert to the
@@ -257,14 +248,14 @@ corresponding DOS error.
 
     See: REC!
 
- REPOSITION-FILE  ( ud fid -- ior )                    A 94
+ REPOSITION-FILE  ( ud fid -- ior )  94
 
      Reposition the file-pointer of the disk file associated with the
      file-handle fid to position ud.  If the file is positioned outside
      the file boundaries or an error occured, ior is non-zero.  If
      ud = 0 the file-pointer is positioned at the start of the file.
 
- RENAME-FILE  ( ca1 u1 ca2 u2 -- ior )         A 94
+ RENAME-FILE  ( ca1 u1 ca2 u2 -- ior )  94
 
      Rename the disk file specified by ca1 u1 to the new name
      ca2 u2.  If the file cannot be found or the new name already
@@ -274,29 +265,29 @@ corresponding DOS error.
 
      Note: RENAME-FILE must not be performed on an open file.
 
- RESET-DISKS  ( -- )                                   A
+ RESET-DISKS  ( -- )
 
      Reset all disks to read/write status.  The currently logged drive
      and user number are unchanged.  RESET-DISKS is used after a disk
      change has occured.
 
- RSTUSR  ( -- )                                        A
+ RSTUSR  ( -- )
 
      Restore the CP/M disk user number previously saved by SETUSR.
 
      See: SETUSR
 
- SETDMA  ( a -- )                                   A
+ SETDMA  ( a -- )
 
      Set the disk memory transfer address to addr.  The default CP/M DMA
      address is $80.
 
      Note: The disk memory transfer is a transient region which may be
-     changed by subsequent operations.  DX-Forth functions that affect
+     changed by subsequent operations.  DZX-Forth functions that affect
      the DMA address include: READ-FILE READ-LINE WRITE-FILE WRITE-LINE.
      Several DOSLIB functions also use SETDMA.
 
- SETFCB  ( ca1 u1 a2 -- u2 )                    A
+ SETFCB  ( ca1 u1 a2 -- u2 )
 
      Parse the filename string specified by ca1 u1 in the form
 
@@ -314,29 +305,29 @@ corresponding DOS error.
      are initialized.  The parsed user number is not acted upon but
      returned as u2.  Formerly named PARSE-FILENAME .
 
- SETUSR  ( u -- )                                      A
+ SETUSR  ( u -- )
 
      Set the current CP/M disk user number to u (0-15 for CP/M, 0-31
      for Z-System).  The previous user number is saved.
 
      See: RSTUSR
 
- WRITE-FILE  ( ca u fid -- ior )                   A 94
+ WRITE-FILE  ( ca u fid -- ior )  94
 
      Write u bytes from memory starting at ca to the disk file
      associated with the current file-handle.  If the disk was full
      or an error occured, ior is non-zero.
 
- WRITE-LINE  ( ca u fid -- ior )                   A 94
+ WRITE-LINE  ( ca u fid -- ior )  94
 
      Write a line of text ca u followed by the CP/M line terminator
      (CRLF) to the disk file associated with file-handle fid.  If the
      disk was full or an error occured, ior is non-zero.
 
 
-2. Screen Files
+== Screen Files
 ---------------
-In DX-Forth several screenfiles (default is 6) may be open at any one
+In DZX-Forth several screenfiles (default is 6) may be open at any one
 time.  The most recently opened file is termed the "current" file.  All
 screen/block words operate on the current file.
 
@@ -344,52 +335,52 @@ Screen/block numbers are valid only in the range 0 to 8191.  Only one
 block buffer is allocated in memory, thus BLOCK and BUFFER always return
 the same physical address.
 
-DX-Forth also supports text source files.  See the section 'Tools' for
+DZX-Forth also supports text source files.  See the section 'Tools' for
 details.
 
- #SCREENS  ( -- +n )                                   S
+ #SCREENS  ( -- +n )
 
      Return the number of screens (blocks) in the current screenfile.
 
- ?BLOCK  ( -- )                                        S
+ ?BLOCK  ( -- )
 
      If the contents of BLK is non-zero reload the current block.
 
- B/BUF  ( -- u )                                       S FIG
+ B/BUF  ( -- u )  FIG
 
      A VALUE returning the number of bytes per block buffer.  Default
      is 1024.
 
      Note: Must be a multiple of 128 and a maximum of 1280.
 
- C/L  ( -- u )                                         S FIG
+ C/L  ( -- u )  FIG
 
      A VALUE returning the number of characters per line in a screen
      block.  Default is 64.
 
- CLOSE  ( -- )                                         S
+ CLOSE  ( -- )
 
      Flush and close the current screenfile.  No errors are reported
      with this function.
 
- CLOSE-ALL  ( -- )                                     S
+ CLOSE-ALL  ( -- )
 
      Perform CLOSE on all open source files beginning with the current
      screenfile.  Any open text files are also closed with this
      function.
 
- FILE?  ( -- flag )                                    S
+ FILE?  ( -- flag )
 
      Return true if the current screenfile is open otherwise return
      false.
 
- FILEBLOCKS  ( +n -- )                                 S
+ FILEBLOCKS  ( +n -- )
 
      Resize the current screenfile to +n blocks.  If n is less than the
      current size, the screenfile is truncated otherwise the file is
      extended and the new blocks are filled with blanks.
 
- FLOAD  ( +n "filename[.SCR]" -- )                     S
+ FLOAD  ( +n "filename[.SCR]" -- )
 
      Save the current screenfile specification then open the specified
      file and load block +n.  At completion of the load, close the file
@@ -398,12 +389,12 @@ details.
 
      Note: Read-only files cannot be opened with this function.
 
- GETFILENAME  ( "filename" -- ca u )               S
+ GETFILENAME  ( "filename" -- ca u )
 
      Parse a filename string from the input stream returning ca u.
      An exception occurs if the string is empty.
 
- LOADED  ( +n1 +n2 ca u -- )                       S
+ LOADED  ( +n1 +n2 ca u -- )
 
      Save the current screenfile specification then open the file
      specified by ca u and load blocks +n1 thru +n2.  At completion
@@ -413,7 +404,7 @@ details.
 
      Note: Read-only files cannot be opened with this function.
 
- LOADFILE  ( -- ca u )                             S
+ LOADFILE  ( -- ca u )
 
      Return a string containing the name of the current sourcefile.
      If no sourcefile is open or the input source is the console,
@@ -421,12 +412,12 @@ details.
 
      See: FILE?
 
- LOADLINE  ( -- u )                                    S
+ LOADLINE  ( -- u )
 
      Return the current line number of the text file being INCLUDEd.
      Starting line number is 1.
 
- OPEN  ( ca u fam -- ior )                         S
+ OPEN  ( ca u fam -- ior )
 
      Open the specified disk file according to file access method fam
      as the current screenfile.  If an error occurs, ior is non-zero.
@@ -438,7 +429,7 @@ details.
 
      See: SWAP-FILE CLOSE CLOSE-ALL
 
- SWAP-FILE  ( -- )                                     S
+ SWAP-FILE  ( -- )
 
      Switch the current and 'swap' screenfiles.  SCR is preserved
      across swaps.
@@ -448,7 +439,7 @@ details.
 
      See: FYI
 
- USING  ( "filename[.SCR]" -- )                        S
+ USING  ( "filename[.SCR]" -- )
 
      Close the current screenfile.  Open or conditionally create the
      specified disk file for read/write as the current screenfile.  If
@@ -463,13 +454,13 @@ details.
      See: SWAP-FILE CLOSE CLOSE-ALL
 
 
-3. Tools
+== Tools
 --------
 
 Note: These words are available only after the file TOOLS.SCR has been
 loaded.
 
- (*                                                    I S
+ (*                                                    I
 
      Begin a block comment.  Parse and discard text delimited by the
      token *) .  If the parse area is exhausted before the delimiter
@@ -481,55 +472,55 @@ loaded.
      Note: (* is primarily intended for text files.  May be relocated
      to the kernel if/when it gains greater popularity.
 
- -TOOLS  ( -- aa )                                 S
+ -TOOLS  ( -- aa )
 
      A MARKER word used for deleting the tools utilities with FORGET.
 
      Note: MARKER differs from the Forth-94 specification.
 
- .S  ( -- )                                            S
+ .S  ( -- )
 
      Display the values on the data and floating-point stacks.
 
- ?  ( aa -- )                                      A
+ ?  ( aa -- )
 
      Display the single-cell value stored at a-addr.  Display as signed
      number if base is decimal or unsigned otherwise.
 
- B  ( -- )                                             S
+ B  ( -- )
 
      Decrement variable SCR and list the screen.
 
      See: L N
 
- DELETE  ( "filename" -- )                             S
+ DELETE  ( "filename" -- )
 
      Erase the specified file from disk.  DELETE must not be performed
      on an open file.
 
- DIR  ( "filename" -- )                                S
+ DIR  ( "filename" -- )
 
      List the current disk directory.  Filename if specified may
      include path and wildcards.
 
- DUMP  ( a u -- )                                   S
+ DUMP  ( a u -- )
 
      Dump u bytes of memory starting at the address addr.
 
- EDIT  ( | scr -- )                                    S
+ EDIT  ( | scr -- )
 
      Performs the same function as EDIT in the screenfile editor.  If
      the editor is not resident then EDITOR.SCR is first loaded.  If
      scr is not given then editing begins at the position where the
      last error occured.
 
- FYI  ( -- )                                           S
+ FYI  ( -- )
 
      "For Your Information".  Display information about the current
      forth environment including dictionary size, vocabularies, logged
      drive and open screenfiles.  Formerly named MAP .
 
- ICLOSE  ( -- )                                        S
+ ICLOSE  ( -- )
 
      Close the current text file.
 
@@ -545,7 +536,7 @@ loaded.
 
      See: INCLUDE INCLUDED CLOSE-ALL
 
- INCLUDE  ( "filename[.F]" -- )                        S
+ INCLUDE  ( "filename[.F]" -- )
 
      Compile the ascii text source file specified by the filename.
      If a filename extension is not included then .F is assumed.
@@ -555,7 +546,7 @@ loaded.
 
      See: ICLOSE
 
- INCLUDED  ( ca u -- )                             S
+ INCLUDED  ( ca u -- )
 
      Compile the ascii text source file specified by the filename
      given by ca u.  Text files may be nested.
@@ -564,26 +555,26 @@ loaded.
 
      See: ICLOSE
 
- INDEX  ( +n1 +n2 -- )                                 S FIG
+ INDEX  ( +n1 +n2 -- )  FIG
 
      List line 0 of screens +n1 thru +n2 from the screenfile.  Line 0
      typically contains a comment indicating the contents of the screen.
 
      See: QX
 
- L  ( -- )                                             S
+ L  ( -- )
 
      List the screen specified by variable SCR.
 
      See: N B
 
- N  ( -- )                                             S
+ N  ( -- )
 
      Increment variable SCR and list the screen.
 
      See: L B
 
- QX  ( +n -- )                                         S
+ QX  ( +n -- )
 
      Quick index.  Starting with screen +n, list line 0 of 60 sequential
      screens from the screenfile.  Line 0 typically contains a comment
@@ -591,39 +582,39 @@ loaded.
 
      See: INDEX
 
- RENAME  ( "oldfile" "newfile" -- )                    S
+ RENAME  ( "oldfile" "newfile" -- )
 
      Rename the specified disk file with a new name.  RENAME must not
      be performed on an open file.
 
- SHOW  ( +n1 +n2 -- )                                  S
+ SHOW  ( +n1 +n2 -- )
 
      List screens +n1 through +n2 from the screenfile to the printer,
      formatted 3 screens to the page.  A form-feed character (0C hex) is
      output at the end of each page.
 
- VOCS  ( -- )                                          S
+ VOCS  ( -- )
 
      List all vocabularies beginning with the most recent.
 
- WORDS  ( -- )                                         S
+ WORDS  ( -- )
 
      Lists the names of forth words in the first search wordlist
      beginning with the most recent.  Immediate words are preceded with
      a '#' character and system words with a '|' character.  fig-forth
      equivalent is VLIST.
 
- WORDS-LIKE  ( "pattern" -- )                          S
+ WORDS-LIKE  ( "pattern" -- )
 
      As for WORDS but takes a blank delimited string from the input
      stream.  Only word names that include the specified string are
      listed.
 
 
-4. DOS Interface
+== DOS Interface
 ----------------
 
- CMDTAIL  ( -- ca u )                              A
+ CMDTAIL  ( -- ca u )
 
      Return the string representing the command tail entered at the DOS
      prompt when the program was first initiated.  Leading and trailing
@@ -632,21 +623,21 @@ loaded.
      Note: The returned string resides in a transient region which may
      be overwritten by subsequent operations.
 
- BDOS  ( DE u -- A )                                   A
+ BDOS  ( DE u -- A )
 
      Perform CP/M BDOS call number u.  DE is the value passed to the
      DE register.  Return the contents of the A register.
 
      See: FDOS
 
- BIOS  ( BC u -- A )                                   A
+ BIOS  ( BC u -- A )
 
      Perform CP/M BIOS call number u.  BC is the value passed to the
      BC register.  Return the contents of the A register.
 
      Note: CP/M 3 compatible.
 
- BIOSHL  ( DE BC u -- HL )                             A
+ BIOSHL  ( DE BC u -- HL )
 
      Perform CP/M BIOS call number u.  DE and BC are the values passed
      to the DE and BC registers respectively.  Return the contents of
@@ -654,39 +645,39 @@ loaded.
 
      Note: CP/M 3 compatible.
 
- DOSVER  ( -- H L )                                    A
+ DOSVER  ( -- H L )
 
      Return DOS version number.  H = 00h for CP/M, L = BDOS version
      number in hexadecimal.
 
- FDOS  ( DE u -- HL A )                                A
+ FDOS  ( DE u -- HL A )
 
      Perform CP/M BDOS call number u.  DE is the value passed to the
      DE register.  Return the contents of the HL and A registers.
 
      See: BDOS
 
- PC@  ( pa -- u )                                  A
+ PC@  ( pa -- u )
 
      Perform the 8080 IN instruction on port address pa and return
      the value u.  The upper 8 bits of u is set to zero.  Fig-Forth
      equivalent is P@.
 
- PC!  ( u pa -- )                                  A
+ PC!  ( u pa -- )
 
      Perform the 8080 OUT instruction sending the lower 8 bits of u to
      port address p-addr.  Fig-Forth equivalent is P!
 
- ZENV  ( -- a | false )                             A
+ ZENV  ( -- a | false )
 
      Return the Z-System external Environment Descriptor address.
      If Z-System is not present return false.
 
 
-5. Input/Output
+== Input/Output
 ---------------
 
- (D.)  ( d -- ca u )                               A
+ (D.)  ( d -- ca u )
 
      Convert the signed double number d to a string ca u.
      Primitive for D.
@@ -694,16 +685,16 @@ loaded.
      Note: The returned string resides in a transient region which may
      be overwritten by subsequent operations.
 
- .  ( x -- )                                           A
+ .  ( x -- )
 
     Remove single number x from the stack.  If BASE is decimal display
     x as a signed number, or unsigned otherwise.
 
- CONSOLE  ( -- )                                       A
+ CONSOLE  ( -- )
 
      Redirect EMIT to the console screen.
 
- SYS-VEC  ( -- a )                                  A
+ SYS-VEC  ( -- a )
 
      Return the address of the system vector & parameter table.
 
@@ -730,144 +721,144 @@ loaded.
 
      Sizes are expressed in bytes unless otherwise noted.
 
- KEY  ( -- char )                                      A 94
+ KEY  ( -- char )  94
 
      Receive the next character from the console.
 
- KEY?  ( -- flag )                                     A 94
+ KEY?  ( -- flag )  94
 
      Return true if a console key has been pressed.  KEY is subsequently
      used to retrieve the character.  fig-Forth equivalent is ?TERMINAL.
 
- PRINTER  ( -- )                                       A
+ PRINTER  ( -- )
 
      Redirect EMIT to the printer.
 
- OUT  ( -- aa )                                    A FIG
+ OUT  ( -- aa )  FIG
 
      A USER variable that contains the number of characters output by
      EMIT or TYPE since the last CR.
 
 
-6. Arithmetic and Stack
+== Arithmetic and Stack
 -----------------------
 
- -ROLL  ( xu ... x1 x0 u -- x0 xu ... x1 )             A
+ -ROLL  ( xu ... x1 x0 u -- x0 xu ... x1 )
 
      Remove u.  Rotate xu ... x1 to the top of the stack pushing x0 to
      the position vacated by xu.  The reverse of ROLL.
 
- -ROT  ( x1 x2 x3 -- x3 x1 x2 )                        A
+ -ROT  ( x1 x2 x3 -- x3 x1 x2 )
 
      Rotate the top stack item to the third position.  The reverse of
      ROT.
 
- 2+  ( x1 -- x2 )                                      A 83 FIG
+ 2+  ( x1 -- x2 )  FIG 83
 
      Add two (2) to n1|u1 giving the sum n2|u2.
 
- 2-  ( x1 -- x2 )                                      A 83
+ 2-  ( x1 -- x2 )  83
 
      Subtract two (2) to n1|u1 giving the sum n2|u2.
 
- 2NIP  ( x1 x2 x3 x4 -- x3 x4 )                        A
+ 2NIP  ( x1 x2 x3 x4 -- x3 x4 )
 
      Drop cell pair x1 x2 from the stack leaving x3 x4.
 
- ><  ( x1 -- x2 )                                      A
+ ><  ( x1 -- x2 )
 
      Swap the high order byte (bits 8-15) with the low order byte
      (bits 0-7) of x1.
 
- FM/MOD  ( d n1 -- n2 n3 )                             A 94
+ FM/MOD  ( d n1 -- n2 n3 )  94
 
      Divide double number d by single n1, giving the floored quotient
      n3 and the remainder n2.
 
- LOHI  ( x -- lo hi )                                  A
+ LOHI  ( x -- lo hi )
 
      Split a 16-bit number.  Lo is the low byte of x.  Hi is the high
      byte of x.
 
- LO|HI  ( lo hi -- x )                                 A
+ LO|HI  ( lo hi -- x )
 
      Form a 16-bit number.  Lo is the low byte of x.  Hi is the high
      byte of x.
 
- LSHIFT  ( x1 u -- x2 )                                A 94
+ LSHIFT  ( x1 u -- x2 )  94
 
      Perform a logical left shift of u bit-places on x1 giving x2.
      Put zero into the least significant bits vacated by the shift.
 
- M*  ( n1 n2 -- d )                                    A 94
+ M*  ( n1 n2 -- d )  94
 
      Multiply n1 by n2 giving the double result d.
 
- M*/  ( d1 n1 +n2 -- d2 )                              A 94
+ M*/  ( d1 n1 +n2 -- d2 )  94
 
      Multiply double number d1 by single n1 producing the triple
      length intermediate result t.  Divide t by +n2 giving the
      double quotient d2.
 
- M+  ( d1 n -- d2 )                                    A 94
+ M+  ( d1 n -- d2 )  94
 
      Add single length number n to double d1, giving the sum d2.
 
- NIP  ( x1 x2 -- x2 )                                  A 94
+ NIP  ( x1 x2 -- x2 )  94
 
      Drop the first item below the top of stack.
 
- NOT  ( x -- flag )                                    A 79
+ NOT  ( x -- flag )   79
 
      Reverse the boolean value of x.  Functionally equivalent to: 0= .
 
      Note: Do not confuse this function with FORTH-83 NOT which behaved
      as INVERT.
 
- RSHIFT  ( x1 u -- x2 )                                A 94
+ RSHIFT  ( x1 u -- x2 )  94
 
      Perform a logical right shift of u bit-places on x1 giving x2.
      Put zero into the most significant bits vacated by the shift.
 
- SM/REM  ( d n1 -- n2 n3 )                             A 94
+ SM/REM  ( d n1 -- n2 n3 )  94
 
      Divide d by n1, giving the single-cell remainder n2 and the single-
      cell symmetric quotient n3.  An ambiguous condition exists if n1 is
      zero.
 
- TUCK  ( x1 x2 -- x2 x1 x2 )                           A 94
+ TUCK  ( x1 x2 -- x2 x1 x2 )  94
 
      Copy the first (top) stack item below the second stack item.
 
- U2/  ( x1 -- x2 )                                     A
+ U2/  ( x1 -- x2 )
 
      x2 is the result of shifting x1 one bit toward the least-significant
      bit, leaving the most-significant bit zero.  Equivalent to: 1 RSHIFT.
 
- UMAX  ( u1 u2 -- u1 | u2 )                            A
+ UMAX  ( u1 u2 -- u1 | u2 )
 
      Return the greater of two unsigned numbers.
 
- UMIN  ( u1 u2 -- u1 | u2 )                            A
+ UMIN  ( u1 u2 -- u1 | u2 )
 
      Return the lesser of two unsigned numbers.
 
 
-7. Conversion
+== Conversion
 -------------
 
- DPL  ( -- aa )                                    A 83
+ DPL  ( -- aa )  83
 
      A USER variable containing the number of places to the right of
      the decimal point following number input conversion.
 
-     In DX-Forth DPL is incremented for each character successfully
+     In DZX-Forth DPL is incremented for each character successfully
      converted by >NUMBER.  Applications may use this feature to create
      custom number conversion routines.
 
      See: NUMBER?
 
- NUMBER?  ( ca u -- d true | false )               A
+ NUMBER?  ( ca u -- d true | false )
 
      Convert the case-insensitive string ca u to a double number
      according to the current base.  If successful, return double
@@ -879,30 +870,29 @@ loaded.
 
      See: DPL SYS-VEC
 
- UPCASE  ( c1 -- c2 )                                  A
+ UPCASE  ( c1 -- c2 )
 
      Convert the character c1 to its uppercase equivalent c2.
 
      Note: The name of this function is subject to change.
 
- UPPER  ( ca u -- )                                A
+ UPPER  ( ca u -- )
 
      Convert the character string ca u to uppercase.
 
      Note: The name of this function is subject to change.
 
 
-8. Strings and Memory
----------------------
+== Strings and Memory
 
- +STRING  ( ca1 u1 ca2 u2 -- ca2 u3 )      A
+ +STRING  ( ca1 u1 ca2 u2 -- ca2 u3 )
 
      Append the string ca1 u1 to the end of string ca2 u2
      returning the resulting string ca2 u3.  It is the programmer's
      responsibility to ensure sufficient room is available at ca2
      to hold both strings.
 
- ,"  ( "ccc<">" -- )                                   S
+ ,"  ( "ccc<">" -- )
 
      Parse the character string delimited by '"' and compile as a
      counted string at HERE.  The delimiter character may be included
@@ -910,13 +900,13 @@ loaded.
 
      See: PARSE$
 
- /STRING  ( ca1 u1 n -- ca2 u2 )               94
+ /STRING  ( ca1 u1 n -- ca2 u2 )  94
 
      Truncate the string ca1 u1 by n characters.  The resulting
      string ca2 u2 begins at ca1+n and has a length u1-n.
      n may be negative.
 
- CAPS  ( -- )                                          A
+ CAPS  ( -- )
 
      Causes the next occurrence of COMPARE or SEARCH to be performed as
      if all characters in the source and destination strings were
@@ -929,35 +919,35 @@ loaded.
      by COMPARE SEARCH COLD, or when an error occurs and QUIT is
      executed.
 
- CELL-  ( aa1 -- aa2 )                         A
+ CELL-  ( aa1 -- aa2 )
 
      Subtract the size in address units of a cell to aa1, giving
      a-addr2.
 
- COMPARE  ( ca1 u1 ca2 u2 -- -1 | 0 | 1 )      94
+ COMPARE  ( ca1 u1 ca2 u2 -- -1 | 0 | 1 )  94
 
      Compare string ca1 u1 with string ca2 u2.  Return 0 if
      match, -1 if ca1 u1 is less than ca2 u2 or 1 if greater.
 
      See: CAPS
 
- CTOGGLE  ( x ca -- )                              A
+ CTOGGLE  ( x ca -- )
 
      Exclusive-or the byte stored at ca with x.
 
- MOVE  ( aa1 aa2 u -- )                        A 94
+ MOVE  ( aa1 aa2 u -- )  94
 
      Move u bytes from aa1 to aa2 without overlap.
 
- OFF  ( aa -- )                                    A
+ OFF  ( aa -- )
 
      Clear all bits of the cell at a-addr.  Equivalent to: 0 aa !
 
- ON  ( aa -- )                                     A
+ ON  ( aa -- )
 
      Set all bits of the cell at a-addr.  Equivalent to: TRUE aa !
 
- PACKED  ( ca1 u ca2 -- ca2 )              A
+ PACKED  ( ca1 u ca2 -- ca2 )
 
      Store the string ca1 u as a counted string at ca2 leaving
      the destination address on the stack.  The source and destination
@@ -967,16 +957,16 @@ loaded.
 
      See: PLACE
 
- PAD  ( -- ca )                                    A
+ PAD  ( -- ca )
 
      Return the address of a transient region that can be used to hold
      data for intermediate processing.  PAD is at least 84 characters.
 
-     Note: In DX-FORTH PAD is located in the APPLICATION data-space
+     Note: In DZX-Forth PAD is located in the APPLICATION data-space
      immediately above the pictured numeric output buffer.  The maximum
      size of PAD is:  APPLICATION UNUSED PAD HERE - - U.
 
- PARSE$  ( char "ccc<char>" -- ca u )              S
+ PARSE$  ( char "ccc<char>" -- ca u )
 
      Parse ccc delimited by char and store the string (255 characters
      maximum) in a temporary buffer.  The delimiter character may be
@@ -992,7 +982,7 @@ loaded.
      to that of the returned string plus the count and trailing space
      characters.
 
- PLACE  ( ca1 u ca2 -- )                       A
+ PLACE  ( ca1 u ca2 -- )
 
      Store the string ca1 u as a counted string at c-addr2.  The
      source and destination strings are permitted to overlap.  An
@@ -1001,8 +991,7 @@ loaded.
 
      See: PACKED
 
- S"  ( "ccc<">" -- )                                   I S 94
-     ( -- ca u ) run-time
+ S"  ( compilation: "ccc<">" -- ) ( run-time: -- ca u )  I 94
 
      Parse a string (255 characters maximum) from the input stream
      delimited by '"' and compile into the current definition.  The
@@ -1017,14 +1006,14 @@ loaded.
 
      See: PARSE$
 
- S,  ( ca +n -- )                                  S
+ S,  ( ca +n -- )
 
      Compile string ca +n (255 characters maximum) as a counted
      string at HERE.
 
      Named STRING, $, in some Forth implementations.
 
- S.R  ( ca n1 n2 -- )                              A
+ S.R  ( ca n1 n2 -- )
 
      Display string ca n1 right-aligned in a field n2 characters
      wide.  If the number of characters required to display the string
@@ -1032,7 +1021,7 @@ loaded.
      spaces in a field as wide as necessary.
      Equivalent to: OVER - SPACES TYPE
 
- SCAN  ( ca1 u1 char -- ca2 u2 )               A
+ SCAN  ( ca1 u1 char -- ca2 u2 )
 
      Scan the string ca1 u1 for the character char.  Leave match
      address ca2 and length remaining u2.  If no match occurred
@@ -1047,24 +1036,23 @@ loaded.
 
      See: CAPS
 
- SKIP  ( ca1 u1 char -- ca2 u2 )               A
+ SKIP  ( ca1 u1 char -- ca2 u2 )
 
      Skip leading occurences of the character char in the string
      ca1 u1.  Leave the address of the first non-matching character
      ca2 and length remaining u2.  If no characters were skipped
      leave ca1 u1.
 
- SLITERAL  ( ca1 u -- ) compilation                I S 94
-           ( -- ca2 u ) run-time
+ SLITERAL  ( compilation: ca1 u -- ) ( run-time: -- ca2 u )  I 94
 
      Compile the string ca u (255 characters maximum) into the
      dictionary.  When later executed ca2 u is left on the stack.
 
 
-9. Dictionary
+== Dictionary
 -------------
 
- (NAME)  ( nfa -- ca u )                           S
+ (NAME)  ( nfa -- ca u )
 
      Return the string ca u representing the name of the forth word
      whose name field address is nfa.
@@ -1072,34 +1060,34 @@ loaded.
      Note: The returned string resides in a transient region which may
      be overwritten by subsequent operations.
 
- -?  ( -- )                                            S
+ -?  ( -- )
 
      Suppress redefinition and system compilation warnings for the next
      definition only.
 
      See: WARNING
 
- .ID  ( nfa -- )                                       S
+ .ID  ( nfa -- )
 
      Display the name of the forth word whose name field address is
      nfa.  If the word is nameless (nfa is zero) then "[noname]" is
      displayed.  fig-FORTH equivalent is ID.
 
- .NAME  ( xt -- )                                      S
+ .NAME  ( xt -- )
 
      Display the name of the forth word whose execution token address
      is xt.  If the word is nameless or xt invalid then "[noname]" is
      displayed.  If the word is an alias then the primary name is
      displayed.
 
- .VOC  ( wid -- )                                      S
+ .VOC  ( wid -- )
 
      Display the name associated with wordlist wid.  Wordlists may be
      nameless in which case "[noname]" will be displayed.
 
      See: VOCABULARY W>NAME
 
- APPLICATION  ( -- )                                   S
+ APPLICATION  ( -- )
 
      Place subsequent definitions into the Application dictionary.  The
      application dictionary holds words that may be executed by turnkey
@@ -1109,7 +1097,7 @@ loaded.
 
      See: SYS SYSTEM
 
- BEHEAD  ( "name1" "name2" -- )                        S
+ BEHEAD  ( "name1" "name2" -- )
 
      Search the first wordlist in the search order and make invisible
      the words between name1 and name2 inclusively.  Beheaded words
@@ -1120,19 +1108,19 @@ loaded.
 
      See: CHECKING
 
- CHAIN  ( "name" -- )                                  S
+ CHAIN  ( "name" -- )
 
      Append vocabulary "name" to the base of the CURRENT wordlist.  An
      error message is issued if "name" is not a vocabulary, is the same
      as, is already chained, or was created later than, the CURRENT
      vocabulary.
 
- CONTEXT  ( -- aa )                                S 83
+ CONTEXT  ( -- aa )  83
 
      A variable which determines the dictionary search order.  CONTEXT @
      returns the wid of the first wordlist in the current search order.
 
- DP  ( -- aa )                                     A FIG
+ DP  ( -- aa )  FIG
 
      A double USER variable containing pointers to the next free
      address in the application and system dictionaries.  e.g.
@@ -1140,12 +1128,12 @@ loaded.
        DP @   ( -- appDP )
        DP 2@  ( -- sysDP appDP )
 
- EMPTY  ( -- )                                         S
+ EMPTY  ( -- )
 
      Delete all definitions created since the last execution of COLD
      or FREEZE.  Wordlist is set to FORTH.
 
- FORGET  ( "name" -- )                                 S 83 FIG
+ FORGET  ( "name" -- )  FIG 83
 
      If word "name" is found in the compilation wordlist, delete it
      and all words added to the dictionary after "name" was defined,
@@ -1155,14 +1143,14 @@ loaded.
 
      See: CHECKING
 
- FREEZE  ( -- )                                        S
+ FREEZE  ( -- )
 
      Protect the current state of the dictionary.  Existing definitions
      will no longer be able to be erased.
 
      See: CHECKING
 
- LIMIT  ( -- a )                                    A FIG
+ LIMIT  ( -- a )  FIG
 
      A CONSTANT that returns the upper limit address of the application
      dictionary and the start of the System dictionary.
@@ -1173,13 +1161,13 @@ loaded.
 
      See: SET-LIMIT
 
- LINK,  ( aa -- )                                  S
+ LINK,  ( aa -- )
 
      Add a node to linked list a-addr.  The node is created at HERE
      and consists initially of one cell containing the address of the
      previous node.  Equivalent to: HERE OVER @ , SWAP !
 
- MARKER  ( "name" -- )                                 S
+ MARKER  ( "name" -- )
 
      A defining word used in the form:
               MARKER name
@@ -1189,13 +1177,13 @@ loaded.
 
      Note: MARKER differs from the Forth-94 specification.
 
- N>NAME  ( nfa1 -- nfa2 | 0 )                          S
+ N>NAME  ( nfa1 -- nfa2 | 0 )
 
      Given the name field address of a word, return the nfa of the
      previous word in the wordlist.  If the end of the wordlist is
      reached then 0 is returned.
 
- REMEMBER  ( xt -- )                                   S
+ REMEMBER  ( xt -- )
 
      Append execution token xt to the REMEMBER list.
 
@@ -1210,7 +1198,7 @@ loaded.
      new dictionary boundary has been established.  Consequently these
      functions may be residing in free memory when executed.
 
- SET-LIMIT  ( a -- )                                S
+ SET-LIMIT  ( a -- )
 
      Set the value of LIMIT for TURNKEY applications to addr.  If a
      does not lie on a 16-byte boundary, it is first rounded down.
@@ -1223,7 +1211,7 @@ loaded.
 
      See: LIMIT UNUSED
 
- SYS  ( -- aa )                                    A
+ SYS  ( -- aa )
 
      A VARIABLE that determines the compilation dictionary.  Definitions
      will be compiled to the system dictionary if SYS is non-zero and to
@@ -1231,7 +1219,7 @@ loaded.
 
      See: APPLICATION SYSTEM
 
- SYSTEM  ( -- )                                        S
+ SYSTEM  ( -- )
 
      Place subsequent definitions into the System dictionary.  The
      System dictionary holds the compiler and other support functions
@@ -1240,23 +1228,23 @@ loaded.
 
      See: SYS APPLICATION
 
- VOC-LINK  ( -- aa )                               S FIG
+ VOC-LINK  ( -- aa )  FIG
 
      A USER variable containing a pointer to the most recently defined
      wordlist.
 
- VOCABULARY  ( "name" -- )                             S 83
+ VOCABULARY  ( "name" -- )  83
 
      Create a new empty wordlist.  When "name" is later executed replace
      the first wordlist in the search order with the wordlist associated
      with "name".  a "name" @ returns the wordlist identifier wid.
 
- W>NAME  ( wid -- nfa | 0 )                            S
+ W>NAME  ( wid -- nfa | 0 )
 
      Return the name field address of the most recently defined word in
      wordlist wid.  If the wordlist is empty then zero is returned.
 
- WARNING  ( -- aa )                                S
+ WARNING  ( -- aa )
 
      A VARIABLE that controls warning messages.  When set to zero, word
      redefinition and System compilation warnings are disabled.  Users
@@ -1266,48 +1254,48 @@ loaded.
      See: -?
 
 
-10. Facility
+== Facility
 ------------
 
- AT-XY  ( x y -- )                                     A C 94
+ AT-XY  ( x y -- )   94
 
      Move the cursor to the specified coordinates relative to the
      current text window.
 
- BEEP  ( -- )                                          A
+ BEEP  ( -- )
 
      Generate a bell sound.
 
- CLEAR-LINE  ( -- )                                    A C
+ CLEAR-LINE  ( -- )
 
      Delete all characters from the current cursor position to the end
      of the line.  The cursor position remains unchanged.
 
- DELETE-LINE  ( -- )                                   A C
+ DELETE-LINE  ( -- )
 
      Delete the line at the current cursor position.  All subsequent
      lines are moved up one position.  An empty line appears at the
      bottom of the screen.
 
- EXIT-VIDEO  ( -- )                                    A C
+ EXIT-VIDEO  ( -- )
 
      Send video terminal reset sequence.
 
- HIGHLIGHT  ( -- )                                     A C
+ HIGHLIGHT  ( -- )
 
      Begin standout video mode (usually reverse or bright).
 
- INIT-VIDEO  ( -- )                                    A C
+ INIT-VIDEO  ( -- )
 
      Send video terminal initialisation sequence.
 
- INSERT-LINE  ( -- )                                   A C
+ INSERT-LINE  ( -- )
 
      Insert an empty line at the current cursor position.  All
      subsequent lines in the text window are moved down one position.
      The bottom line is lost.
 
- MS  ( u -- )                                          A C 94
+ MS  ( u -- )   94
 
      Delay u milliseconds.
 
@@ -1318,28 +1306,28 @@ loaded.
      correct value installed the following should produce a 10 second
      delay:  BEEP 10000 MS BEEP
 
- NORMAL  ( -- )                                        A C
+ NORMAL  ( -- )
 
      End standout video mode.
 
- PAGE  ( -- )                                          A C 94
+ PAGE  ( -- )   94
 
      For the console, clear the text screen window and place the cursor
      at the upper left; otherwise output a formfeed character (0C hex).
-     In DX-Forth, PAGE is equivalent to: 12 EMIT.
+     In DZX-Forth, PAGE is equivalent to: 12 EMIT.
 
      See CONSOLE PRINTER.
 
 
-11. Miscellaneous
+== Miscellaneous
 -----------------
 
- 'NEXT  ( -- a )                                    A
+ 'NEXT  ( -- a )
 
      Return the address of the centralized NEXT routine - the forth
      "address interpreter".
 
- 'SOURCE  ( -- aa )                                S
+ 'SOURCE  ( -- aa )
 
      A double variable containing the current parameters for SOURCE.
      'SOURCE 2@ is the equivalent of SOURCE.
@@ -1349,12 +1337,12 @@ loaded.
      Run-time prodecure compiled by EXIT.  Exit the current colon
      definition and return control to the calling definition.
 
- -->  ( -- )                                           I S 83 FIG
+ -->  ( -- )  I FIG 83
 
      Continue interpretation on the next sequential block.  May be
      used within a colon definition that crosses a block boundary.
 
-@EXECUTE  ( i*x aa -- i*y )                        A
+@EXECUTE  ( i*x aa -- i*y )
 
      Execute xt located at address a-addr.  If xt is zero then no
      action is performed.  Other stack effects are due to the word
@@ -1362,7 +1350,7 @@ loaded.
 
      Named PERFORM in some Forth implementations.
 
- a  ( "name" -- aa )                            I S
+ ADDR  ( "name" -- aa )  I
 
      "address of".  Return the data field address of the word "name".
 
@@ -1372,20 +1360,20 @@ loaded.
 
      Named &OF or & in some Forth implementations.
 
-     a is state-smart.
+     ADDR is state-smart.
 
- AKA  ( "oldname" "newname" -- )                       S
+ AKA  ( "oldname" "newname" -- )
 
      "Also Known As".  Create an alias name "newname" for existing word
      "oldname".  If oldname was immediate then newname will be
      immediate.
 
-     Note: In DX-Forth aliases consume only header space, and the xt of
+     Note: In DZX-Forth aliases consume only header space, and the xt of
      an alias is the same as the xt of the original word.  The function
      appears in other Forth implementations albeit with different names
      and usage e.g. SYNONYM ALIAS .
 
- BETWEEN  ( n1|u1 n2|u2 n3|u3 -- flag )                A
+ BETWEEN  ( n1|u1 n2|u2 n3|u3 -- flag )
 
      Perform a comparison of a test value n1|u1 with a lower limit
      n2|u2 and an upper limit n3|u3, returning true if either (n2|u2
@@ -1397,14 +1385,14 @@ loaded.
      This is similar to WITHIN with the exception that the limits are
      inclusive.
 
- BIOS-IO  ( -- )                                       A
+ BIOS-IO  ( -- )
 
      Set console output and keyboard input to use BIOS calls.  BIOS-IO
      is the default mode.
 
      See: DOS-IO
 
- BUILD  ( xt "name" -- )                               S
+ BUILD  ( xt "name" -- )
 
      Skip leading space delimiters.  Parse name delimited by a space.
      Create a definition for name with the execution semantics specified
@@ -1432,12 +1420,12 @@ loaded.
                DUP BUILD O. ( u -- )  8 C,
                    BUILD H. ( u -- ) 16 C,
 
- BYE  ( -- )                                           S FIG 94
+ BYE  ( -- )  FIG 94
 
      Perform CLOSE-ALL and EXIT-VIDEO then exit to the operation system
      with 0 RETURN.
 
- CASE  ( -- )                                          I S 94
+ CASE  ( -- )  I 94
 
      Mark the start of a CASE construct.  Used in the form:
 
@@ -1447,30 +1435,30 @@ loaded.
             ( x1)
           ENDCASE
 
-     In DX-Forth CASE is a synonym for COND .
+     In DZX-Forth CASE is a synonym for COND .
 
- CATCHER  ( -- aa )                                A
+ CATCHER  ( -- aa )
 
      A USER variable containing the last exception handler.  If the
      contents is zero no more exception frames (installed by CATCH)
      are present.
 
- CHAR  ( -- c )                                        S 94
+ CHAR  ( -- c )  94
 
      Parse the next word in the input stream and return the ASCII
      value of the first character.
 
- COLD  ( -- )                                          A FIG
+ COLD  ( -- )  FIG
 
      Cold restart the forth environment or turnkey application.
 
- COMPILE                                               S 83
+ COMPILE                                               83
 
      COMPILE is obsolete and should not be used directly in
      applications.  COMPILE is a factor of POSTPONE and is present in
      the dictionary as a named word for error handling purposes.
 
- COND  ( C: -- mark )                                  I S
+ COND  ( C: -- mark )  I
 
      Mark the start of a COND construct.  Used in the form:
 
@@ -1486,7 +1474,7 @@ loaded.
 
      See: THENS "Miser's CASE"
 
- DEFER  ( "name" -- )                                  S
+ DEFER  ( "name" -- )
 
      Creates a deferred word whose action word may be subsequently
      altered using the sequence: ' ccc IS name
@@ -1503,7 +1491,7 @@ loaded.
 
      See: IS
 
- DOS-IO  ( -- )                                        A
+ DOS-IO  ( -- )
 
      Set console output to use DOS calls.  May be used to support
      command-line redirection, screen pausing and control-C in
@@ -1511,43 +1499,43 @@ loaded.
 
      See: BIOS-IO
 
- DXFORTH  ( -- minor major )                           A
+ DXFORTH  ( -- minor major )
 
-     Return the DX-Forth version number.
+     Return the DZX-Forth version number.
 
- ENDCASE  ( x -- )                                     I S 94
+ ENDCASE  ( x -- )  I 94
 
      Mark the end of a CASE construct.  Discard x.
 
      See CASE OF ENDOF THENS.
 
- ENDOF  ( -- )                                         I S 94
+ ENDOF  ( -- )  I 94
 
-     Mark the end of an OF ENDOF pair.  In DX-FORTH ENDOF is a synonym
+     Mark the end of an OF ENDOF pair.  In DZX-Forth ENDOF is a synonym
      for ELSE .
 
      See CASE OF ENDCASE.
 
- EVALUATE  ( ca u -- )                             S 94
+ EVALUATE  ( ca u -- )  94
 
      Save the current input source specification.  Make the string
      described by ca u both the input source and input buffer,
      set >IN to zero, and interpret.  When the parse area is empty,
      restore the prior input source specification.
 
- FDB  ( -- a )                                      S
+ FDB  ( -- a )
 
      Get the address of the next free file descriptor block.  If no more
      free descriptors exist the function aborts with a "too many files"
      error message.
 
- INTERPRET  ( -- )                                     S FIG
+ INTERPRET  ( -- )  FIG
 
      Successively interpret forth text from the input stream until
      exhausted, compiling or executing depending upon STATE.  If an
      exception occurs the process aborts with an error message.
 
- IS  ( xt "name" -- )                                  I S
+ IS  ( xt "name" -- )  I
 
      Used in the form:
               ' ccc IS name
@@ -1555,11 +1543,11 @@ loaded.
 
      See: DEFER
 
- NHOLD  ( n char -- )                                  A
+ NHOLD  ( n char -- )
 
      Perform HOLD n times.  An ambiguous condition exists if n < 0.
 
- NOOP  ( -- )                                          A
+ NOOP  ( -- )
 
      No operation.  Typically used to set a null action e.g.
 
@@ -1567,7 +1555,7 @@ loaded.
 
      where XXX is a DEFERed word.
 
- OF  ( x1 x2 -- )                                      I S 94
+ OF  ( x1 x2 -- )  I 94
 
      If x1 = x2, discard both values and perform the sequence between OF
      and ENDOF/ELSE.  Execution then continues after ENDCASE/THENS .  If
@@ -1575,7 +1563,7 @@ loaded.
 
      See CASE ENDOF ENDCASE COND THENS.
 
- PAUSE  ( -- )                                         A
+ PAUSE  ( -- )
 
      Provides support for multitasking applications.  When the
      multitasker is loaded and enabled, PAUSE passes control to the next
@@ -1583,52 +1571,52 @@ loaded.
 
      Note: PAUSE is automatically executed by KEY? KEY EMIT .
 
- R0  ( -- aa )                                     A FIG
+ R0  ( -- aa )  FIG
 
      A USER variable that contains the address of the top of the return
      stack.
 
- RETURN  ( x -- )                                      A
+ RETURN  ( x -- )
 
      Restore the initial drive path and video mode.  Return to DOS with
      exit code x.  Open files are not closed.
 
      See: BYE
 
- RP!  ( a -- )                                      A
+ RP!  ( a -- )
 
      Set the return stack pointer to addr.
 
- RP@  ( -- a )                                      A FIG
+ RP@  ( -- a )  FIG
 
      Return the address of the current return stack pointer.
 
- S0  ( -- aa )                                     A FIG
+ S0  ( -- aa )  FIG
 
      A USER variable that contains the address of the top of the
      data stack.
 
- SAVE  ( "filename[.COM]" -- )                         S
+ SAVE  ( "filename[.COM]" -- )
 
      Save the current forth system image to disk including any new
      definitions created.
 
      See: TURNKEY TURNKEY-SYSTEM
 
- SHOLD  ( ca u -- )                                A
+ SHOLD  ( ca u -- )
 
      Add string ca u to the beginning of the pictured numeric
      output string.
 
- SP!  ( a -- )                                      A
+ SP!  ( a -- )
 
      Set the data stack pointer to addr.
 
- SP@  ( -- a )                                      A FIG
+ SP@  ( -- a )  FIG
 
      Return the address of the current data stack pointer.
 
- THENS  ( C: mark -- )                                 I S
+ THENS  ( C: mark -- )  I
 
      Resolve a COND/CASE construct.
 
@@ -1637,12 +1625,12 @@ loaded.
 
      See: COND "Miser's CASE"
 
- TOKEN  ( "name" -- ca u )                         S
+ TOKEN  ( "name" -- ca u )
 
      Parse a blank-delimited string from the input stream.  Equivalent
      to: BL WORD COUNT .
 
- TURNKEY  ( "bootword" "filename[.EXE]" -- )           S
+ TURNKEY  ( "bootword" "filename[.EXE]" -- )
 
      Save a standalone application to disk using the specified filename.
      When the application is subsequently run, execution begins with
@@ -1654,7 +1642,7 @@ loaded.
 
      See: SAVE TURNKEY-SYSTEM
 
- TURNKEY-SYSTEM  ( "bootword" "filename[.EXE]" -- )    S
+ TURNKEY-SYSTEM  ( "bootword" "filename[.EXE]" -- )
 
      Save a standalone application including the System dictionary to
      disk using the specified filename.  When the application is
@@ -1667,7 +1655,7 @@ loaded.
 
      See: SAVE TURNKEY
 
- UNNEST  ( -- ) ( R: nest-sys -- )                     A
+ UNNEST  ( -- ) ( R: nest-sys -- )
 
     Discard the calling definition specified by nest-sys.  Before
     exiting the current definition, a program shall remove any
@@ -1675,7 +1663,7 @@ loaded.
     An ambiguous condition exists if the current or calling definition
     uses locals.
 
- UNUSED  ( -- u )                                      A 94
+ UNUSED  ( -- u )  94
 
      Return the amount of space in bytes remaining in the region
      addressed by HERE.
@@ -1684,12 +1672,12 @@ loaded.
      Applications should take into account the regions used by the
      pictured numeric string buffer and PAD.
 
- UDP  ( -- aa )                                     A
+ UDP  ( -- aa )
 
      A VARIABLE that contains the base address of the current USER
      area.
 
- USER  ( +n "name" -- )                                S FIG
+ USER  ( +n "name" -- )  FIG
 
      A defining word used in the form:
               +n USER name
@@ -1698,66 +1686,67 @@ loaded.
      "name" leaves the address of the variable in the user area.
 
      USER variables with offsets 44 decimal and higher are available
-     for use by applications (DX-Forth 1.2 for CP/M onwards).
+     for use by applications (DZX-Forth 1.2 for CP/M onwards).
 
      Note: Offsets numbers are subject to change.  When an offset
      is required by an application, it should be determined at
      compile-time e.g.  [ BASE UP @ - ] LITERAL  will return the
      offset for BASE .
 
- WITHIN  ( x1 x2 x3 -- flag )                          A 94
+ WITHIN  ( x1 x2 x3 -- flag )  94
 
      Return true if x3 lies within the range x1 to x2-1, otherwise
      return false.  x may be signed or unsigned.
 
- Y/N  ( -- flag )                                      A
+ Y/N  ( -- flag )
 
      Display '(y/n) N' and wait for a single console key.  Return
      true if the 'Y' or 'y' key was pressed or false otherwise.
 
- [CHAR]  ( -- c )                                      I S 94
+ [CHAR]  ( -- c )  I 94
 
      Parse the next word in the input stream and compile the ASCII
      value of the first character as a literal.
 
- [DEFINED]  ( "name" -- flag )                         I S
+ [DEFINED]  ( "name" -- flag )  I
 
      Parse the next word in the input stream.  Return a true flag if
      word was defined in the dictionary.
 
- [IF]  [ELSE]  [THEN]                                  I S 94
+ [IF]  [ELSE]  [THEN]  I 94
 
      These are the equivalents of IF ELSE THEN but may be used outside
      a definition.
 
- [UNDEFINED]  ( "name" -- flag )                       I S
+ [UNDEFINED]  ( "name" -- flag )  I
 
      Parse the next word in the input stream.  Return a true flag if
      word was not defined in the dictionary.
 
- \  ( -- )                                             I S 94
+ \  ( -- )  I 94
 
      Skip the rest of the line and resume interpretation at the
      beginning of the next line.
 
- \\  ( -- )                                            I S
+ \\  ( -- )  I
 
      Parse and discard the remainder of the parse area.  If the source
      is a text file the remainder of the file is discarded.
 
 
-12. Floating Point
+== Floating Point
 ------------------
-By default DX-Forth uses single precision software floating point.
+
+By default DZX-Forth uses single precision software floating point.
 A real number occupies two cells (4 bytes) with a maximum precision
 of 7 digits and a dynamic range of 5E-39 to 1E38.
 
 The forth interpreter recognizes a number as floating point if it is
 in decimal mode and contains an exponent identifier 'E' e.g.  1.0E
-3.141952E  1e-12
+==141952E  1e-12
 
-DX-Forth for CP/M uses the data stack for floating point operations
-(aka common stack model).
+DZX-Forth uses the data stack for floating point operations (aka common stack
+model).
 
 Notes:
 
@@ -1771,38 +1760,38 @@ Notes:
   point may use the value -1 to force compact display mode.
 
 
- (F.)  ( r n -- ca u )                             A
+ (F.)  ( r n -- ca u )
 
      Convert real number r to string ca u in fixed-point notation
      with n places to the right of the decimal point.  Primitive used
      by F. F.R
 
- (FE.)  ( r n -- ca u )                            A
+ (FE.)  ( r n -- ca u )
 
      Convert real number r to string ca u in engineering notation
      with n places right of the decimal point.  Primitive used by FE.
      FE.R
 
- (FS.)  ( r n -- ca u )                            A
+ (FS.)  ( r n -- ca u )
 
      Convert real number r to string ca u in scientific notation
      with n places right of the decimal point.  Primitive used by FS.
      FS.R
 
- (G.)  ( r n -- ca u )                             A
+ (G.)  ( r n -- ca u )
 
      Convert real number r to string ca u with n places right of the
      decimal point.  Fixed-point is used if the exponent is in the range
      -4 to 5 otherwise use scientific notation.  Primitive used by G.R
      G.
 
- -FP  ( -- aa )                                    S
+ -FP  ( -- aa )
 
      A MARKER word used to delete the floating-point with FORGET.
 
      Note: MARKER differs from the Forth-94 specification.
 
- >FLOAT  ( ca u -- r true | false )                A 94
+ >FLOAT  ( ca u -- r true | false )  94
 
      Convert the string ca u to a real number.  If successful,
      return the real number r and true or false otherwise.
@@ -1810,249 +1799,246 @@ Notes:
      Note: A zero length string or a string with leading blanks will
      return the real number 0.0E and true.
 
- D>F  ( d -- r )                                       A 94
+ D>F  ( d -- r )  94
 
      Convert the double number to its real number equivalent.
 
- F!  ( r fa --  )                                  A 94
+ F!  ( r fa --  )  94
 
      Store r at f-addr.
 
- F*  ( r1 r2 -- r3 )                                   A 94
+ F*  ( r1 r2 -- r3 )  94
 
      Multiply r1 by r2, giving the product r3.
 
- F**  ( r1 r2 -- r3 )                                  A 94
+ F**  ( r1 r2 -- r3 )  94
 
      Raise r1 to the power r2.
 
- F+  ( r1 r2 -- r3 )                                   A 94
+ F+  ( r1 r2 -- r3 )  94
 
      Add r1 to r2, giving the sum r3.
 
- F,  ( r -- )                                          S
+ F,  ( r -- )
 
      Reserve one floating-point cell of data space and store r in the
      cell.
 
- F-  ( r1 r2 -- r3 )                                   A 94
+ F-  ( r1 r2 -- r3 )  94
 
      Subtract r2 from r1, giving the difference r3.
 
- F.  ( r -- )                                          A
+ F.  ( r -- )
 
      Display r in floating-point notation followed by a space.  Non-
      essential zeros and signs are removed.
 
- F.R  ( n u -- ) or ( r n u -- )                       A
+ F.R  ( n u -- ) or ( r n u -- )
 
      Display r in fixed-point notation right-justified in a field width
      u with n places right of the decimal point.
 
- F/  ( r1 r2 -- r3 )                                   A 94
+ F/  ( r1 r2 -- r3 )  94
 
      Divide r1 by r2, giving the quotient r3.
 
- F0<  ( r -- flag )                                    A 94
+ F0<  ( r -- flag )  94
 
      Return true if r is less than zero, or false otherwise.
 
- F0=  ( r -- flag )                                    A 94
+ F0=  ( r -- flag )  94
 
      Return true if r is equal to zero, or false otherwise.
 
- F0>  ( r -- flag )                                    A
+ F0>  ( r -- flag )
 
      Flag is true if r is greater than zero.
 
- F<  ( r1 r2 -- flag )                                 A 94
+ F<  ( r1 r2 -- flag )  94
 
      Return true if r1 is less than r2, or false otherwise.
 
- F>  ( r1 r2 -- flag )                                 A
+ F>  ( r1 r2 -- flag )
 
      Flag is true if r1 is greater than r2.
 
- F>D  ( r -- d )                                       A 94
+ F>D  ( r -- d )  94
 
      Convert the integer part of r to its double number equivalent.
 
- F>S  ( r -- n )                                       A
+ F>S  ( r -- n )
 
      Convert the integer part of r to its single number equivalent.
 
- F@  ( fa -- r )                                   A 94
+ F@  ( fa -- r )  94
 
      Return the value of the real number stored at f-addr.
 
- FABS  ( r1 -- r2 )                                    A 94
+ FABS  ( r1 -- r2 )  94
 
      Return the absolute value of r1.
 
- FATAN  ( r1 -- r2 )                                   A 94
+ FATAN  ( r1 -- r2 )  94
 
      r2 is the principal radian angle whose tangent is r1.
 
- FCONSTANT  ( r -- ) compilation                       A 94
-            ( -- r ) run-time
+ FCONSTANT  ( r "name" -- ) 94
 
      Define a floating point constant having the value r.
 
- FCOS  ( r1 -- r2 )                                    A 94
+ FCOS  ( r1 -- r2 )  94
 
      r2 is the cosine of the radian angle r1.
 
- FDP  ( -- aa )                                    A
+ FDP  ( -- aa )
 
      A VARIABLE that controls floating decimal point display.  If zero
      then trailing decimal points are not shown; if non-zero a decimal
      point is always shown.  Default is FDP ON.
 
- FDROP  ( r --  )                                      A 94
+ FDROP  ( r --  )  94
 
      Remove r from the stack.
 
- FDUP  ( r -- r r )                                    A 94
+ FDUP  ( r -- r r )  94
 
      Duplicate r.
 
- FE.  ( r -- )                                         A
+ FE.  ( r -- )
 
      Display r in engineering notation followed by a space.  Non-
      essential zeros and signs are removed.
 
- FE.R  ( r n u -- )                                    A
+ FE.R  ( r n u -- )
 
      Display r in engineering notation right-justified in a field width
      u with n places to the right of the decimal point.
 
- FEXP  ( r1 -- r2 )                                    A 94
+ FEXP  ( r1 -- r2 )  94
 
      Raise e to the power r1, giving r2.
 
- FLITERAL  ( r -- ) compilation                        A 94
-           ( -- r ) run-time
+ FLITERAL  ( compilation: r -- ) ( runtime: -- r )  94
 
      Compile r into the dictionary.  When later executed r is left on
      the stack.
 
- FLN  ( r1 -- r2 )                                     A 94
+ FLN  ( r1 -- r2 )  94
 
      r2 is the natural logarithm of r1.
 
- FLOOR  ( r1 -- r2 )                                   A 94
+ FLOOR  ( r1 -- r2 )  94
 
      Round r1 to an integral value using the "round toward negative
      infinity" rule, giving r2.
 
- FMAX  ( r1 r2 -- r3 )                                 A 94
+ FMAX  ( r1 r2 -- r3 )  94
 
      r3 is the maximum of r1 and r2.
 
- FMIN  ( r1 r2 -- r3 )                                 A 94
+ FMIN  ( r1 r2 -- r3 )  94
 
      r3 is the minimum of r1 and r2.
 
- FNEGATE  ( r1 -- r2 )                                 A 94
+ FNEGATE  ( r1 -- r2 )  94
 
      Negate r1, giving r2.
 
- FOVER  ( r1 r2 -- r1 r2 r1 )                          A 94
+ FOVER  ( r1 r2 -- r1 r2 r1 )  94
 
      Place a copy of r1 on top of the stack.
 
- FPICK  ( ru ... r0 u -- ru ... r0 ru )                A
+ FPICK  ( ru ... r0 u -- ru ... r0 ru )
 
      Remove u.  Copy ru to the top of the stack.
 
- FRANDOM  ( r1 -- r2 )                                 A
+ FRANDOM  ( r1 -- r2 )
 
      If r1 is a positive non-zero number, return a psuedo-random number
      r2 uniformly distributed in the range 0.0E to (but not including)
      1.0E.  If r1 is zero, return the last random number generated.  If
      r1 is negative, r1 is used to re-seed the random number generator.
 
- FROT  ( r1 r2 r3 -- r2 r3 r1 )                        A 94
+ FROT  ( r1 r2 r3 -- r2 r3 r1 )  94
 
      Rotate r1 to the top of the stack.
 
- FROUND  ( r1 -- r2 )                                  A 94
+ FROUND  ( r1 -- r2 )  94
 
      Round r1 to an integral value using the "round to nearest" rule,
      giving r2.
 
- FS.  ( r -- )                                         A
+ FS.  ( r -- )
 
      Display r in scientific notation followed by a space.  Non-
      essential zeros and signs are removed.
 
- FS.R  ( r n u -- )                                    A
+ FS.R  ( r n u -- )
 
      Display r in scientific notation right-justified in a field width
      u with n places to the right of the decimal point.
 
- FS0  ( -- aa )                                    A
+ FS0  ( -- aa )
 
      A USER variable that contains the address of the top of the
      separate floating point stack.
 
      Note: Has no function in the common stack floating point model
 
- FSIN  ( r1 -- r2 )                                    A 94
+ FSIN  ( r1 -- r2 )  94
 
      r2 is the sine of the radian angle r1.
 
- FSP  ( -- aa )                                    A
+ FSP  ( -- aa )
 
      A VARIABLE that returns the address of the current separate
      floating point stack pointer.
 
      Note: Has no function in the common stack model
 
- FSQRT  ( r1 -- r2 )                                   A 94
+ FSQRT  ( r1 -- r2 )  94
 
      r2 is the square root of r1.
 
- FSWAP  ( r1 r2 -- r2 r1 )                             A 94
+ FSWAP  ( r1 r2 -- r2 r1 )  94
 
      Exchange the top two floating point numbers.
 
- FVARIABLE  ( -- ) compilation                         A 94
-            ( -- fa ) run-time
+ FVARIABLE  ( compilation: -- ) ( run-time: -- fa )  94
 
      Define a floating point variable.
 
- G.  ( r -- )                                          A
+ G.  ( r -- )
 
      Display real number r in floating point notation followed by a
      space.  If the exponent is outside the range -4 to 5 then
      scientific notation is used.  Non-essential zeros and signs are
      removed.
 
- G.R  ( r n u -- )                                     A
+ G.R  ( r n u -- )
 
      Display real number r followed by a space.  Floating-point is used
      if the exponent is in the range -4 to 5 otherwise use scientific
      notation.  Non-essential zeros and signs are removed.
 
- MAX-PRECISION  ( -- u )                               A
+ MAX-PRECISION  ( -- u )
 
      A CONSTANT returning the implementation-defined maximum PRECISION.
 
      See: SET-PRECISION
 
- PI  ( -- r )                                          A
+ PI  ( -- r )
 
      An FCONSTANT that returns the value for "pi" (3.141593..)
 
- PRECISION  ( -- u )                                   A 94
+ PRECISION  ( -- u )  94
 
-     Return the number of significat digits currently used by F. F.R
+     Return the number of significant digits currently used by F. F.R
      FS. FS.R
 
- REPRESENT  ( r ca n1 -- n2 flag1 flag2 )          A 94
+ REPRESENT  ( r ca n1 -- n2 flag1 flag2 )  94
 
-     DX-Forth uses an enhanced REPRESENT.  It follows the Forth-94
+     DZX-Forth uses an enhanced REPRESENT.  It follows the Forth-94
      definition with the following extensions:
 
      - if n1 is zero the entire significand of r is rounded to one or
@@ -2064,42 +2050,41 @@ Notes:
      See:
      ftp://ftp.taygeta.com/pub/Forth/Applications/ANS/Represent_30.txt
 
- S>F  ( n -- r )                                       A
+ S>F  ( n -- r )
 
      Convert the single number to its real number equivalent.
 
- SET-PRECISION  ( u -- )                               A 94
+ SET-PRECISION  ( u -- )  94
 
      Set the number of significant digits currently used by F. F.R FS.
-     FS.R.  In DX-Forth, the number of significant digits is limited
+     FS.R.  In DZX-Forth, the number of significant digits is limited
      to MAX-PRECISION.
 
 
-13. Compiler Security
----------------------
+== Compiler Security
 
- !CSP  ( -- )                                          S FIG
+ !CSP  ( -- )  FIG
 
      Save the current data stack position.
 
      See: ?CSP
 
- +BAL  ( -- )                                          S
+ +BAL  ( -- )
 
      Increment the current control structure balance level.
 
- -BAL  ( -- )                                          S
+ -BAL  ( -- )
 
      Decrement the current control structure balance level.
 
- ?BAL  ( flag -- )                                     S
+ ?BAL  ( flag -- )
 
      Issue an error message 'definition unbalanced' and abort if flag
      and CHECKING are not zero.
 
      See: CHECKING
 
- ?CSP  ( -- )                                          S FIG
+ ?CSP  ( -- )  FIG
 
      Issue an error message 'definition unbalanced' and abort if the
      current data stack position does not match the value saved by !CSP
@@ -2107,17 +2092,17 @@ Notes:
 
      See: CHECKING
 
- ?COMP  ( -- )                                         S FIG
+ ?COMP  ( -- )  FIG
 
      Issue an error message 'compilation only' and abort if not
      compiling.
 
- ?EXEC  ( -- )                                         S FIG
+ ?EXEC  ( -- )  FIG
 
      Issue an error message 'execution only' and abort if not
      executing.
 
- ?STACK  ( -- )                                        S FIG
+ ?STACK  ( -- )  FIG
 
      Issue an error message and abort if a stack underflow or overflow
      occurs.  Data, return and floating point stack (if present) are
@@ -2126,7 +2111,7 @@ Notes:
      Note: A non-System version of ?STACK is provided in MISC.SCR for
      turnkey applications requiring run-time stack checking.
 
- CHECKING  ( -- aa )                               S
+ CHECKING  ( -- aa )
 
      A VARIABLE that controls compiler security - including control
      structure balance, data stack level and protected dictionary.
@@ -2135,83 +2120,82 @@ Notes:
 
      See: ?BAL ?CSP BEHEAD FORGET
 
- CSP  ( -- aa )                                    S FIG
+ CSP  ( -- aa )  FIG
 
      A VARIABLE containing the current data stack position saved by
      !CSP .
 
- SMUDGE  ( -- )                                        S FIG
+ SMUDGE  ( -- )  FIG
 
      Toggle the 'smudge' bit in the header of the last defined word.
      If the smudge bit is set, the definition will not be found during
      a dictionary search.
 
 
-14. Control Flow Stack
-----------------------
+== Control Flow Stack
 
-In DX-Forth the control-flow stack is implemented on the data stack.
+In DZX-Forth the control-flow stack is implemented on the data stack.
 CS-DROP CS-PUSH CS-POP CS-MARK CS-TEST are available when the 'cfs'
 equate in the kernel source is enabled.  See MISER.SCR for example of
 use.
 
- <MARK  ( C: -- dest )                                 S 83
+ <MARK  ( C: -- dest )  83
 
-     This function is not provided.  In DX-Forth use  POSTPONE BEGIN
+     This function is not provided.  In DZX-Forth use  POSTPONE BEGIN
      instead.
 
- <RESOLVE  ( C: dest -- )                              S 83
+ <RESOLVE  ( C: dest -- )  83
 
      Compile a backward branch address in the dictionary using the
      location left by BEGIN .  Formerly named BACK .
 
- >MARK  ( C: -- orig )                                 S 83
+ >MARK  ( C: -- orig )  83
 
      Reserve space in the dictionary for a forward branch address
      to be later resolved by THEN .  Formerly named FORWARD .
 
- >RESOLVE  ( C: orig -- )                              S 83
+ >RESOLVE  ( C: orig -- )  83
 
-     This function is not provided.  In DX-Forth use  POSTPONE THEN
+     This function is not provided.  In DZX-Forth use  POSTPONE THEN
      instead.
 
- AHEAD  ( C: -- orig )                                 S 94
+ AHEAD  ( C: -- orig )  94
 
      Put the location of a new unresolved forward reference orig
      onto the control flow stack.  Similar to IF but compiles an
      unconditional forward branch.
 
- CS-PICK  ( C: xu..x0 -- xu..x0 xu ) ( S: u -- )       S 94
+ CS-PICK  ( C: xu..x0 -- xu..x0 xu ) ( S: u -- )  94
 
      Remove u.  Place a copy of item xu on top of the control-flow
      stack.
 
- CS-ROLL  ( C: xu..x0 -- xu-1..x0 xu ) ( S: u --  )    S 94
+ CS-ROLL  ( C: xu..x0 -- xu-1..x0 xu ) ( S: u --  )  94
 
      Remove u.  Rotate item xu to the top of the control-flow stack.
 
- CS-DROP  ( C: x -- )                                  S
+ CS-DROP  ( C: x -- )
 
      Remove the top item from the control-flow stack.
 
- CS-PUSH  ( C: xu..x1 x0 -- x0 xu..x1 )                S
+ CS-PUSH  ( C: xu..x1 x0 -- x0 xu..x1 )
 
      Rotate items on the control-flow stack such that the top item
      becomes the bottom.  An ambiguous condition exists if the control-
      flow stack is empty before CS-PUSH is executed.
 
- CS-POP  ( C: xu xu-1..x0 -- xu-1..x0 xu )             S
+ CS-POP  ( C: xu xu-1..x0 -- xu-1..x0 xu )
 
      Rotate items on the control-flow stack such that the bottom item
      becomes the top.  An ambiguous condition exists if the control-
      flow stack is empty before CS-POP is executed.
 
- CS-MARK  ( C: -- x )                                  S
+ CS-MARK  ( C: -- x )
 
      Place a marker on the control-flow stack.  A marker occupies the
      same width as an orig|dest but is distinguishable using CS-TEST.
 
- CS-TEST  ( C: x -- x ) ( S: -- flag )                 S
+ CS-TEST  ( C: x -- x ) ( S: -- flag )
 
      Return a true flag if x is an orig|dest, or false if a marker.
      x is not altered or removed.
