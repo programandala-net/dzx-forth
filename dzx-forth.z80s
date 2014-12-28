@@ -8,9 +8,10 @@
 
 ; 2014-11-03: Start.
 version: macro
-  db 'A-00-201412282222'
+  db 'A-00-201412282235'
   ; XXX Status (most recent first):
   ; 
+  ; Labels used by DO structures renamed with ".do" suffix.
   ; Labels before 'dw exit' renamed with ".end" suffix.
   ; New 'alias', not tested.
   ;
@@ -2424,7 +2425,7 @@ number_question.end:
 ; <#  ( -- )    pad hld !
 
   hdr _public,'<#'
-bdigs:
+less_number_sign:
   call do_colon
   dw pad
   dw hld,store
@@ -2433,7 +2434,7 @@ bdigs:
 ; #>  ( d -- ca u )  2drop hld @ pad over -
 
   hdr _public,'#>'
-edigs:
+number_sign_greater:
   call do_colon
   dw two_drop
   dw hld,fetch
@@ -2508,18 +2509,17 @@ number_sign.end:
 ; #S  ( +d -- 0 0 )  begin # 2dup d0= until
 
   hdr _public,'#S'
-digs:
+number_sign_s:
   call do_colon
-digs.1:
-  dw number_sign
-  dw two_dup,d_zero_equals
-  dw question_branch,digs.1
+number_sign_s.begin:
+  dw number_sign,two_dup,d_zero_equals
+  dw question_branch,number_sign_s.begin
   dw exit
 
 ; SHOLD  ( ca u -- )  dup +hld swap move
 
   hdr _public,'SHOLD'  ; hold string
-shold:
+s_hold:
   call do_colon
   dw dup,phld
   dw swap,move
@@ -2528,7 +2528,7 @@ shold:
 ; NHOLD  ( n c -- )  over +hld -rot fill
 
   hdr _public,'NHOLD'  ; hold n characters
-nhold:
+n_hold:
   call do_colon
   dw over,phld
   dw minus_rot,fill
@@ -3792,10 +3792,10 @@ paren_d_dot:
   call do_colon
   dw tuck
   dw d_abs
-  dw bdigs
-  dw digs
+  dw less_number_sign
+  dw number_sign_s
   dw rot,sign
-  dw edigs
+  dw number_sign_greater
   dw exit
 
 ; U.R  ( u1 u2 -- ) 0 swap d.r
@@ -4427,9 +4427,9 @@ type:
 ;;  call do_colon
 ;;  dw zero_max,zero
 ;;  dw paren_question_do,type.2
-;;type.1:
+;;type.do:
 ;;  dw count,emit
-;;  dw paren_loop,type.1
+;;  dw paren_loop,type.do
 ;;type.2:
 ;;  dw drop
 ;;  dw exit
@@ -4452,9 +4452,9 @@ spaces:
   call do_colon
   dw zero_max,zero ; 0max 0
   dw paren_question_do,spaces.end ; ?do
-spaces.1:
+spaces.do:
   dw space
-  dw paren_loop,spaces.1 ; loop
+  dw paren_loop,spaces.do ; loop
 spaces.end:
   dw exit
 
@@ -7837,16 +7837,16 @@ path:
   dw c_lit
   db 32
   dw bdos
-  dw zero,bdigs
+  dw zero,less_number_sign
   dw c_lit
   db ':'
   dw hold
-  dw digs
+  dw number_sign_s
   dw rot,to_drive
   dw c_lit
   db 'A'
   dw plus
-  dw hold,edigs
+  dw hold,number_sign_greater
   dw zero
   dw exit
 
@@ -8919,7 +8919,7 @@ read_line:
 ;;read_line.1:
 ;;  dw two_dup,over,plus,swap
 ;;  dw paren_question_do,read_line.5
-;;read_line.2:
+;;read_line.do:
 ;;  dw i_
 ;;  dw dup,c_fetch
 ;;  dw c_lit
@@ -8928,7 +8928,7 @@ read_line:
 ;;  dw question_branch,read_line.3
 ;;  dw rot,minus
 ;;  dw fh,file_size,drop,rwpst
-;;  dw paren_leave,read_line.2-cw
+;;  dw paren_leave,read_line.do-cw
 ;;read_line.3:
 ;;  dw eol_question,question_dup
 ;;  dw question_branch,read_line.4
@@ -8942,7 +8942,7 @@ read_line:
 ;;  dw true,zero
 ;;  dw unloop,exit
 ;;read_line.4:
-;;  dw paren_loop,read_line.2
+;;  dw paren_loop,read_line.do
 ;;read_line.5:
 ;;  dw nip
 ;;  dw dup,zero_not_equals,zero
@@ -8971,11 +8971,11 @@ sfp.2:
 swap_file:
   call do_colon
   dw scr,fetch
-  dw snum,store
+  dw scr_number,store
   dw sfp,two_fetch
   dw swap
   dw sfp,two_store
-  dw snum,fetch
+  dw scr_number,fetch
   dw scr,store
   dw empty_buffers
   dw exit
@@ -8992,7 +8992,7 @@ fdb:
   db nfd
   dw zero
   dw paren_do,fdb.3
-fdb.1:
+fdb.do:
   dw dup,fetch,fetch
   dw zero_equals
   dw question_branch,fdb.2
@@ -9000,7 +9000,7 @@ fdb.1:
   dw exit
 fdb.2:
   dw cell_plus
-  dw paren_loop,fdb.1
+  dw paren_loop,fdb.do
 fdb.3:
   dw paren_abort_quote
   dcs 'too many files'
@@ -9044,7 +9044,7 @@ blks:
 ; SCR#  ( -- a )
 
   hdr _hidden,'SCR#'
-snum:
+scr_number:
   ld e,cw*3    ; current SCR# field
   jp fid.1
 
@@ -9257,11 +9257,11 @@ paren_thru:
   call do_colon
   dw one_plus,swap
   dw paren_question_do,paren_thru.end
-paren_thru.1:
+paren_thru.do:
   dw i_,block
   dw bytes_per_buffer
   dw i_,paren_evaluate
-  dw paren_loop,paren_thru.1
+  dw paren_loop,paren_thru.do
 paren_thru.end:
   dw exit
 
@@ -9316,12 +9316,12 @@ pfbk:
   dw wso,creatf,throw
   dw over,zero
   dw paren_question_do,pfbk.2
-pfbk.1:
+pfbk.do.1:
   dw dup
   dw i_,block
   dw bytes_per_buffer
   dw rot,writf,throw
-  dw paren_loop,pfbk.1
+  dw paren_loop,pfbk.do.1
 pfbk.2:
   dw closf,throw
   dw fid,fetch
@@ -9336,11 +9336,11 @@ pfbk.3:
   dw over
   dw blks,store  ; update max block
   dw paren_question_do,pfbk.end
-pfbk.4:
+pfbk.do.2:
   dw i_,buffer
   dw bytes_per_buffer,blank
   dw update,save_buffers
-  dw paren_loop,pfbk.4
+  dw paren_loop,pfbk.do.2
 pfbk.end:
   dw exit
 
@@ -11332,13 +11332,13 @@ represent.3:
   dw r_fetch
   dw zero,max,zero
   dw paren_question_do,represent.5
-represent.4:
+represent.do:
   dw f_ten,f_star
-  dw paren_loop,represent.4
+  dw paren_loop,represent.do
 represent.5:
   dw f_round,f_to_d
   dw two_dup
-  dw bdigs,digs,edigs
+  dw less_number_sign,number_sign_s,number_sign_greater
   dw dup
   dw r_fetch,minus  ; handle overflow
   dw exsn,plus_store
@@ -11460,7 +11460,7 @@ paren_f3.3:
   dw fbuf
   dw max_precision
   dw dtrai
-  dw bdigs
+  dw less_number_sign
   dw exit
 
 ; (F4)  ( exp -- )  pl# 0< >r dup abs s>d r@ 0= if # then #s
@@ -11478,7 +11478,7 @@ paren_f4:
   dw question_branch,paren_f4.1
   dw number_sign
 paren_f4.1:
-  dw digs
+  dw number_sign_s
   dw two_drop
   dw dup,sign
   dw zero_less
@@ -11505,15 +11505,15 @@ paren_f5:
   dw plus_store
   dw exit
 
-; (F6)  ( ca u -- )  (f5) shold
+; (F6)  ( ca u -- )  (f5) s_hold
 
   hdr _hidden,'(F6)'  ; insert string
 paren_f6:
   call do_colon
-  dw paren_f5,shold
+  dw paren_f5,s_hold
   dw exit
 
-; (F7)  ( n -- )    (f5) [char] 0 nhold
+; (F7)  ( n -- )    (f5) [char] 0 n_hold
 
   hdr _hidden,'(F7)'  ; insert '0's
 paren_f7:
@@ -11521,7 +11521,7 @@ paren_f7:
   dw paren_f5
   dw c_lit
   db '0'
-  dw nhold
+  dw n_hold
   dw exit
 
 ; (F8)  ( -- )    sn# sign 0 0 #>
@@ -11531,7 +11531,7 @@ paren_f8:
   call do_colon
   dw snn,sign
   dw zero,zero
-  dw edigs
+  dw number_sign_greater
   dw exit
 
 ; (F9)  ( ca u1 -- ca u2 )
