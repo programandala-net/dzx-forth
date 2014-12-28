@@ -8,7 +8,7 @@
 //
 // 2014-12-28: Start convertion to Asciidoctor.
 
-// XXX FIXME why the first paragraph is bold?!
+// XXX FIXME why the first paragraph is bold?!!
 XXX Hello.
 
 This is the documentation for DZX-Forth.  It is divided into three parts.
@@ -176,8 +176,8 @@ to see only word names that contain the sequence 'MOD' then type
 You will notice some words are accompanied by an attribute.
 
 [horizontal]
-# :: indicates the word is immediate.
-| :: indicates the word resides in the System dictionary. // XXX OLD
+\# :: indicates the word is immediate.
+\| :: indicates the word resides in the System dictionary. // XXX OLD
 
 Forth users will be familiar with IMMEDIATE words.  SYSTEM words are
 peculiar to DZX-Forth and are explained in the programming section.
