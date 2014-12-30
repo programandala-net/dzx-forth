@@ -3,6 +3,7 @@
 # 2014-12-16: First version.
 # 2014-12-28: Much improved.
 # 2014-12-29: 'tap2dsk' added (from Taptools, by Jhon Elliot).
+# 2014-12-30: Abandoned in favor of Makefile.
 
 # XXX TODO versions with/out floating support, using Pasmo's command line to
 # set the labels.
