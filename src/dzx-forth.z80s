@@ -7,7 +7,7 @@
 ; 2014-11-03: Start.
 
 version: macro
-  db 'A-00-201501061754'
+  db 'A-00-201501061958'
   ; XXX Latest modifications (most recent first):
   ; 
   ; New version of '?stack', but something strange happens.
@@ -46,7 +46,7 @@ yes:    equ not no
 ; ------------------------------
 ; Conditional assembly
 
-debug:                            equ yes ; debugging messages?
+debug:                            equ no ; debugging messages?
 case_insensitive_names:           equ yes
 control_flow_stack_extensions:    equ yes
 warning_options:                  equ yes
@@ -1457,12 +1457,6 @@ invert:
   push hl
   jp next
 
-; NOT  ( x1 -- x2 )
-;   aka 0= not
-
-  hdr _public,'NOT',,zero_equals    ; F79 NOT
-not_: equ zero_equals
-
 ; S>D  ( n -- d )
 
   hdr _public,'S>D'
@@ -2068,6 +2062,7 @@ zero_equals_hl:
   hdr _public,'0<>'
 zero_not_equals:
   pop hl
+zero_not_equals_hl:
   ld a,l
   or h
   jp z,false
@@ -5050,7 +5045,7 @@ user:
 addr:
   call do_colon
   dw tick,to_body           ; ' >body
-  dw state_question         ; state?
+  dw compiling_question         ; state?
   dw question_branch,addr.1 ; if
   dw literal                ;   postpone literal
 addr.1:                     ; then
@@ -5081,7 +5076,7 @@ paren_to:
 to:
   call do_colon
   dw tick
-  dw state_question
+  dw compiling_question
   dw question_branch,to.1
   dw compile,paren_to,comma
   dw branch,to.end
@@ -5170,6 +5165,7 @@ false:
 ;   aka true -1
 
   hdr _public,'-1',,true
+minus_one: equ true
 
 ; 0  ( -- 0 )
 ;   aka false 0
@@ -5212,15 +5208,16 @@ bl:
   hdr _public,'B/BUF'
 bytes_per_buffer:
   call do_value
-bytes_per_buffer.1:
-  dw 128*8 ; default
+bytes_per_buffer.value:
+  dw 1024 ; default
 
 ; C/L  ( -- u )
 ;   chars per screen line
 
   hdr _public,'C/L'
-csll:
+chars_per_line:
   call do_value
+chars_per_line.value:
   dw 64 ; default
 
 ; For applications, LIMIT is the upper limit of available memory.
@@ -5586,15 +5583,43 @@ sys_question.1: ; XXX TODO rename, because it's used by other words
   push de
   jp zero_not_equals
 
-; STATE?  ( -- flag )
+; COMPILING?  ( -- flag )
 ;   state @ 0<>
-; XXX TODO rename to 'interpreting?'
-; XXX TODO write 'compiling?'
 
-  hdr _hidden,'STATE?'
-state_question:
-  ld hl,state.variable
-  jp sys_question.1
+  hdr _hidden,'COMPILING?'
+compiling_question:
+  if 0 ; XXX OLD -- original method
+    ld hl,state.variable
+    jp sys_question.1
+  else
+    ; XXX NEW -- faster
+    ld a,(state.variable)
+    ld l,a
+    ld a,(state.variable+1)
+    ld h,a
+    jp zero_not_equals_hl
+  endif
+
+; EXECUTING?  ( -- flag )
+;   state @ 0<>
+
+  hdr _hidden,'EXECUTING?'
+executing_question:
+  if 0 ; XXX OLD -- original method
+    ld hl,state.variable
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    push de
+    jp zero_equals
+  else
+    ; XXX NEW -- faster
+    ld a,(state.variable)
+    ld l,a
+    ld a,(state.variable+1)
+    ld h,a
+    jp zero_equals_hl
+  endif
 
 ; CHECK?  ( -- flag ) checking @ 0<>
 
@@ -5642,8 +5667,7 @@ allot:
   dw paren_abort_quote
   dcs 'no data space'
   dw erase
-;;  dw hh,plus_store ; XXX OLD
-  dw dp,plus_store ; XXX NEW
+  dw dp,plus_store
   dw exit
 
 ; HERE  ( -- a )
@@ -5651,8 +5675,7 @@ allot:
   hdr _public,'HERE'
 here:
   call do_colon
-;;  dw hh,fetch ; XXX OLD
-  dw dp,fetch ; XXX NEW
+  dw dp,fetch
   dw exit
 
 ; C,  ( c -- )
@@ -5874,7 +5897,7 @@ dotid.1:
 ;   >name .id
 
   hdr _public,'.NAME'
-dotnam:
+dot_name:
   call do_colon
   dw to_name,dotid
   dw exit
@@ -5913,23 +5936,24 @@ question_csp:
 
 ; ?COMP  ( -- )
 ;   state? 0= abort" compilation only'
+; XXX TODO rename '?compiling'
 
   hdr _public,'?COMP'
 question_comp:
   call do_colon
-  dw state,fetch
-  dw zero_equals
+  dw compiling_question
   dw paren_abort_quote
   dcs 'compilation only'
   dw exit
 
 ; ?EXEC  ( -- )
-;   state? abort" execution only'
+;   compiling? abort" execution only'
+; XXX TODO rename '?executing'
 
   hdr _public,'?EXEC'
 qexec:
   call do_colon
-  dw state_question
+  dw compiling_question
   dw paren_abort_quote
   dcs 'execution only'
   dw exit
@@ -6013,6 +6037,7 @@ qexec:
   hdr _public,'?STACK'
 question_stack:
   call do_colon
+  dw exit ; XXX TMP
   dw sp_fetch
   if debug ; XXX INFORMER
     dw paren_dot_quote
@@ -6075,29 +6100,29 @@ right_bracket:
   jp on_hl
 
 ; COMPILE,  ( xt -- )
-;   warning @ 0< if dup limit u< sys? d0=
-;   if dup .name ."  is system " then then ,
 
-  hdr _public,'COMPILE,'
-compile_comma:
-  call do_colon
-  dw warning,fetch
-  if warning_options
-    dw zero_less
-  endif
-  dw question_branch,compile_comma.1
-  dw dup,limit
-  dw u_less
-  dw sys_question
-  dw d_zero_equals
-  dw question_branch,compile_comma.1
-  dw dup
-  dw dotnam
-  dw paren_dot_quote
-  dcs ' is system '
-compile_comma.1:
-  dw comma
-  dw exit
+  hdr _public,'COMPILE,',,comma
+compile_comma:  equ comma
+; XXX OLD
+;compile_comma:
+;  call do_colon
+;  dw warning,fetch
+;  if warning_options
+;    dw zero_less
+;  endif
+;  dw question_branch,compile_comma.end
+;  dw dup,limit
+;  dw u_less
+;  dw sys_question
+;  dw d_zero_equals
+;  dw question_branch,compile_comma.end
+;  dw dup
+;  dw dot_name
+;  dw paren_dot_quote
+;  dcs ' is system '
+;compile_comma.end:
+;  dw comma
+;  dw exit
 
 ; COMPILE  ( -- )
 ;   ?comp r> dup cell+ >r @ compile,
@@ -6493,7 +6518,7 @@ bslas:
   dw source,nip
   dw blk,fetch
   dw question_branch,bslas.1
-  dw csll
+  dw chars_per_line
   dw in_,fetch
   dw over,slash
   dw one_plus,star
@@ -6623,40 +6648,8 @@ forth:
 unused:
   dw lit,0xffff,here,minus
   dw exit
-; XXX OLD
-;;;   sys? if (esm) @ else sp@ then here
-;;;   255 + 2dup u> -rot - and
-;;  call do_colon
-;;  dw sys_question
-;;  dw question_branch,unused.1
-;;  dw lit,esm
-;;  dw fetch
-;;  dw branch,unused.2
-;;unused.1:
-;;  dw sp_fetch
-;;unused.2:
-;;  dw here
-;;  dw c_lit    ; allow margin
-;;  db 255
-;;  dw plus
-;;  dw two_dup
-;;  dw u_greater
-;;  dw minus_rot
-;;  dw minus
-;;  dw and_
-;;  dw exit
 
 ; INTERPRET  ( -- )
-;   begin bl-word dup c@ while find ?dup if
-;       state? = if compile, else execute then
-;       else count base @ >r over c@ case [char] $
-;       of hex 1 endof [char] # of decimal 1 endof
-;       0 swap endcase /string 2dup number? if
-;       2nip dpl @ 0< if drop state? if
-;       postpone literal then else state? if
-;       postpone 2literal then then true else
-;       fnumber then r> base ! ?defined then ?stack
-;       repeat drop
 
   hdr _public,'INTERPRET'
 interpret:
@@ -6672,42 +6665,62 @@ interpret.begin:
     dcs 'interpret after bl_word',cr_char
   endif
   dw dup,c_fetch
-  dw question_branch,interpret.end  ; while not end of input stream
+  dw branch_if_0,interpret.end  ; while not end of input stream
   if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret before find',cr_char
   endif
   dw find
-  if 0 ; debug ; XXX INFORMER
+  if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret after find',cr_char
+    ;dw dot,dot,bye
   endif
   dw question_dup
   dw question_branch,interpret.not_found
 
   ; found
-  dw state_question,equals
-  dw question_branch,interpret.execute
+  ; ( xt 1 | xt -1 )
+  if debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'interpret -- found',cr_char
+    ;dw dot,dot,bye
+  endif
+  dw compiling_question,equals ; compiling an immediate word?
+  dw branch_if_false,interpret.execute
 
   ; compiling and not immediate
   dw compile_comma
   dw branch,interpret.repeat
 
 interpret.execute:
-  ; interpreting or immediate
+  ; executing or immediate
   if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret.execute ',cr_char
   endif
   dw execute
+  dw branch,interpret.repeat
 
 interpret.not_found:
+  ; ( ca )
   if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret.not_found ',cr_char
   endif
-  dw base,fetch,to_r
-  dw count,over,c_fetch ; first char
+  dw base,fetch,to_r ; save the current base
+  if debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'interpret: the string address is '
+    dw decimal,dot,cr,bye
+  endif
+  dw count,over,c_fetch ; get the string and its first char
+  ; ( ca len c )
+  if debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'interpret: the first char is '
+    dw dup,decimal,dot,cr,bye
+  endif
 
   dw c_lit
   db '$'
@@ -6769,6 +6782,10 @@ interpret.number_question:
   ; The number prefix, if any, has been removed.
   ; Is the rest a number in the current base?
   dw two_dup
+  if 0;debug ; XXX INFORMER
+    ; This prints the right string if it's longer than 1
+    dw cr,two_dup,type,cr
+  endif
 interpret.number_question_patch: ; XXX not used
   dw number_question       ; NUMBER? patch ; XXX not patched
   if debug ; XXX INFORMER
@@ -6784,23 +6801,25 @@ interpret.number_question_patch: ; XXX not used
   dw dpl,fetch,zero_less ; single number?
   dw branch_if_false,interpret.double_number
   dw drop
-  dw state_question ; compiling?
-  dw branch_if_false,interpret.9
+  dw compiling_question ; compiling?
+;  dw branch_if_false,interpret.9 ; XXX OLD
+  dw branch_if_false,interpret.repeat ; XXX NEW
   dw literal
-interpret.9:
+;interpret.9: ; XXX OLD
 ;  dw branch,interpret.not_a_number ; XXX why?
   dw branch,interpret.repeat ; XXX NEW
 
 interpret.double_number:
-  dw state_question ; compiling?
+  dw compiling_question ; compiling?
 ;  dw question_branch,interpret.not_a_number ; XXX why?
   dw question_branch,interpret.repeat ; XXX NEW
   dw two_literal
   dw branch,interpret.repeat ; XXX NEW
 
-interpret.not_a_number:
-  dw true
-  dw branch,interpret.question_defined
+; XXX OLD
+;interpret.not_a_number:
+;  dw true
+;  dw branch,interpret.question_defined
 
 interpret.f_number_patch:
   dw f_number_patch       ; XXX patched
@@ -6809,19 +6828,20 @@ interpret.f_number_patch:
     dcs 'after interpret.f_number_patch',cr_char
   endif
 
-interpret.question_defined:
-  ; ( flag -- )
-  ; abort if flag<>0
-  dw from_r,base,store
-  if debug ; XXX INFORMER
-    dw paren_dot_quote
-    dcs 'before question_defined',cr_char
-  endif
-  dw question_defined
-  if debug ; XXX INFORMER
-    dw paren_dot_quote
-    dcs 'after question_defined',cr_char
-  endif
+; XXX OLD
+;interpret.question_defined:
+;  ; ( flag -- )
+;  ; abort if flag<>0
+;  dw from_r,base,store
+;  if 1; debug ; XXX INFORMER
+;    dw paren_dot_quote
+;    dcs 'before question_defined',cr_char
+;  endif
+;  dw question_defined
+;  if 1; debug ; XXX INFORMER
+;    dw paren_dot_quote
+;    dcs 'after question_defined',cr_char
+;  endif
 
 interpret.repeat:
   if debug ; XXX INFORMER
@@ -7000,8 +7020,8 @@ quit.do:                          ; begin
     dcs 'QUIT '
   endif
   dw interpret                  ;   interpret
-  dw state_question,zero_equals ;   state? 0=
-  dw question_branch,quit.3      ;   if
+  dw executing_question
+  dw branch_if_false,quit.3      ;   if
   dw paren_dot_quote            ;     ."  ok" 
   dcs ' ok'
 quit.3:                          ;   then
@@ -7103,7 +7123,7 @@ doterr:
   dw paren_dot_quote
   dcs ' Screen '
   dw u_dot
-  dw csll
+  dw chars_per_line
   dw slash
   dw paren_dot_quote
   dcs 'Line '
@@ -7243,7 +7263,7 @@ abort.1:
   hdr _hidden,'(ABORT")'
 paren_abort_quote:
   call do_colon
-  if 0;debug ; XXX INFORMER -- because of the problen in '?stack'
+  if 0;debug ; XXX INFORMER -- because of the problem in '?stack'
     ; XXX FIXME this debug code breaks something
     dw paren_dot_quote
     dcs 'abort" parameter = '
@@ -7336,23 +7356,23 @@ cold_boot:
 
   jp cold ; XXX TMP
 
-; BOOTMESSAGE  ( -- )
+; BOOT-MESSAGE  ( -- )
 
-; XXX NEW -- after Gforth
 ; XXX TODO -- defered
 
-bootmessage:
+boot_message:
   call do_colon
   dw paren_dot_quote
-  db bootmessage.end-$-1  ; length
+  db boot_message.end-$-1  ; length
   db "DZX-Forth "
+  db cr_char,"Version "
   version
   db cr_char,"Copyright (C) 2014 Marcos Cruz"
+  db cr_char,"(programandala.net)"
   db cr_char
 ; XXX OLD
-;  db cr_char,"(programandala.net)"
 ;  db cr_char,"Type 'bye' to exit.",cr_char
-bootmessage.end
+boot_message.end
   dw exit
 
 ; COLD ( -- )
@@ -7455,7 +7475,7 @@ cold.3:
 
 ;;cold.6:
   dw cls
-  dw bootmessage
+  dw boot_message
 
 ;;cold.7:
 ;;cold.8:
@@ -7860,7 +7880,7 @@ s_quote:
   dw c_lit
   db '"'
   dw parss
-  dw state_question
+  dw compiling_question
   dw question_branch,s_quote.end
   dw s_literal
 s_quote.end:
@@ -12515,7 +12535,7 @@ f_number.2:
   dw two_drop,zero
 f_number.3:
   dw dup,to_r
-  dw state_question
+  dw compiling_question
   dw and_
   dw question_branch,f_number.4
   dw f_literal
@@ -12617,7 +12637,7 @@ init_dp:   equ $
 
   ; XXX NEW
 ;  dw cls
-;  dw bootmessage
+;  dw boot_message
 ;forever:
 ;  dw branch,forever ; XXX INFORMER
 ; -----------------------
