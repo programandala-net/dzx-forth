@@ -7,19 +7,13 @@
 ; 2014-11-03: Start.
 
 version: macro
-  db 'A-00-201501061958'
-  ; XXX Latest modifications (most recent first):
-  ; 
-  ; New version of '?stack', but something strange happens.
-  ; The original version didn't work with the new memory map.
-  ;
-  ; Location of the stacks is fixed.
-  ;
-  ; Save/Restore the system stack.
+  db 'A-00-201501062124'
   endm
 
 ; ------------------------------
 ; XXX TODO 
+
+; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should it be?
 
 ; Rename the 'header' word to '(header)'
 ;
@@ -57,6 +51,8 @@ fp_engineering_output_functions:  equ yes
 separated_f_stack:                equ no ; XXX TODO -- not fully implemented in DX-Forth
 
 classic_Forth_behaviours:         equ no
+
+fast_emit:                        equ yes ; if yes, 'space' and 'cr' jump directly into '(emit)', don't call 'emit'
 
 ; ------------------------------
 ; Config
@@ -396,6 +392,7 @@ stack_end:
   ds stack_size
 stack_0:
 
+return_stack_end:
   ds return_stack_size
 return_stack_0:
 
@@ -4309,26 +4306,15 @@ atxy:
 ;;atxy.8:
 ;;  db 100,10,1
 
-; XXX NEW
-; CLS  ( -- )
-  hdr _public,'CLS'
-;  XXX TODO -- call it from 'PAGE'
+; PAGE  ( -- )
+  hdr _public,'PAGE'
 
-cls:
+page:
   save_ip
   call rom_cl_all
   ld a,2
   call rom_chan_open
   jp restore_ip_next
-; XXX OLD
-;;  call do_colon
-;;  dw lit,tceold
-;;  dw lit,thome
-;;  dw atxy.2
-;;  dw lit,tclsd
-;;  dw lit,tcls
-;;  dw atxy.2
-;;  dw exit
 
 ; NORMAL  ( -- )
 
@@ -4485,20 +4471,32 @@ previous_key equ $+1
 
   hdr _public,'SPACE'
 space:
-  ld a,sp_char
-  jp emit_a
+  if fast_emit
+    ld a,sp_char
+    jp paren_emit_a
+  else
+    ld hl,sp_char
+    push hl
+    jp emit
+  endif
+
+; (EMIT)  ( c -- )
+
+  hdr _public,'(EMIT)'
+paren_emit:
+  pop hl
+paren_emit_l:
+  ld a,l
+paren_emit_a:
+  rst 0x10
+  jp pause
 
 ; EMIT  ( c -- )
 
-  ; XXX TODO make it defered
   hdr _public,'EMIT'
 emit:
-  pop hl
-emit_l:
-  ld a,l
-emit_a:
-  rst 0x10
-  jp pause
+  call fetch_execute
+  dw paren_emit
 
 ; XXX OLD
 ;;;   (vemit) @execute 1 out +! pause
@@ -4536,9 +4534,8 @@ saved_ip: equ $+1
   ld bc,0 ; restore IP
   jp next
 
-; SPACES  ( +n -- ) 0max 0 ?do space loop
+; SPACES  ( +n -- )
 
-  ; XXX TODO in assembly
   hdr _public,'SPACES'
 spaces:
   call do_colon
@@ -4555,16 +4552,14 @@ spaces.end:
   hdr _public,'CR'
 cr:
   ; XXX TODO -- printer too? lf_char?
-  ld a,cr_char
-  jp emit_a
-
-; PAGE  ( -- )
-
-  hdr _public,'PAGE'
-page:
-  ; XXX FIXME -- this is only for printer
-  ld a,ff_char ; formfeed char
-  jp emit_a
+  if fast_emit
+    ld a,cr_char
+    jp paren_emit_a
+  else
+    ld hl,cr_char
+    push hl
+    jp emit
+  endif
 
 ; CONSOLE  ( -- )
 ;   (vcon) @ (vemit) !
@@ -5085,25 +5080,38 @@ to.1:
 to.end:
   dw exit
 
-  ; XXX TODO rewrite
-undef:
+; (DEFER-DEFAULT)  ( -- )
+
+  hdr _public,'(DEFER-DEFAULT)'
+paren_defer_default:
   call do_colon
   dw one
   dw paren_abort_quote
-  dcs 'uninitiated DEFER'
+  dcs 'deferred word is uninitialized'
+  dw exit
+
+; DEFER-DEFAULT  ( -- )  gforth
+
+  hdr _public,'DEFER-DEFAULT'
+defer_default:
+  call fetch_execute
+  dw paren_defer_default
 
 ; DEFER  ( "name" -- )
 
+  ; XXX TODO simpler: use 'JP defer_default' instead?
+  ; It would be faster, but the xt would not be stored in the body.
   hdr _public,'DEFER'
 defer:
   call do_colon
-  dw lit,fetch_execute  ; ['] @execute
-  dw build              ; build
-  dw lit,undef,comma    ; undef ,
+  dw lit,fetch_execute
+  dw build
+  dw lit,defer_default,comma
   dw exit
 
 ; IS  ( xt "name" -- )
 
+  ; XXX TODO simpler: see note in 'defer'
   hdr _public,'IS',_immediate,to  ; state-smart
 is: equ to
 
@@ -5958,77 +5966,7 @@ qexec:
   dcs 'execution only'
   dw exit
 
-; XXX OLD -- does not work with the new memory map
-;;; ?STACK  ( -- )
-;;;       sp@ s0 @ over  ( sp s0 sp )
-;;;       u< swap ( s0<sp? sp )
-;;;       pad u<  ( s0<sp? sp<pad? )
-;;;       or abort" stack?"
-;;;       r0 @ rp@ u< rp@ fs0 @ u< or abort" r-stack?"
-;;;       fs0 @ fsp @ u< fsp @ fs0 @ (nfpm) @ - u< or abort" f-stack?"
-;;
-;;  hdr _public,'?STACK'
-;;question_stack:
-;;  call do_colon
-;;  if debug ; XXX INFORMER
-;;    dw paren_dot_quote
-;;    dcs 'question_stack',cr_char
-;;  endif
-;;  dw sp_fetch
-;;  if debug ; XXX INFORMER
-;;    dw paren_dot_quote
-;;    dcs 'SP = '
-;;    dw dup,u_dot,cr
-;;  endif
-;;  dw s0,fetch
-;;  if debug ; XXX INFORMER
-;;    dw paren_dot_quote
-;;    dcs 'S0 = '
-;;    dw dup,u_dot,cr
-;;  endif
-;;  dw over,u_less
-;;  if debug ; XXX INFORMER
-;;    dw paren_dot_quote
-;;    dcs 'S0<SP = '
-;;    dw dup,dot,cr
-;;  endif
-;;  dw swap
-;;  dw pad
-;;  dw u_less
-;;  if debug ; XXX INFORMER
-;;    dw paren_dot_quote
-;;    dcs ' SP<PAD = '
-;;    dw dup,dot,cr
-;;  endif
-;;  dw or_
-;;  dw paren_abort_quote
-;;  dcs 'stack?'
-;;  dw r0,fetch
-;;  dw rp_fetch
-;;  dw u_less
-;;  dw rp_fetch
-;;  dw fs0    ; = S0 if no float
-;;  dw fetch
-;;  dw u_less,or_
-;;  dw paren_abort_quote
-;;  dcs 'r-stack?'
-;;;  XXX TODO -- if separated fp stack
-;;; dw fs0,fetch
-;;; dw fsp,fetch
-;;; dw u_less
-;;; dw fsp,fetch
-;;; dw fs0,fetch
-;;; dw lit,nfpm
-;;; dw fetch
-;;; dw minus
-;;; dw u_less
-;;; dw or_
-;;; dw paren_abort_quote
-;;; dcs 'f-stack?'
-;;  dw exit
-
 ; ?STACK  ( -- )
-; XXX NEW
 ; XXX TODO finish
 ;       sp@ s0 @ u< abort" stack ?"
 ;       r0 @ rp@ u< rp@ fs0 @ u< or abort" r-stack?"
@@ -6037,21 +5975,21 @@ qexec:
   hdr _public,'?STACK'
 question_stack:
   call do_colon
-  dw exit ; XXX TMP
+;  dw exit ; XXX TMP
   dw sp_fetch
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'SP = '
     dw dup,u_dot,cr
   endif
   dw s0,fetch
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'S0 = '
     dw dup,u_dot,cr
   endif
   dw u_greater
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'result = '
     dw dup,dot,cr
@@ -6062,7 +6000,7 @@ question_stack:
 ;  dw sp_fetch,s0,fetch,u_less
 ;  dw paren_abort_quote
 ;  dcs 'stack overflow'
-  dw rp_fetch,r0,fetch,u_less
+  dw rp_fetch,r0,fetch,u_greater
   dw paren_abort_quote
   dcs 'return stack underflow'
   ; XXX TODO
@@ -6657,16 +6595,16 @@ interpret:
 interpret.begin:
   if debug ; XXX INFORMER
     dw paren_dot_quote
-    dcs 'interpret ',cr_char
+    dcs 'interpret.begin',cr_char
   endif
   dw bl_word
-  if 0 ; debug ; XXX INFORMER
+  if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret after bl_word',cr_char
   endif
   dw dup,c_fetch
   dw branch_if_0,interpret.end  ; while not end of input stream
-  if 0 ; debug ; XXX INFORMER
+  if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret before find',cr_char
   endif
@@ -6709,14 +6647,14 @@ interpret.not_found:
     dcs 'interpret.not_found ',cr_char
   endif
   dw base,fetch,to_r ; save the current base
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret: the string address is '
-    dw decimal,dot,cr,bye
+    ;dw decimal,dot,cr,bye
   endif
   dw count,over,c_fetch ; get the string and its first char
   ; ( ca len c )
-  if debug ; XXX INFORMER
+  if 0; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret: the first char is '
     dw dup,decimal,dot,cr,bye
@@ -6761,7 +6699,7 @@ interpret.no_prefix_found: ; endcase
   if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'interpret.no_prefix_found',cr_char
-    dw dup,dot ; case selector
+    ; dw dup,dot ; case selector
   endif
   dw drop ; discard the case selector
   dw branch,interpret.number_question
@@ -6780,15 +6718,17 @@ interpret.remove_the_prefix:
 
 interpret.number_question:
   ; The number prefix, if any, has been removed.
-  ; Is the rest a number in the current base?
-  dw two_dup
+  ; Is the string a number in the current base?
+  ; ( ca len )
   if 0;debug ; XXX INFORMER
-    ; This prints the right string if it's longer than 1
+    dw paren_dot_quote
+    dcs 'interpret.number_question',cr_char
     dw cr,two_dup,type,cr
   endif
+  dw two_dup
 interpret.number_question_patch: ; XXX not used
   dw number_question       ; NUMBER? patch ; XXX not patched
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'after number_question',cr_char
   endif
@@ -6803,26 +6743,27 @@ interpret.number_question_patch: ; XXX not used
   dw drop
   dw compiling_question ; compiling?
 ;  dw branch_if_false,interpret.9 ; XXX OLD
-  dw branch_if_false,interpret.repeat ; XXX NEW
+  dw branch_if_false,interpret.number_done ; XXX NEW
   dw literal
 ;interpret.9: ; XXX OLD
 ;  dw branch,interpret.not_a_number ; XXX why?
-  dw branch,interpret.repeat ; XXX NEW
+  dw branch,interpret.number_done ; XXX NEW
 
 interpret.double_number:
   dw compiling_question ; compiling?
 ;  dw question_branch,interpret.not_a_number ; XXX why?
-  dw question_branch,interpret.repeat ; XXX NEW
+  dw branch_if_false,interpret.number_done ; XXX NEW
   dw two_literal
-  dw branch,interpret.repeat ; XXX NEW
+  dw branch,interpret.number_done ; XXX NEW
 
-; XXX OLD
 ;interpret.not_a_number:
 ;  dw true
 ;  dw branch,interpret.question_defined
 
 interpret.f_number_patch:
+  ; ( ca len )
   dw f_number_patch       ; XXX patched
+  ; ( flag )
   if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'after interpret.f_number_patch',cr_char
@@ -6830,18 +6771,20 @@ interpret.f_number_patch:
 
 ; XXX OLD
 ;interpret.question_defined:
-;  ; ( flag -- )
-;  ; abort if flag<>0
-;  dw from_r,base,store
-;  if 1; debug ; XXX INFORMER
-;    dw paren_dot_quote
-;    dcs 'before question_defined',cr_char
-;  endif
-;  dw question_defined
-;  if 1; debug ; XXX INFORMER
-;    dw paren_dot_quote
-;    dcs 'after question_defined',cr_char
-;  endif
+  ; ( flag -- )
+  ; abort if flag<>0
+  if 0; debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'before question_defined',cr_char
+  endif
+  dw question_defined
+  if 0; debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'after question_defined',cr_char
+  endif
+
+interpret.number_done:
+  dw from_r,base,store
 
 interpret.repeat:
   if debug ; XXX INFORMER
@@ -6856,6 +6799,7 @@ interpret.end:
     dw paren_dot_quote
     dcs 'interpret.end ',cr_char
   endif
+;  dw branch,$ ; XXX TMP
   dw drop
   dw exit
 
@@ -6938,9 +6882,8 @@ paren_refill.1:
   dw lit,tib
   dw dup
   dw c_lit
-  db 32 ; XXX TMP -- use 32, ZX Spectrum's chars per line; XXX TODO use a variable instead?
-  dw accept
-;  dw space ; XXX OLD -- not needed; it can ruin forms
+  db 32 ; XXX TMP -- ZX Spectrum's chars per line; XXX TODO use a variable instead?
+  dw accept,space
 paren_refill.2:
   dw tick_source,two_store
   dw in_,off
@@ -7007,25 +6950,23 @@ reset_forth:
   hdr _public,'QUIT'
 quit:
   call do_colon
-quit.1:
-  dw r0,fetch,rp_store      ; r0 @ rp!
-  dw reset                  ; reset
+quit.start:
+  dw r0,fetch,rp_store
+  dw reset
 ;** dw vnorm ; XXX OLD
-  dw reset_interpreter        ; reset-interpreter
-quit.do:                          ; begin
-  ; XXX FIXME move 'cr' to 'if'?
-  dw cr,paren_refill,drop       ;   cr  (refill) drop
+  dw reset_interpreter
+quit.begin:
+  dw paren_refill,drop
   if 0 ; debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'QUIT '
   endif
-  dw interpret                  ;   interpret
+  dw interpret
   dw executing_question
-  dw branch_if_false,quit.3      ;   if
-  dw paren_dot_quote            ;     ."  ok" 
-  dcs ' ok'
-quit.3:                          ;   then
-  dw branch,quit.do               ; again
+  dw branch_if_false,quit.begin
+  dw paren_dot_quote
+  dcs 'ok',cr_char
+  dw branch,quit.begin
 
 ; RETURN  ( u -- )
 ; Exit to BASIC with return code u.
@@ -7079,22 +7020,25 @@ endif
 paren_abort:
   call do_colon
   dw s0,fetch,sp_store
-  dw fs0,fetch,fsp,store
+  if floating_point_support and separated_f_stack
+    dw fs0,fetch,fsp,store
+  endif
 ;;  dw boot_question ; XXX OLD
   if debug
 ;;   dw question_branch,paren_abort.1
     ; XXX OLD
 ;;    dw one
 ;;    dw return
-    paren_abort.1: dw paren_dot_quote
-    dcs ' (ABORT) '
+    paren_abort.1:
+      dw paren_dot_quote
+      dcs ' (ABORT) '
 ;;    dw quit
   else
-;;    dw question_branch,quit.1
+;;    dw question_branch,quit.start
 ;;    dw one
 ;;    dw return
   endif
-  dw branch,quit.1
+  dw branch,quit.start
 ;  dw next ; XXX NEW TMP -- needed?
 
 ; .ERROR  ( -- )
@@ -7251,7 +7195,6 @@ throw.end:
   hdr _public,'ABORT'
 abort:
   ld hl,-1
-abort.1:
   push hl
   jp throw
 
@@ -7271,10 +7214,10 @@ paren_abort_quote:
     ; dw dup,dot,cr
   endif
   dw from_r,count,rot
-  dw question_branch,paren_abort_quote_.1
+  dw branch_if_false,paren_abort_quote.noop
   dw errmsg,two_store
   dw lit,-2,throw
-paren_abort_quote_.1:
+paren_abort_quote.noop:
   dw plus,to_r
   dw exit
 
@@ -7474,8 +7417,7 @@ cold.3:
 ;;  db cold.8-$-1
 
 ;;cold.6:
-  dw cls
-  dw boot_message
+  dw page,boot_message
 
 ;;cold.7:
 ;;cold.8:
@@ -7484,7 +7426,7 @@ cold.3:
 ;;  db cr_char,lf_char
 do_f_identify_patch:
   dw f_identify_patch
-;;  dw cr
+  dw cr
 ;;  dw file_question
 ;;  dw question_branch,cold.10
 ;;  dw cr
