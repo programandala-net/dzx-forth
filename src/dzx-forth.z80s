@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
 version: macro
-  db 'A-00-201501121603'
+  db 'A-00-201501121829'
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -31,7 +31,7 @@ version: macro
 ; ------------------------------
 ; XXX TODO 
 
-; 2015-01-11: bug in 'build', the machine resets.
+; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
 ;
 ; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should it be?
 ;
@@ -40,11 +40,6 @@ version: macro
 ; Check problems with backspace (char 8), depending on the ZX Spectrum ROM.
 ;
 ; See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM routines.
-;
-; Convert block update flags 0x7fff and 0x8000 to labels.
-;
-; 2015-01-10: FIXME: dw lit,2,border ; works: red border dw lit,two,border ;
-; cyan border!
 
 ; }}} **********************************************************
 ; Labels {{{
@@ -67,7 +62,7 @@ control_flow_stack_extensions:    equ yes
 warning_options:                  equ no ; XXX TODO does this causes trouble?
 
 ; XXX FIXME when yes, some things don't work fine:
-optimize_size:                    equ no ; if yes, the code will be smaller but slower
+size_optimization:                equ no ; if yes, the code will be smaller but slower
 
 floored_division:                 equ no  ; integer division method
 floating_point_support:           equ yes
@@ -88,7 +83,7 @@ top_prunes:             defl 0 ; XXX OLD ?
 ; ------------------------------
 ; Memory 
 
-start: equ 0x8000 ; start of DZX-Forth in memory
+start: equ 24000 ; start of DZX-Forth in memory
 
 cw: equ 2 ; cell size (bytes)
 fw: equ 4 ; floating point number size (bytes)
@@ -110,6 +105,12 @@ return_stack_size:            equ 256
 tib_size:                     equ 80        ; Terminal Input Buffer
 user_data_size:               equ 128
 word_buffer_size:             equ 31+5
+
+; ------------------------------
+; Blocks
+
+block_updated_mask: equ 0x8000
+block_number_mask:  equ 0x7fff
 
 ; ------------------------------
 ; DOS ; XXX OLD
@@ -377,18 +378,27 @@ jump: macro p1,p2
   ; depending on the configured optimization
   ; XXX FIXME -- this can not work?
   if nul p2
-    if optimize_size
+    if size_optimization
       jr p1
     else
       jp p1
     endif
   else 
-    if optimize_size
+    if size_optimization
       jr p1,p2
     else
       jp p1,p2
     endif
   endif
+  endm
+
+; ------------------------------
+; Debug
+
+show_depth macro
+  dw paren_dot_quote
+  dcs 'Depth is '
+  dw depth,dot,cr
   endm
 
 ; }}} **********************************************************
@@ -673,7 +683,7 @@ do_user_variable:
   ld d,(hl)
   ld hl,(user_data_pointer)
   add hl,de
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -728,6 +738,19 @@ paren_exit: ; XXX TODO rename 'paren_exit'
 execute:
   ret
 
+; @?EXECUTE  ( a -- )
+
+  hdr _public,'@?EXECUTE'
+fetch_question_execute:
+  pop hl
+  ld a,(hl)
+  inc hl
+  ld h,(hl)
+  ld l,a
+  or h
+  jp z,next
+  jp (hl)
+
 ; @EXECUTE  ( a -- )
 
   hdr _public,'@EXECUTE'
@@ -737,8 +760,6 @@ fetch_execute:
   inc hl
   ld h,(hl)
   ld l,a
-  or h
-  jp z,next
   jp (hl)
 
 ; CLIT  ( -- c )
@@ -766,7 +787,7 @@ lit:
   ld a,(bc)
   ld h,a
   inc bc
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -800,7 +821,7 @@ two_lit:
 sp_fetch:
   ld hl,0
   add hl,sp
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -820,7 +841,7 @@ sp_store:
   hdr _public,'RP@'
 rp_fetch:
   ld hl,(return_stack_pointer)
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -924,7 +945,7 @@ drop:
 dup:
   pop hl
   push hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -938,14 +959,14 @@ question_dup:
   pop hl
   ld a,l
   or h
-  if optimize_size
+  if size_optimization
     jr z,question_dup.end
   else
     jp z,question_dup.end
   endif
   push hl
 question_dup.end:
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -958,7 +979,7 @@ question_dup.end:
 swap:
   pop hl
   ex (sp),hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1077,7 +1098,7 @@ nip:
   pop hl
   inc sp
   inc sp
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1169,7 +1190,7 @@ two_nip:
   inc  sp
 push_de_hl: ; XXX this is DX-Forth's dpush
   push de
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1191,6 +1212,7 @@ depth:
 ; MAXDEPTH-.S  ( -- a )
 ; XXX NEW -- after Gforth
 ; max items shown by '.s'
+  ; XXX TODO -- make it optional
 
   hdr _public,'MAXDEPTH-.S'
 maxdepth_dot_s:
@@ -1200,11 +1222,9 @@ maxdepth_dot_s:
 ; .S  ( -- )
 ; XXX NEW -- after Gforth
 
-  ; XXX TODO -- finish and test
+  ; XXX TODO -- make it optional
   hdr _public,'.S'
 dot_s:
-  ; XXX FIXME it works but issues "compilation only"
-  ; at the end 
   call do_colon
   ; show the depth:
   dw depth
@@ -1214,28 +1234,16 @@ dot_s:
   dw c_lit
   db '>'
   dw emit,space
-  if 1;debug ; XXX INFORMER
-    dw paren_dot_quote
-    dcs 'at .s after printing the depth',cr_char
-  endif
   ; calculate the items to show:
   dw depth,zero,max,maxdepth_dot_s,fetch,min
-  if 1;debug ; XXX INFORMER
-    dw paren_dot_quote
-    dcs 'at .s before doing it',cr_char
-  endif
   ; do it:
-  dw dup,zero,paren_do,dot_s.end
+  dw dup,zero
+  dw paren_question_do,dot_s.end
 dot_s.do:
-  dw dup,i_,minus,pick,do
+  dw dup,i_,minus,pick,dot
   dw paren_loop,dot_s.do
 dot_s.end:
   dw drop
-  if 1;debug ; XXX INFORMER
-    dw paren_dot_quote
-    dcs 'at .s exit depth is '
-    dw depth,dot,cr
-  endif
   dw paren_exit
 
 ; }}} **********************************************************
@@ -1286,7 +1294,7 @@ c_fetch:
   pop hl
   ld l,(hl)
   ld h,0
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1417,8 +1425,8 @@ off.hl:
   hdr _public,'CTOGGLE'
 c_toggle:
   pop hl
+c_toggle.hl:
   pop de
-c_toggle.1:
   ld a,(hl)
   xor e
   ld (hl),a
@@ -1434,7 +1442,7 @@ byte_swap:
   pop de
   ld h,e
   ld l,d
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1453,7 +1461,7 @@ and_:
   ld a,d
   and h
   ld h,a
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1472,7 +1480,7 @@ or_:
   ld a,d
   or h
   ld h,a
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1491,7 +1499,7 @@ xor_:
   ld a,d
   xor h
   ld h,a
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1553,7 +1561,7 @@ negate_hlde:
 invert:
   pop hl
   call negate_hl.1
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1584,7 +1592,7 @@ d_to_s: equ drop
 negate:
   pop hl
   call negate_hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1597,7 +1605,7 @@ negate:
 abs:
   pop hl
   call abs_hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1630,7 +1638,7 @@ plus:
 plus_de:
   pop hl
   add hl,de
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1645,7 +1653,7 @@ minus:
   pop de
   pop hl
   call hl_minus_de_to_hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1702,7 +1710,7 @@ m_plus:
 one_plus:
   pop hl
   inc hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1717,7 +1725,7 @@ two_plus:
   pop hl
   inc hl
   inc hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1731,7 +1739,7 @@ two_plus:
 one_minus:
   pop hl
   dec hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -1746,7 +1754,7 @@ two_minus:
   pop hl
   dec hl
   dec hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -2100,7 +2108,7 @@ m_star_slash.end:
 two_star:
   pop hl
   add hl,hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -2114,7 +2122,7 @@ two_star:
 two_slash:
   pop hl
   call sra_hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -2130,7 +2138,7 @@ u_two_slash:
   or a
   ld a,h
   call sra_hl.1
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -2327,7 +2335,7 @@ max.2:
   jp c,max.3
   ex de,hl
 max.3:
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -2569,7 +2577,8 @@ to_number.1:
 to_number.end:
   dw paren_exit    ; then
 
-; NUMBER?  ( ca u -- d -1 | 0 )
+; NUMBER?  ( ca u -- d true | false )
+; Convert a string to a double number.
 ;        over c@ [char] - = over 0> and dup >r 1
 ;        and /string over c@ [char] . > and 0 0
 ;        2swap ?dup if >number dpl on dup if 1-
@@ -2579,7 +2588,7 @@ to_number.end:
 
   hdr _public,'NUMBER?'
 number_question:
-  call do_colon    ; convert string to double number
+  call do_colon
   if debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'number_question: '
@@ -2831,7 +2840,7 @@ packed:
   pop de
   ld (hl),e
   pop bc
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -2887,14 +2896,14 @@ scan:
 scan.1:
   ld a,c
   or b
-  if optimize_size
+  if size_optimization
     jr z,scan.2
   else
     jp z,scan.2
   endif
   ld a,e
   cp (hl)
-  if optimize_size
+  if size_optimization
     jr z,scan.2
   else
     jp z,scan.2
@@ -2934,13 +2943,13 @@ skip.1:
 ; -TRAILING  ( ca u1 -- ca u2 )
 
   hdr _public,'-TRAILING'
-dtrai:
+minus_trailing:
   pop de
   pop hl
   push hl
   add hl,de
   ex de,hl
-dtrai.1:
+minus_trailing.1:
   dec de
   ld a,l
   or h
@@ -2949,7 +2958,7 @@ dtrai.1:
   cp ' '
   jp nz,push_hl
   dec hl
-  jp dtrai.1
+  jp minus_trailing.1
 
 ; /STRING  ( ca1 u1 n -- ca2 u2 )
 ;   rot over + -rot -
@@ -2962,7 +2971,7 @@ slash_string:
   ex (sp),hl ; (sp)=u2 hl=ca1
   add hl,de ; hl=ca2
   ex (sp),hl ; (sp)=ca2 hl=u2
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -3009,7 +3018,7 @@ patch_compare_strings:
   ld l,(hl)
   or l ; case sensitive search?
   ld hl,compare_strings_case_insensitive ; routine
-  if optimize_size
+  if size_optimization
     jr z,patch_compare_strings.end
   else
     jp z,patch_compare_strings.end
@@ -3111,7 +3120,7 @@ compare.2:
   push af
 compare.compare_strings: equ $+1
   call 0 ; modifed
-  if optimize_size
+  if size_optimization
     jr z,compare.4
   else
     jp z,compare.4
@@ -3371,7 +3380,13 @@ branch_if_true:
   ld a,l
   or h
   jp nz,branch
-  jp question_branch.1
+  if size_optimization
+    jr question_branch.1
+  else
+    inc bc
+    inc bc
+    jp next
+  endif
 
 ; ?BRANCH  ( flag -- )
 
@@ -3384,7 +3399,11 @@ branch_if_zero:
   pop hl
   ld a,l
   or h
-  jp z,branch
+  if size_optimization
+    jr z,branch
+  else
+    jp z,branch
+  endif
 question_branch.1:
   inc bc
   inc bc
@@ -3729,7 +3748,7 @@ i_.2:
   ld h,(hl)
   ld l,a
   add hl,de
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -4584,10 +4603,11 @@ pause:
   ; XXX TODO -- use a self-modifing JP instead?
   call fetch_execute
 pause.action: ; XXX TODO rename this label
-  dw 0   ; patched by COLD
+  dw noop   ; patched by COLD
 
 ; KEY?  ( -- flag )
 
+  ; XXX FIXME
   hdr _public,'KEY?'
 key_question:
   ld hl,0 ; false
@@ -4995,14 +5015,14 @@ smudge:
   ld e,smudge_mask
 smudge.1:
   push de
-; jp xnfa
+;  jp xnfa ; XXX OLD -- already commented out in DX-Forth
 
 ; XNFA  ( x -- )
 ;   toggle nfa bit
 
 xnfa:
   ld hl,(last.nfa)
-  jp c_toggle.1
+  jp c_toggle.hl
 
 ; HEADER  ( xt|0 "name" -- )
 
@@ -5151,24 +5171,41 @@ build:
   hdr _public,':'
 colon:
   call do_colon
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'colon',cr_char
+    show_depth
+  endif
   dw lit,do_colon
   dw build
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'colon after build',cr_char
+    show_depth
+  endif
   dw smudge
 colon.1:
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'colon.1',cr_char
+    show_depth
   endif
   dw bal,off
   dw store_csp
   if control_flow_stack_extensions
     dw sp_fetch,cs0,store
   endif
-  dw right_bracket
-  if 1;debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
-    dcs 'at colon exit depth is '
-    dw depth,dot,cr
+    dcs 'colon after control flow',cr_char
+    show_depth
+  endif
+  dw right_bracket
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'at colon exit',cr_char
+    show_depth
+    dw dup,dot,cr,cr
   endif
   dw paren_exit
 
@@ -5215,6 +5252,8 @@ semicolon:
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'semicolon',cr_char
+    show_depth
+    dw dup,dot,cr
   endif
   dw exit
   if 0;debug ; XXX INFORMER
@@ -5239,6 +5278,8 @@ semicolon:
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'semicolon exit',cr_char
+    show_depth
+    dw dup,dot,cr
   endif
   dw paren_exit
 
@@ -5488,7 +5529,7 @@ aka.end:
   hdr _public,'TRUE'
 true:
   ld hl,-1
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -5500,7 +5541,7 @@ true:
   hdr _public,'FALSE'
 false:
   ld hl,0
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -5787,7 +5828,7 @@ current.variable:
   hdr _hidden,'GET-CONTEXT'
 get_context:
   ld hl,(context.variable)
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -5799,7 +5840,7 @@ get_context:
   hdr _public,'GET-CURRENT'
 get_current:
   ld hl,(current.variable)
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -5927,6 +5968,7 @@ case_sensitive_search_user_variable: equ 44
 
 ; SYS?  ( -- flag ) sys@ 0<>
 
+  ; XXX OLD
   hdr _hidden,'SYS?'
 sys_question:
   ld hl,sys.variable
@@ -6365,7 +6407,7 @@ question_defined:
   call do_colon
   dw zero_equals
   dw paren_abort_quote
-  dcs 'is undefined'
+  dcs 'undefined word'
   dw paren_exit
 
 ; [ ( -- )
@@ -7036,6 +7078,9 @@ interpret.not_found:
     dw dup,decimal,dot,cr,bye
   endif
 
+  ; XXX TODO -- factor out to a new word the number recognition with prefixes
+  ; -- see Gforth's '>number', 'number?', 'snumber?'...
+
   dw c_lit
   db '$'
   dw paren_of,interpret.check_binary
@@ -7078,9 +7123,10 @@ interpret.no_prefix_found: ; endcase
     ; dw dup,dot ; case selector
   endif
   dw drop ; discard the case selector
+  ; XXX changed: it ran into .remove_the_prefix when no prefix was found
+  ; XXX TODO omit the jump when size_optimization is on:
   dw branch,interpret.number_question
 
-  ; XXX FIXME why run into .remove_the_prefix if no prefix was found?
   ; XXX FIXME maybe a jump to .number_question would be faster?
 
 interpret.remove_the_prefix:
@@ -7258,7 +7304,7 @@ paren_refill.1:
   dw lit,tib
   dw dup
   dw c_lit
-  db 32 ; XXX TMP -- ZX Spectrum's chars per line; XXX TODO use a variable instead?
+  db 32*2-1 ; XXX TMP -- ZX Spectrum's chars per line; XXX TODO use a variable instead?
   dw cr,accept
 paren_refill.2:
   dw tick_source,two_store
@@ -7758,7 +7804,7 @@ cold:
 ;  jp bye
 
   ; patch 'pause' to do nothing
-  ld hl,0
+  ld hl,noop
   ld (pause.action),hl
 
   ; delete the last key
@@ -8201,7 +8247,7 @@ s_quote:
   db '"'
   dw parse_dollar
   dw compiling_question
-  dw question_branch,s_quote.end
+  dw branch_if_false,s_quote.end
   dw s_literal
 s_quote.end:
   dw paren_exit
@@ -8457,6 +8503,8 @@ path:
 ;        2dup [char] : scan dup if 1 /string 2swap
 ;        then 2drop
 
+  ; XXX TODO simpler, because ':' always is at the same position
+
   hdr _public,'-PATH'
 minus_path:
   call do_colon
@@ -8477,7 +8525,7 @@ minus_path.1:
   hdr _hidden,'FILETYPE?'  ; get filetype length
 filetype_question:
   call do_colon
-  dw minus_path
+  dw minus_path ; XXX why?
   dw c_lit
   db '.'
   dw scan,nip
@@ -8499,9 +8547,9 @@ plus_ext.1:
   dw paren_s_quot
   dcs '.'
   dw two_rot
-  dw dtrai    ; trim trailing blanks
+  dw minus_trailing
   dw c_lit
-  db filename_size-5
+  db filename_size-5 ; XXX why -5?
   dw min
   dw zbuf,fetch    ; unused
   dw one_plus
@@ -8689,35 +8737,36 @@ set_fcb.19:
 old_user:
   db 255    ; 255 = ignore
 
-; GETUSR  ( -- u )
-;   get user
-
-  hdr _public,'GETUSR'
-getusr:
-  call get_current_user
-  jp push_a
-
-; SETUSR  ( u -- )
-;   set user
-
-  hdr _public,'SETUSR'
-setusr:
-  call get_current_user
-  ld (old_user),a  ; save current user
-  pop hl
-  ld a,l
-setusr.1:
-  cp 255
-  call nz,set_current_user
-  jp next
-
-; RSTUSR  ( -- )
-;   restore user
-
-  hdr _public,'RSTUSR'
-rstusr:
-  ld a,(old_user)
-  jp setusr.1
+; XXX OLD
+;;; GETUSR  ( -- u )
+;;;   get user
+;;
+;;  hdr _public,'GETUSR'
+;;getusr:
+;;  call get_current_user
+;;  jp push_a
+;;
+;;; SETUSR  ( u -- )
+;;;   set user
+;;
+;;  hdr _public,'SETUSR'
+;;setusr:
+;;  call get_current_user
+;;  ld (old_user),a  ; save current user
+;;  pop hl
+;;  ld a,l
+;;setusr.1:
+;;  cp 255
+;;  call nz,set_current_user
+;;  jp next
+;;
+;;; RSTUSR  ( -- )
+;;;   restore user
+;;
+;;  hdr _public,'RSTUSR'
+;;rstusr:
+;;  ld a,(old_user)
+;;  jp setusr.1
 
 ; REC@  ( a -- +d )
 ;   dup >r @ r> 2+ c@ 7 0 do d2* loop
@@ -8823,7 +8872,7 @@ use:
   call hl_by_de_to_hlde_unsigned
   ld hl,(hbuf.1)
   add hl,de
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -8880,14 +8929,14 @@ ior:
   pop hl
   ld a,h
   or l
-  if optimize_size
+  if size_optimization
     jr z,ior.end
   else
     jp z,ior.end
   endif
   ld h,0xfe
 ior.end:
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -9007,30 +9056,32 @@ xf5:
   hdr _public,'FILE-SIZE'
 file_size:
   call do_colon
-  dw three,stfh
-  dw dup,zero_equals
-  dw question_branch,fsiz.1
-  dw uid,c_fetch
-  dw setusr
-  dw xf5
-  dw fcb
-  dw c_lit
-  db 16
-  dw bdos,drop
-  dw xf5
-  dw fcb
-  dw c_lit
-  db 35
-  dw bdos,drop
-  dw rstusr
-fsiz.1:
-  dw fcb
-  dw c_lit
-  db 33
-  dw plus
-  dw rec_fetch
-  dw rot
-  dw ior
+; XXX TODO
+; XXX OLD
+;;  dw three,stfh
+;;  dw dup,zero_equals
+;;  dw question_branch,fsiz.1
+;;  dw uid,c_fetch
+;;  dw setusr
+;;  dw xf5
+;;  dw fcb
+;;  dw c_lit
+;;  db 16
+;;  dw bdos,drop
+;;  dw xf5
+;;  dw fcb
+;;  dw c_lit
+;;  db 35
+;;  dw bdos,drop
+;;  dw rstusr
+;;fsiz.1:
+;;  dw fcb
+;;  dw c_lit
+;;  db 33
+;;  dw plus
+;;  dw rec_fetch
+;;  dw rot
+;;  dw ior
   dw paren_exit
 
 ; CLOSE-FILE  ( fid -- ior )
@@ -9041,26 +9092,28 @@ fsiz.1:
   hdr _public,'CLOSE-FILE'
 close_file:
   call do_colon
-  dw three,stfh
-  dw dup
-  dw question_branch,close_file.1
-  dw ior
-  dw paren_exit
-close_file.1:
-  dw use,c_store
-  dw uid,c_fetch
-  dw setusr
-  dw fcb
-  dw c_lit
-  db 16
-close_file.2:
-  dw bdos
-  dw rstusr
-  dw c_lit
-  db 255
-  dw equals
-  dw two
-  dw qior
+; XXX TODO
+; XXX OLD
+;;  dw three,stfh
+;;  dw dup
+;;  dw question_branch,close_file.1
+;;  dw ior
+;;  dw paren_exit
+;;close_file.1:
+;;  dw use,c_store
+;;  dw uid,c_fetch
+;;  dw setusr
+;;  dw fcb
+;;  dw c_lit
+;;  db 16
+;;close_file.2:
+;;  dw bdos
+;;  dw rstusr
+;;  dw c_lit
+;;  db 255
+;;  dw equals
+;;  dw two
+;;  dw qior
   dw paren_exit
 
 ; R/O  ( -- fam )
@@ -9095,29 +9148,31 @@ bin: equ  next
   hdr _hidden,'OPEN1'
 open1:
   call do_colon
-  dw getfh,zero_equals
-  dw question_branch,open1.1
-  dw two_drop
-  dw c_lit
-  db 4
-  dw ior
-  if  debug
-    dw paren_dot_quote
-    dcs 'UNNEST_OPEN1'
-  endif
-  dw unnest
-  dw paren_exit
-open1.1:
-  dw one_plus
-  dw use,c_store
-  dw tfnam,count
-  dw fcb
-  dw set_fcb
-  dw dup
-  dw uid,c_store
-  dw setusr
-  dw zero,zero
-  dw rwpst
+  ; XXX TODO
+  ; XXX OLD
+;;  dw getfh,zero_equals
+;;  dw question_branch,open1.1
+;;  dw two_drop
+;;  dw c_lit
+;;  db 4
+;;  dw ior
+;;  if  debug
+;;    dw paren_dot_quote
+;;    dcs 'UNNEST_OPEN1'
+;;  endif
+;;  dw unnest
+;;  dw paren_exit
+;;open1.1:
+;;  dw one_plus
+;;  dw use,c_store
+;;  dw tfnam,count
+;;  dw fcb
+;;  dw set_fcb
+;;  dw dup
+;;  dw uid,c_store
+;;  dw setusr
+;;  dw zero,zero
+;;  dw rwpst
   dw paren_exit
 
 ; OPEN2  ( fn# -- fid flag )
@@ -9126,14 +9181,16 @@ open1.1:
   hdr _hidden,'OPEN2'
 open2:
   call do_colon
-  dw fh
-  dw fcb
-  dw rot
-  dw bdos
-  dw c_lit
-  db 255
-  dw equals
-  dw rstusr
+; XXX TODO
+; XXX OLD
+;;  dw fh
+;;  dw fcb
+;;  dw rot
+;;  dw bdos
+;;  dw c_lit
+;;  db 255
+;;  dw equals
+;;  dw rstusr
   dw paren_exit
 
 ; OPEN3  ( flag err -- | ior )
@@ -9223,11 +9280,14 @@ tfcb:
 
   hdr _public,'DELETE-FILE'
 delete_file:
-  call do_colon
-  dw tfcb,setusr
-  dw c_lit
-  db 19
-  dw branch,close_file.2
+  ret
+; XXX TODO
+; XXX OLD
+;;  call do_colon
+;;  dw tfcb,setusr
+;;  dw c_lit
+;;  db 19
+;;  dw branch,close_file.2
 
 ; RENAME-FILE  ( a1 u1 a2 u2 -- ior )
 ;          2swap >fcb setusr >r >fcb drop r@ c@
@@ -9238,38 +9298,40 @@ delete_file:
   hdr _public,'RENAME-FILE'
 rename_file:
   call do_colon
-  dw two_swap
-  dw tfcb,setusr,to_r
-  dw tfcb,drop
-  dw r_fetch,c_fetch
-  dw over,c_store
-  dw dup
-  dw c_lit
-  db 15
-  dw bdos
-  dw c_lit
-  db 255
-  dw equals
-  dw question_branch,rename_file.1
-  dw r_fetch
-  dw c_lit
-  db 16
-  dw plus
-  dw c_lit
-  db 16
-  dw cmove,from_r
-  dw c_lit
-  db 23
-  dw branch,close_file.2
-rename_file.1:
-  dw c_lit
-  db 16
-  dw bdos
-  dw from_r,two_drop
-  dw c_lit
-  db 5
-  dw ior
-  dw rstusr
+; XXX TODO
+; XXX OLD
+;;  dw two_swap
+;;  dw tfcb,setusr,to_r
+;;  dw tfcb,drop
+;;  dw r_fetch,c_fetch
+;;  dw over,c_store
+;;  dw dup
+;;  dw c_lit
+;;  db 15
+;;  dw bdos
+;;  dw c_lit
+;;  db 255
+;;  dw equals
+;;  dw question_branch,rename_file.1
+;;  dw r_fetch
+;;  dw c_lit
+;;  db 16
+;;  dw plus
+;;  dw c_lit
+;;  db 16
+;;  dw cmove,from_r
+;;  dw c_lit
+;;  db 23
+;;  dw branch,close_file.2
+;;rename_file.1:
+;;  dw c_lit
+;;  db 16
+;;  dw bdos
+;;  dw from_r,two_drop
+;;  dw c_lit
+;;  db 5
+;;  dw ior
+;;  dw rstusr
   dw paren_exit
 
 ; OFFS  ( -- x )
@@ -9481,14 +9543,16 @@ fwrit:
   hdr _public,'READ-FILE'
 read_file:
   call do_colon
-  dw one,rdini
-  dw uid,c_fetch
-  dw setusr
-  dw fread
-  dw rstusr
-  dw nip
-  dw minus
-  dw zero
+; XXX TODO
+; XXX OLD
+;;  dw one,rdini
+;;  dw uid,c_fetch
+;;  dw setusr
+;;  dw fread
+;;  dw rstusr
+;;  dw nip
+;;  dw minus
+;;  dw zero
   dw paren_exit
 
 ; WRITE-FILE  ( a u fid -- ior )
@@ -9498,16 +9562,18 @@ read_file:
   hdr _public,'WRITE-FILE'
 write_file:
   call do_colon
-  dw two,wrini
-  dw uid,c_fetch
-  dw setusr
-  dw fwrit
-  dw rstusr
-  dw nip
-  dw zero_not_equals
-  dw c_lit
-  db 255
-  dw qior
+; XXX TODO
+; XXX OLD
+;;  dw two,wrini
+;;  dw uid,c_fetch
+;;  dw setusr
+;;  dw fwrit
+;;  dw rstusr
+;;  dw nip
+;;  dw zero_not_equals
+;;  dw c_lit
+;;  db 255
+;;  dw qior
   dw paren_exit
 
 ; WRITE-LINE  ( ca u fileid -- ior )
@@ -9765,7 +9831,7 @@ nscr:
 
   hdr _public,'EMPTY-BUFFERS'
 empty_buffers:
-  ld hl,0x7fff
+  ld hl,block_number_mask
   ld (blk_number.variable),hl
   jp next
 
@@ -9777,7 +9843,7 @@ update:
   call do_colon
   dw question_open
   dw blk_number,fetch
-  dw lit,0x8000
+  dw lit,block_updated_mask
   dw or_
   dw blk_number,store
   dw paren_exit
@@ -9844,7 +9910,7 @@ save_buffers:
   dw blk_number,fetch,zero_less
   dw question_branch,save_buffers.end
   dw blk_number,fetch
-  dw lit,0x7fff,and_
+  dw lit,block_number_mask,and_
   dw dup,blk_number,store
   dw question_blk    ; block in range?
   dw one,blk_rw
@@ -9881,7 +9947,7 @@ block:
   call do_colon
   dw question_open
   dw blk_number,fetch
-  dw lit,0x7fff
+  dw lit,block_number_mask
   dw and_,over,minus
   dw question_branch,block.1
   dw dup,buffer,drop
@@ -10401,7 +10467,7 @@ floatp:
   pop hl
   ld de,fw
   add hl,de
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -10416,7 +10482,7 @@ floats:
   pop hl
   add hl,hl
   add hl,hl
-  if optimize_size
+  if size_optimization
     jp push_hl
   else
     push hl
@@ -12152,7 +12218,7 @@ paren_f3.3:
   dw paren_to,exn
   dw fbuf
   dw max_precision
-  dw dtrai
+  dw minus_trailing
   dw less_number_sign
   dw paren_exit
 
