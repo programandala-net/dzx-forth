@@ -1,23 +1,41 @@
 ; DZX-Forth {{{
+
+version: macro
+  db 'A-00-201501120126'
+  endm
+
 ; A direct-threaded Forth for ZX Spectrum
+;
 ; (Project under development)
 ;
 ; DZX-Forth is a fork of CP/M DX-Forth v4.09 (2014-12)
 
-; 2014-11-03: Start.
+; Copyright (C) 2014,2015 Marcos Cruz (programandala.net)
+;
+; This program is free software; you can redistribute it and/or modify it under
+; the terms of the GNU General Public License as published by the Free Software
+; Foundation; either version 3 of the License, or (at your option) any later
+; version.
+;
+; This program is distributed in the hope that it will be useful, but WITHOUT
+; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+; details.
+;
+; You should have received a copy of the GNU General Public License along with
+; this program; if not, see <http://gnu.org/licenses>.
 
-version: macro
-  db 'A-00-201501101649'
-  endm
+
+; 2014-11-03: Start.
 
 ; ------------------------------
 ; XXX TODO 
 
-; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should it be?
-
-; Rename the 'header' word to '(header)'
+; 2015-01-11: bug in 'build', the machine resets.
 ;
-; Rename the 'hdr' macro to 'header'
+; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should it be?
+;
+; Rename the 'header' word to '(header)' and the 'hdr' macro to 'header'
 ;
 ; Check problems with backspace (char 8), depending on the ZX Spectrum ROM.
 ;
@@ -25,9 +43,8 @@ version: macro
 ;
 ; Convert block update flags 0x7fff and 0x8000 to labels.
 ;
-; 2015-01-10: FIXME: 
-;   dw lit,2,border ; works: red border
-;   dw lit,two,border ; cyan border!
+; 2015-01-10: FIXME: dw lit,2,border ; works: red border dw lit,two,border ;
+; cyan border!
 
 ; }}} **********************************************************
 ; Labels {{{
@@ -44,10 +61,13 @@ yes:    equ not no
 ; ------------------------------
 ; Conditional assembly
 
-debug:                            equ yes ; debugging messages?
+debug:                            equ no ; debugging messages?
 case_insensitive_names:           equ yes
 control_flow_stack_extensions:    equ yes
 warning_options:                  equ yes
+
+; XXX FIXME when yes, some things don't work fine:
+optimize_size:                    equ no ; if yes, the code will be smaller but slower
 
 floored_division:                 equ no  ; integer division method
 floating_point_support:           equ yes
@@ -129,24 +149,7 @@ f_stack_size:     defl 0 ; bytes
 
   include zx_spectrum_system_variables.z80s
   include zx_spectrum_rom_routines.z80s
-
-; XXX TODO complete
-caps_char:      equ 0x06 ; toggle caps lock
-edit_char:      equ 0x07 ; edit
-left_char:      equ 0x08 ; cursor left (backspace)
-bs_char:        equ 0x08 ; backspace (cursor left)
-right_char:     equ 0x09 ; cursor right
-down_char:      equ 0x0a ; cursor down
-up_char:        equ 0x0b ; cursor up
-lf_char:        equ 0x0a ; line feed ; XXX OLD
-delete_char:    equ 0x0c ; delete (backspace)
-ff_char:        equ 0x0c ; form feed (printer only)
-cr_char:        equ 0x0d ; carriage return (enter key)
-graphics_char:  equ 0x0f ; toggle graphics mode
-at_char:        equ 0x16 ; at
-tab_char:       equ 0x17 ; tab (screen only)
-esc_char:       equ edit_char
-sp_char:        equ 0x20 ; space
+  include zx_spectrum_char_codes.z80s
 
 black_color:    equ 0
 blue_color:     equ 1
@@ -156,6 +159,11 @@ green_color:    equ 4
 cyan_color:     equ 5
 yellow_color:   equ 6
 white_color:    equ 7
+
+lf_char:                    equ 0x0a ; line feed ; XXX OLD
+ff_char:                    equ 0x0c ; form feed (printer only)
+cursor_left_word_char:      equ 0x18 ; XXX TODO -- implement
+cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 
 ; }}} **********************************************************
 ; Description {{{
@@ -368,6 +376,28 @@ save_ip: macro
   ld l,c
   ld (saved_ip),hl
 endm
+
+; ------------------------------
+; Size-optimized jumps
+
+jump: macro p1,p2
+  ; Create a relative or absolute jump,
+  ; depending on the configured optimization
+  ; XXX FIXME -- this can not work?
+  if nul p2
+    if optimize_size
+      jr p1
+    else
+      jp p1
+    endif
+  else 
+    if optimize_size
+      jr p1,p2
+    else
+      jp p1,p2
+    endif
+  endif
+  endm
 
 ; }}} **********************************************************
 ; Boot {{{
@@ -651,8 +681,12 @@ do_user_variable:
   ld d,(hl)
   ld hl,(user_data_pointer)
   add hl,de
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; NOOP  ( -- )
 
@@ -686,7 +720,7 @@ unnest:
   hdr _public,'(EXIT)'
 paren_exit: ; XXX TODO rename 'paren_exit'
   ld bc,next
-;;exit.1:
+;;exit.1: ; XXX OLD -- not used
   push bc
   ld hl,(return_stack_pointer)  ; pop IP from return stack
   ld c,(hl)
@@ -740,8 +774,12 @@ lit:
   ld a,(bc)
   ld h,a
   inc bc
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; 2LIT  ( -- d )
 
@@ -770,8 +808,12 @@ two_lit:
 sp_fetch:
   ld hl,0
   add hl,sp
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; SP!  ( a -- )
 
@@ -786,8 +828,12 @@ sp_store:
   hdr _public,'RP@'
 rp_fetch:
   ld hl,(return_stack_pointer)
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; RP!  ( a -- )
 
@@ -838,6 +884,7 @@ r_fetch:
   hdr _public,'2>R'
 two_to_r:
   ld hl,(return_stack_pointer)
+  ; XXX TODO faster per macro loop with 'inc hl'?
   ld de,-cw*2
   add hl,de
   ld (return_stack_pointer),hl
@@ -885,8 +932,12 @@ drop:
 dup:
   pop hl
   push hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; ?DUP  ( x -- 0 | x x )
 
@@ -895,11 +946,19 @@ question_dup:
   pop hl
   ld a,l
   or h
-  jp z,question_dup.1
+  if optimize_size
+    jr z,question_dup.end
+  else
+    jp z,question_dup.end
+  endif
   push hl
-question_dup.1:
-  push hl
-  jp next
+question_dup.end:
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; SWAP  ( x1 x2 -- x2 x1 )
 
@@ -907,8 +966,12 @@ question_dup.1:
 swap:
   pop hl
   ex (sp),hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; OVER  ( x1 x2 -- x1 x2 x1 )
 
@@ -1022,8 +1085,12 @@ nip:
   pop hl
   inc sp
   inc sp
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; TUCK  ( x1 x2 -- x2 x1 x2 )
 
@@ -1110,8 +1177,12 @@ two_nip:
   inc  sp
 push_de_hl: ; XXX this is DX-Forth's dpush
   push de
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; DEPTH  ( -- u )
 ;   sp@ s0 @ swap - 2/
@@ -1208,8 +1279,12 @@ c_fetch:
   pop hl
   ld l,(hl)
   ld h,0
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; C!  ( c ca -- )
 
@@ -1352,8 +1427,12 @@ byte_swap:
   pop de
   ld h,e
   ld l,d
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; AND  ( x1 x2 -- x3 )
 
@@ -1367,8 +1446,12 @@ and_:
   ld a,d
   and h
   ld h,a
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; OR  ( x1 x2 -- x3 )
 
@@ -1382,8 +1465,12 @@ or_:
   ld a,d
   or h
   ld h,a
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; XOR  ( x1 x2 -- x3 )
 
@@ -1397,8 +1484,12 @@ xor_:
   ld a,d
   xor h
   ld h,a
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 abs_hl:
   ld a,h
@@ -1455,8 +1546,12 @@ negate_hlde:
 invert:
   pop hl
   call negate_hl.1
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; S>D  ( n -- d )
 
@@ -1482,8 +1577,12 @@ d_to_s: equ drop
 negate:
   pop hl
   call negate_hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; ABS  ( n -- +n )
 
@@ -1491,8 +1590,12 @@ negate:
 abs:
   pop hl
   call abs_hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; DNEGATE  ( d1 -- d2 )
 
@@ -1520,8 +1623,13 @@ plus:
 plus_de:
   pop hl
   add hl,de
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; -  ( x1 x2 -- x3 )
 
@@ -1530,8 +1638,13 @@ minus:
   pop de
   pop hl
   call hl_minus_de_to_hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; D+  ( xd1 xd2 -- xd3 )
 
@@ -1582,8 +1695,13 @@ m_plus:
 one_plus:
   pop hl
   inc hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; 2+  ( x1 -- x2 )
 
@@ -1592,8 +1710,13 @@ two_plus:
   pop hl
   inc hl
   inc hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; 1-  ( x1 -- x2 )
 
@@ -1601,8 +1724,13 @@ two_plus:
 one_minus:
   pop hl
   dec hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; 2-  ( x1 -- x2 )
 
@@ -1611,8 +1739,13 @@ two_minus:
   pop hl
   dec hl
   dec hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; ------------------------------
 ; Multiplication primitives
@@ -1960,8 +2093,13 @@ m_star_slash.end:
 two_star:
   pop hl
   add hl,hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; 2/  ( n1 -- n2 )
 
@@ -1969,8 +2107,13 @@ two_star:
 two_slash:
   pop hl
   call sra_hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; U2/  ( x1 -- x2 )
 
@@ -1980,8 +2123,13 @@ u_two_slash:
   or a
   ld a,h
   call sra_hl.1
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; D2*  ( xd1 -- xd2 )
 
@@ -2076,7 +2224,7 @@ zero_not_equals_hl:
 equals:
   pop de
   pop hl
-equals.1:
+equals.de_hl:
   call compare_de_hl_unsigned
   jp z,true
   jp false
@@ -2096,7 +2244,7 @@ not_equals:
   hdr _public,'0<'
 zero_less:
   pop hl
-zero_less.1:
+zero_less.hl:
   add hl,hl
 zero_less.2:
   jp c,true
@@ -2135,7 +2283,7 @@ greater:
 u_less:
   pop de
   pop hl
-u_less.1:
+u_less.de_hl:
   call compare_de_hl_unsigned
   jp c,true
   jp false
@@ -2145,9 +2293,9 @@ u_less.1:
   hdr _public,'U>'
 u_greater:
   pop hl
-u_greater.1:
+u_greater.hl:
   pop de
-  jp u_less.1
+  jp u_less.de_hl
 
 ; 0MAX  ( n1 -- n2 )
 ;   0 max
@@ -2172,8 +2320,13 @@ max.2:
   jp c,max.3
   ex de,hl
 max.3:
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; MIN  ( n1 n2 -- n1 | n2 )
 ;   2dup > if swap then drop
@@ -2207,6 +2360,7 @@ u_min:
 
 ; WITHIN  ( n1|u1 n2|u2 n3|u3 -- flag )
 ;   over - >r - r> u<
+; XXX checked
 
   hdr _public,'WITHIN'
 within:
@@ -2215,7 +2369,7 @@ within:
   call hl_minus_de_to_hl
   ex (sp),hl
   call hl_minus_de_to_hl
-  jp u_greater.1
+  jp u_greater.hl
 
 ; BETWEEN  ( n1|u1 n2|u2 n3|u3 -- flag )
 ;   over - -rot - u< 0=
@@ -2252,7 +2406,7 @@ d_equals:
   pop de
   pop hl
   jp nz,false
-  jp equals.1
+  jp equals.de_hl
 
 ; D0<  ( d -- flag )
 ;   swap drop 0<
@@ -2261,7 +2415,7 @@ d_equals:
 d_zero_less:
   pop hl
   pop de
-  jp zero_less.1
+  jp zero_less.hl
 
 ; D<  ( d1 d2 -- flag ) rot 2dup = if 2drop u< exit then 2nip >
 
@@ -2292,7 +2446,7 @@ d_u_less:
   pop hl
   jp c,true
   jp nz,false
-  jp u_less.1
+  jp u_less.de_hl
 
 ; DMIN  ( d1 d2 -- d1 | d2 )
 ;   2over 2over d< 0= if 2swap then 2drop
@@ -2670,8 +2824,13 @@ packed:
   pop de
   ld (hl),e
   pop bc
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; PLACE  ( ca1 u ca2 -- )
 ;   packed drop
@@ -2721,10 +2880,18 @@ scan:
 scan.1:
   ld a,c
   or b
-  jp z,scan.2
+  if optimize_size
+    jr z,scan.2
+  else
+    jp z,scan.2
+  endif
   ld a,e
   cp (hl)
-  jp z,scan.2
+  if optimize_size
+    jr z,scan.2
+  else
+    jp z,scan.2
+  endif
   inc hl
   dec bc
   jp scan.1
@@ -2788,8 +2955,13 @@ slash_string:
   ex (sp),hl ; (sp)=u2 hl=ca1
   add hl,de ; hl=ca2
   ex (sp),hl ; (sp)=ca2 hl=u2
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 ; XXX OLD 
 ;;; CAPS  ( -- )
@@ -2830,7 +3002,11 @@ patch_compare_strings:
   ld l,(hl)
   or l ; case sensitive search?
   ld hl,compare_strings_case_insensitive ; routine
-  jp z,patch_compare_strings.end
+  if optimize_size
+    jr z,patch_compare_strings.end
+  else
+    jp z,patch_compare_strings.end
+  endif
   ld hl,compare_strings_case_sensitive ; routine
 patch_compare_strings.end:
   ex de,hl
@@ -2928,7 +3104,11 @@ compare.2:
   push af
 compare.compare_strings: equ $+1
   call 0 ; modifed
-  jp z,compare.4
+  if optimize_size
+    jr z,compare.4
+  else
+    jp z,compare.4
+  endif
   pop bc
 compare.3:
   pop bc
@@ -3542,8 +3722,13 @@ i_.2:
   ld h,(hl)
   ld l,a
   add hl,de
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+
 
 if 0 ; XXX commented out in DX-Forth
 
@@ -4405,6 +4590,16 @@ key_question:
   dec hl  ; true
   jp push_hl
 
+if 0 ; XXX TODO -- alternative
+key_question:
+  ld hl,0 ; false
+  ld a,(sys_last_k)
+  and a
+  jp z,push_hl
+  dec hl  ; true
+  jp push_hl
+endif
+
 ; XXX OLD
 ;;  call do_colon
 ;;  dw lit,vkeyq   ; (vkeyq)
@@ -4590,31 +4785,31 @@ printer:
 ; }}} **********************************************************
 ; Compiler {{{
 
-; WFIND  ( ca wid -- 0 | xt nfa -1 | xt nfa 1 )
+; WORDLIST-FIND  ( ca wid -- 0 | xt nfa -1 | xt nfa 1 )
 
-  hdr _hidden,'WFIND'
-wfind:
+  hdr _public,'WORDLIST-FIND'
+wordlist_find:
   call do_colon   ; save IP
   dw $+2
   pop hl
   ld a,l
   or h
-  jp z,wfind.2  ; wid=0
+  jp z,wordlist_find.2  ; wid=0
   ld e,(hl)
   inc hl
   ld d,(hl)
-wfind.1:
+wordlist_find.1:
   pop hl    ; string
   push hl
   ld a,e   ; end of list?
   or d
   ex de,hl
-  jp nz,wfind.3
-wfind.2:
+  jp nz,wordlist_find.3
+wordlist_find.2:
   pop de    ; discard string
-  jp wfind.6    ; no match
+  jp wordlist_find.6    ; no match
 
-wfind.3:
+wordlist_find.3:
   push hl    ; save nfa
   ld c,(hl)
   ld a,c
@@ -4623,19 +4818,19 @@ wfind.3:
   ld a,(de)    ; string length
   xor c   ; check lengths/smudge bit
   and 0x3f
-  jp z,wfind.5
+  jp z,wordlist_find.5
   inc hl    ; to link
-wfind.4:
+wordlist_find.4:
   inc hl
   dec b
-  jp nz,wfind.4
+  jp nz,wordlist_find.4
   ld e,(hl)    ; next nfa
   inc hl
   ld d,(hl)
   pop hl    ; discard old
-  jp wfind.1
+  jp wordlist_find.1
 
-wfind.5:
+wordlist_find.5:
   inc hl    ; check each char
   inc de
   ld a,(de)
@@ -4648,9 +4843,9 @@ wfind.5:
     call uppercase_a
   endif
   xor c
-  jp nz,wfind.4 ; no match
+  jp nz,wordlist_find.4 ; no match
   dec b
-  jp nz,wfind.5
+  jp nz,wordlist_find.5
   inc hl    ; to link
   inc hl    ; to cfa pointer
   inc hl
@@ -4664,10 +4859,10 @@ wfind.5:
   ld a,(hl)
   and immediate_mask   ; immediate?
   ld hl,-1
-  jp z,wfind.6
+  jp z,wordlist_find.6
   inc hl
   inc hl
-wfind.6:
+wordlist_find.6:
   push hl
   jp paren_exit    ; restore IP
 
@@ -4675,7 +4870,7 @@ wfind.6:
 ; searches CONTEXT CURRENT FORTH
 ;       0 3 0 do
 ;         over i cells context + @
-;         wfind ?dup if  nip 2nip leave  then
+;         wordlist-find ?dup if  nip 2nip leave  then
 ;       loop
 
   hdr _hidden,'(FIND)'
@@ -4692,7 +4887,7 @@ paren_find.do:
   dw over
   dw i_,cells
   dw context,plus,fetch
-  dw wfind,question_dup
+  dw wordlist_find,question_dup
   dw question_branch,paren_find.loop
   dw nip,two_nip
   dw paren_leave,paren_find.do-cw
@@ -4721,13 +4916,13 @@ find:
 if 0 ; XXX TODO -- commented out in DX-Forth
 
 ; SEARCH-WORDLIST  ( ca u wid -- 0 | xt -1 | xt 1 )
-;       >r wpack r> wfind dup if nip then
+;       >r wpack r> wordlist-find dup if nip then
 
   hdr _public,'SEARCH-WORDLIST'
 search_wordlist:
   call do_colon
   dw to_r,wpack,from_r
-  dw wfind,dup
+  dw wordlist_find,dup
   dw question_branch,search_wordlist.end
   dw nip
 search_wordlist.end:
@@ -4751,6 +4946,7 @@ minus_question:
 
 ; WARNING?  ( -- 0|1 )
 ; get warning flag and apply mask
+;
 ;     warning @ dup if dup 1 and tuck if -1
 ;     else $7fff and 1 then or warning ! then
 
@@ -4802,18 +4998,24 @@ xnfa:
   jp c_toggle.1
 
 ; HEADER  ( xt|0 "name" -- )
-;       warning? 2>r bl-word dup c@ 32 1 within
-;       abort" invalid name" dup find nip r> and
-;       if dup count type ."  is redefined "
-;       then dup count tuck + get-current w>name
-;       over ! cell+ swap 5 + dph @ over dph +!
-;       dup get-current ! rot r> ?dup 0= if here
-;       then dup rot ! over last 2! swap cmove
+
+;       warning? 2>r
+;       bl-word  ( ca )
+;       dup c@ 32 1 within abort" invalid name"
+;       dup find nip r> and 
+;       if  dup count type ."  is redefined"  then
+;       dup count tuck +
+;       get-current wordlist>name over ! cell+ swap
+;       5 + dph @ over dph +!  dup
+;       get-current ! rot r>
+;       ?dup 0= if  here  then
+;       dup rot ! over last 2! swap
+;       cmove
 
   hdr _hidden,'HEADER'
 header:
   call do_colon
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'header',cr_char
   endif
@@ -4822,35 +5024,46 @@ header:
   else
     dw warning,fetch
   endif
+  ; ( xt|0 f1 "name" )
   dw two_to_r
   dw bl_word
-  dw dup,c_fetch
+  dw dup,c_fetch ; name length
   dw c_lit
   db 32
-  dw one,within
+  dw one,within ; not 1..32?
   dw paren_abort_quote
   dcs 'invalid name'
-  dw dup,find,nip
-  dw from_r,and_
-  dw question_branch,header.1
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'header after invalid name',cr_char
+  endif
+  ; ( ca )
+  dw dup,find,nip ; ( ca f ) found?
+  dw from_r       ; ( ca f f1 ) is 'warning' on?
+  dw and_         ; ( ca wf )
+  dw branch_if_zero,header.1
+  ; the name was found and 'warning' is on
+  ; ( ca )
   dw dup,count,type
   dw paren_dot_quote
-  dcs ' is redefined '
+  dcs ' is redefined'
 header.1:
-  if debug ; XXX INFORMER
+  ; the name was not found or 'warning' is off
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'header.1',cr_char
   endif
-  dw dup,count
-  dw tuck
-  dw plus
-  dw get_current,wtnam
-  dw over,store
-  dw cell_plus,swap
+  dw dup,count ; ( ca ca1 len1 )
+  dw tuck      ; ( ca len1 ca1 len1 )
+  dw plus      ; ( ca len1 ca1+len1 )
+  dw get_current,wordlist_to_name ; ( ca len1 ca1+len1 nfa )
+  dw over,store ; ( ca len1 ) store nfa after the name
+  dw cell_plus,swap ; ( len1+cell ca )
   dw c_lit
   db 5
-  dw plus
-  dw dph,fetch
+  dw plus ; ( len1+cell ca+5 )
+  dw dph,fetch ; ( len1+cell ca+5 dp )
+  ; XXX TODO -- keep on studying from here:
   dw over,dph,plus_store
   dw dup
   dw get_current
@@ -4860,13 +5073,17 @@ header.1:
   dw question_branch,header.2
   dw here
 header.2:
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'header.2',cr_char
   endif
   dw dup,rot,store
   dw over,last,two_store
   dw swap,cmove
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'header end',cr_char
+  endif
   dw paren_exit
 
 ; ,CALL ( a -- )  $CD c, ,
@@ -4875,7 +5092,7 @@ header.2:
 comma_call:
   call do_colon
   dw c_lit
-  db 0xcd    ; 'call' opcode
+  db 0xcd    ; Z80 'call' opcode
   dw c_comma
   dw comma
   dw paren_exit
@@ -4885,12 +5102,23 @@ comma_call:
   hdr _public,'BUILD'
 build:
   call do_colon
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'build',cr_char
+    dw key,drop
   endif
-  dw zero,header  ; 0 header
-  dw comma_call   ; ,call
+  dw zero,header
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'build after header',cr_char
+    dw key,drop
+  endif
+  dw comma_call
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'build after comma_call',cr_char
+    dw key,drop
+  endif
   dw paren_exit
 
 ; :  ( "name" -- )
@@ -4926,13 +5154,23 @@ colon.1:
 
   hdr _public,'EXIT',_immediate
 exit: ; XXX TODO rename 'exit'
+  if  0;debug ; XXX INFORMER
+    push af
+    ld a,2
+    out (254),a
+    pop af
+    ;jr $
+  endif
+
   call do_colon
-  if  debug ; XXX INFORMER
-    ; XXX FIXME this resets the machine
+
+  if  0;debug ; XXX INFORMER
+    ; XXX FIXME this resets the machine:
     ;dw lit,2,border
     ;dw paren_dot_quote
     ;dcs 'exit',cr_char
   endif
+
   dw compile,paren_exit
   if  debug ; XXX INFORMER
     ; XXX FIXME this resets the machine
@@ -4951,7 +5189,7 @@ exit: ; XXX TODO rename 'exit'
   hdr _public,';',_immediate
 semicolon:
   call do_colon
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'semicolon',cr_char
   endif
@@ -5034,6 +5272,11 @@ create:
 variable:
   call do_colon
   dw create
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'variable',cr_char
+    dw key,drop
+  endif
   dw two,allot
   dw paren_exit
 
@@ -5221,16 +5464,24 @@ aka.end:
   hdr _public,'TRUE'
 true:
   ld hl,-1
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; FALSE  ( -- false )
 
   hdr _public,'FALSE'
 false:
   ld hl,0
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; -1  ( -- -1 )
 ;   aka true -1
@@ -5512,16 +5763,25 @@ current.variable:
   hdr _hidden,'GET-CONTEXT'
 get_context:
   ld hl,(context.variable)
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; GET-CURRENT  ( -- wid )
 
   hdr _public,'GET-CURRENT'
 get_current:
   ld hl,(current.variable)
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+  
 
 ; SET-CURRENT  ( wid -- )
 
@@ -5657,7 +5917,7 @@ sys_question.1: ; XXX TODO rename, because it's used by other words
 ; COMPILING?  ( -- flag )
 ;   state @ 0<>
 
-  hdr _hidden,'COMPILING?'
+  hdr _public,'COMPILING?'
 compiling_question:
   if 0 ; XXX OLD -- original method
     ld hl,state.variable
@@ -5674,7 +5934,7 @@ compiling_question:
 ; EXECUTING?  ( -- flag )
 ;   state @ 0<>
 
-  hdr _hidden,'EXECUTING?'
+  hdr _public,'EXECUTING?'
 executing_question:
   if 0 ; XXX OLD -- original method
     ld hl,state.variable
@@ -5827,18 +6087,18 @@ namef:
   dw nlnk,cell_plus,fetch ; n>link cell+ @
   dw paren_exit
 
-; W>NAME  ( wid -- nfa | 0 )
-;   aka @ w>name
+; WORDLIST>NAME  ( wid -- nfa | 0 )
+;   aka @ wordlist>name
 
-  hdr _public,'W>NAME',,fetch
-wtnam: equ fetch
+  hdr _public,'WORDLIST>NAME',,fetch
+wordlist_to_name: equ fetch
 
 ; -ALIAS  ( nfa -- nfa flag )
 ;   dup c@ $80 <
 
   hdr _hidden,'-ALIAS'
   ; false if alias
-dalias:
+minus_alias:
   pop hl
   push hl
   ld a,(hl)
@@ -5848,7 +6108,7 @@ dalias:
 ; XXX OLD -- DX-Forth 4.00
 ;;; >name  ( xt -- nfa | 0 )
 ;;;       voc-link begin @ dup while tuck 2-
-;;;       w>name begin ?dup while -alias if 2dup
+;;;       wordlist>name begin ?dup while -alias if 2dup
 ;;;       name> = if -rot 2drop exit then then
 ;;;       n>name repeat swap repeat nip
 ;;
@@ -5862,11 +6122,11 @@ dalias:
 ;;  dw question_branch,to_name.5
 ;;  dw tuck
 ;;  dw two_minus
-;;  dw wtnam
+;;  dw wordlist_to_name
 ;;to_name.2:
 ;;  dw question_dup
 ;;  dw question_branch,to_name.4
-;;  dw dalias    ; skip if alias
+;;  dw minus_alias    ; skip if alias
 ;;  dw question_branch,to_name.3
 ;;  dw two_dup,namef
 ;;  dw equals
@@ -5885,7 +6145,7 @@ dalias:
 
 ; XXX NEW -- DX-Forth 4.09
 ; >NAME  ( xt -- nfa | 0 )
-;        voc-link begin @ dup while tuck cell- w>name
+;        voc-link begin @ dup while tuck cell- wordlist>name
 ;        begin ?dup while -alias if 2dup name> = if
 ;        -rot 2drop exit then then n>name repeat swap
 ;        repeat nip
@@ -5900,11 +6160,11 @@ to_name.1:
   dw question_branch,to_name.5
   dw tuck
   dw cell_minus
-  dw wtnam
+  dw wordlist_to_name
 to_name.2:
   dw question_dup
   dw question_branch,to_name.4
-  dw dalias    ; skip if alias
+  dw minus_alias    ; skip if alias
   dw question_branch,to_name.3
   dw two_dup,namef
   dw equals
@@ -6130,6 +6390,13 @@ compile_comma:  equ comma
 
   hdr _public,'COMPILE'
 compile:
+  if  1;debug ; XXX INFORMER
+    push af
+    ld a,2
+    out (254),a
+    pop af
+    ;jr $
+  endif
   call do_colon
   dw question_comp   ; prevent crash if interpreting
   dw from_r
@@ -6293,7 +6560,7 @@ paren_accept.do:
   dw paren_accept_key
   dw branch,paren_accept.do
 paren_accept.end:
-  dw minus_cursor
+  dw minus_cursor,space
   dw drop,nip,nip
   dw paren_exit
 
@@ -6389,10 +6656,10 @@ ppsb:
 ;         then 2drop (parsed_string_buffer) r>
 
   hdr _public,'PARSE$'
-parss:
+parse_dollar:
   call do_colon
   dw zero
-parss.1:
+parse_dollar.1:
   dw to_r
   dw dup,parse
   dw two_dup
@@ -6402,15 +6669,15 @@ parss.1:
   dw dup
   dw source,plus
   dw u_less
-  dw question_branch,parss.2
+  dw question_branch,parse_dollar.2
   dw two_dup,c_fetch
   dw equals
-  dw question_branch,parss.2
+  dw question_branch,parse_dollar.2
   dw one,dup
   dw in_,plus_store
   dw from_r,ppsb
-  dw branch,parss.1
-parss.2:
+  dw branch,parse_dollar.1
+parse_dollar.2:
   dw two_drop
   dw lit,parsed_string_buffer
   dw from_r
@@ -6525,7 +6792,7 @@ dot_paren:
   call do_colon
   dw c_lit
   db ')'
-  dw parss,type
+  dw parse_dollar,type
   dw paren_exit
 
 ; \  ( "ccc" -- )
@@ -6881,8 +7148,8 @@ interpret.end:
     dw paren_dot_quote
     dcs 'interpret.end ',cr_char
   endif
-;  dw branch,$ ; XXX TMP
   dw drop
+;  dw branch,$ ; XXX TMP
   dw paren_exit
 
 ; (EVALUATE)  ( ca u blk -- )
@@ -7394,8 +7661,8 @@ boot_message:
   db "DZX-Forth "
   db cr_char,"Version "
   version
-  db cr_char,"Copyright (C) 2014 Marcos Cruz"
-  db cr_char,"(programandala.net)"
+  db cr_char,copy_char," 2014,2015 Marcos Cruz "
+  db "(programandala.net)"
   db cr_char
 ; XXX OLD
 ;  db cr_char,"Type 'bye' to exit.",cr_char
@@ -7641,14 +7908,14 @@ xdp:
 
 ; NAME?  ( "name" -- xt nfa )
 ; find name in context wordlist
-;         bl-word get-context wfind ?defined
+;         bl-word get-context wordlist-find ?defined
 
   hdr _hidden,'NAME?'
-nameq:
+name_question:
   call do_colon
   dw bl_word
   dw get_context
-  dw wfind,question_defined
+  dw wordlist_find,question_defined
   dw paren_exit
 
 ; LFIND  ( wid nfa -- lfa |0 )
@@ -7681,8 +7948,8 @@ lfind.end:
   hdr _public,'BEHEAD'
 behead:
   call do_colon
-  dw nameq,nip
-  dw nameq,nip
+  dw name_question,nip
+  dw name_question,nip
   dw two_dup,u_less
   dw question_branch,behead.1
   dw swap
@@ -7758,7 +8025,7 @@ paren_forget.3:
   dw dup,r_fetch  ; for each word >= nfa
   dw u_less,zero_equals
   dw question_branch,paren_forget.5
-  dw dalias    ; not an alias
+  dw minus_alias    ; not an alias
   dw question_branch,paren_forget.4
   dw dup,namef  ; get its xt
   dw dp,fetch
@@ -7804,8 +8071,8 @@ forget:
   call do_colon
   dw get_current
   dw context,store
-  dw nameq
-  dw dalias,zero_equals  ; alias?
+  dw name_question
+  dw minus_alias,zero_equals  ; alias?
   dw paren_abort_quote
   dcs 'is alias'
   dw swap
@@ -7856,7 +8123,7 @@ comma_quote:
   call do_colon
   dw c_lit
   db '"'
-  dw parss
+  dw parse_dollar
   dw s_comma
   dw paren_exit
 
@@ -7905,7 +8172,7 @@ s_quote:
   call do_colon
   dw c_lit
   db '"'
-  dw parss
+  dw parse_dollar
   dw compiling_question
   dw question_branch,s_quote.end
   dw s_literal
@@ -8525,8 +8792,12 @@ use:
   call hl_by_de_to_hlde_unsigned
   ld hl,(hbuf.1)
   add hl,de
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; UID  ( -- a )
 ;   use 1+
@@ -8578,11 +8849,19 @@ ior:
   pop hl
   ld a,h
   or l
-  jp z,ior.1
+  if optimize_size
+    jr z,ior.end
+  else
+    jp z,ior.end
+  endif
   ld h,0xfe
-ior.1:
-  push hl
-  jp next
+ior.end:
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; ?IOR  ( flag err# -- ior )
 ;   and ior ;
@@ -10091,8 +10370,12 @@ floatp:
   pop hl
   ld de,fw
   add hl,de
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; FLOATS  ( n1 -- n2 )
 ;   4 *
@@ -10102,8 +10385,12 @@ floats:
   pop hl
   add hl,hl
   add hl,hl
-  push hl
-  jp next
+  if optimize_size
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
 
 ; FALIGN  ( -- )
 ;   aka noop falign immediate
