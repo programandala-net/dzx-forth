@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
 version: macro
-  db 'A-00-201501120126'
+  db 'A-00-201501121603'
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -64,7 +64,7 @@ yes:    equ not no
 debug:                            equ no ; debugging messages?
 case_insensitive_names:           equ yes
 control_flow_stack_extensions:    equ yes
-warning_options:                  equ yes
+warning_options:                  equ no ; XXX TODO does this causes trouble?
 
 ; XXX FIXME when yes, some things don't work fine:
 optimize_size:                    equ no ; if yes, the code will be smaller but slower
@@ -1203,17 +1203,27 @@ maxdepth_dot_s:
   ; XXX TODO -- finish and test
   hdr _public,'.S'
 dot_s:
-  ; XXX FIXME it works but resets the machine
-  ; at the end of the loop
+  ; XXX FIXME it works but issues "compilation only"
+  ; at the end 
   call do_colon
   ; show the depth:
-  dw depth,c_lit
+  dw depth
+  dw c_lit
   db '<'
-  dw emit,zero,dot_r,c_lit
+  dw emit,zero,dot_r
+  dw c_lit
   db '>'
   dw emit,space
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'at .s after printing the depth',cr_char
+  endif
   ; calculate the items to show:
   dw depth,zero,max,maxdepth_dot_s,fetch,min
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'at .s before doing it',cr_char
+  endif
   ; do it:
   dw dup,zero,paren_do,dot_s.end
 dot_s.do:
@@ -1221,6 +1231,11 @@ dot_s.do:
   dw paren_loop,dot_s.do
 dot_s.end:
   dw drop
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'at .s exit depth is '
+    dw depth,dot,cr
+  endif
   dw paren_exit
 
 ; }}} **********************************************************
@@ -3442,7 +3457,7 @@ paren_leave:
   ld b,(hl)
   jp unloop
 
-; (?DO)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (do1)
+; (?DO)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (do.hl)
 
   hdr _hidden,'(?DO)'
 paren_question_do:
@@ -3657,7 +3672,7 @@ while:
 ;         ; immediate
 
   hdr _public,'REPEAT',_immediate
-repeatt:
+repeat:
   call do_colon
   dw again
   dw then
@@ -3678,7 +3693,7 @@ lv:
   hdr _public,'DO',_immediate
 do:
   ld hl,paren_do
-do1:
+do.hl:
   push hl
   call do_colon
   dw compile_comma
@@ -3694,9 +3709,9 @@ do1:
 ;         postpone begin ; immediate
 
   hdr _public,'?DO',_immediate
-qdo:
+question_do:
   ld hl,paren_question_do
-  jp do1
+  jp do.hl
 
 ; I  ( -- x )
 
@@ -4694,7 +4709,7 @@ emit:
 ;;  call do_colon
 ;;  dw lit,vemit
 ;;  dw fetch_execute
-;;  dw one,outt,plus_store
+;;  dw one,out_,plus_store
 ;;  dw pause
 ;;  dw paren_exit
 
@@ -5004,7 +5019,7 @@ xnfa:
 ;       dup rot ! over last 2! swap
 ;       cmove
 
-  hdr _hidden,'HEADER'
+  hdr _public,'HEADER'
 header:
   call do_colon
   if 0;debug ; XXX INFORMER
@@ -5083,10 +5098,25 @@ header.2:
   hdr _hidden,',CALL'
 comma_call:
   call do_colon
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'comma_call',cr_char
+    dw key,drop
+  endif
   dw c_lit
   db 0xcd    ; Z80 'call' opcode
   dw c_comma
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'comma_call after c_comma',cr_char
+    dw key,drop
+  endif
   dw comma
+  if 0;debug ; XXX INFORMER
+    dw paren_dot_quote
+    dcs 'comma_call at the end',cr_char
+    dw key,drop
+  endif
   dw paren_exit
 
 ; BUILD ( xt "name" -- )
@@ -5135,9 +5165,10 @@ colon.1:
     dw sp_fetch,cs0,store
   endif
   dw right_bracket
-  if debug ; XXX INFORMER
+  if 1;debug ; XXX INFORMER
     dw paren_dot_quote
-    dcs 'colon exit',cr_char
+    dcs 'at colon exit depth is '
+    dw depth,dot,cr
   endif
   dw paren_exit
 
@@ -5164,7 +5195,7 @@ exit: ; XXX TODO rename 'exit'
   endif
 
   dw compile,paren_exit
-  if  debug ; XXX INFORMER
+  if  0;debug ; XXX INFORMER
     ; XXX FIXME this resets the machine
     ;dw lit,3,border
     ;dw paren_dot_quote
@@ -5186,26 +5217,26 @@ semicolon:
     dcs 'semicolon',cr_char
   endif
   dw exit
-  if debug ; XXX INFORMER
-    dw lit,2,border
+  if 0;debug ; XXX INFORMER
+    ;dw lit,2,border
     ; XXX FIXME this resets the machine:
     ;dw paren_dot_quote
     ;dcs 'semicolon after compiling (exit)',cr_char
   endif
   dw bal,fetch
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'semicolon after bal @',cr_char
   endif
   dw question_bal
   dw question_csp
   dw smudge
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'semicolon after smudge',cr_char
   endif
   dw left_bracket
-  if debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote
     dcs 'semicolon exit',cr_char
   endif
@@ -5291,8 +5322,9 @@ value.1:
   hdr _public,'CONSTANT'
 constant:
   call do_colon
-  dw char_question
-  dw question_branch,value.1
+  dw char_question ; 8-bit number?
+  dw branch_if_false,value.1 ; no
+  ; yes
   dw lit,do_byte_constant
   dw build
   dw c_comma
@@ -5558,9 +5590,9 @@ hbuf.1:
 ;   address of NEXT
 
   hdr _public,"'NEXT"
-tnext:
+tick_next:
   call do_constant
-tnext.1:
+tick_next.variable:
   dw next
 
 ; #FCB  ( -- u )
@@ -5633,7 +5665,7 @@ udp:
   hdr _public,'FSP'
 fsp:
   call do_create
-fspp:
+fsp.variable:
   ds cw
 
 ; BOOT  ( -- xt )
@@ -5863,7 +5895,7 @@ base:
 ; OUT  ( -- a )
 
   hdr _public,'OUT'
-outt:
+out_:
   call do_user_variable
   dw 28
 
@@ -5954,7 +5986,7 @@ check_question:
 ; APPLICATION  ( -- ) sys off
 
   hdr _public,'APPLICATION'
-app:
+application:
   ld hl,sys.variable
   jp off.hl
 
@@ -6382,7 +6414,7 @@ compile_comma:  equ comma
 
   hdr _public,'COMPILE'
 compile:
-  if  1;debug ; XXX INFORMER
+  if  0;debug ; XXX INFORMER
     push af
     ld a,2
     out (254),a
@@ -6922,9 +6954,12 @@ forth:
   dw forth.1
 
 ; UNUSED  ( -- u )
+;
+; Free memory in bytes.
 
   hdr _public,'UNUSED'
 unused:
+  call do_colon
   dw lit,0xffff,here,minus
   dw paren_exit
 
@@ -7389,15 +7424,15 @@ paren_abort:
 ;       [char] " dup emit pwa count 31 min type emit
 
   hdr _hidden,'.ERROR'
-doterr:
+dot_error:
   call do_colon
   dw cr
   dw blk,fetch
   dw question_dup
-  dw question_branch,doterr.1
+  dw question_branch,dot_error.1
   dw file_question
   dw and_    ; screen file open and loading from block?
-  dw question_branch,doterr.1
+  dw question_branch,dot_error.1
   dw current_block_file,type
   dw in_,fetch
   dw two_minus    ; adjust pointer
@@ -7414,7 +7449,7 @@ doterr:
   dcs 'Line '
   dw dot
   dw cr
-doterr.1:
+dot_error.1:
   dw paren_dot_quote
   dcs 'Error: '
   dw c_lit
@@ -7457,7 +7492,7 @@ error.1:
   dw boot,cell_plus,fetch
   dw zero_equals
   dw question_branch,error.2
-  dw doterr    ; skipped by applications
+  dw dot_error    ; skipped by applications
 error.2:
   if debug ; XXX INFORMER
     dw paren_dot_quote
@@ -7687,7 +7722,7 @@ cold:
 ;;  ex de,hl
 ;;  ld hl,(nrts)   ; return stack size
 ;;  call de_minus_hl_to_hl
-;;  ld (fspp),hl   ; init fp stack
+;;  ld (fsp.variable),hl   ; init fp stack
 ;;  ld (cold_fs0),hl   ; patch FS0
 ;;; XXX These lines were commented out in the original source:
 ;;; ex de,hl
@@ -8208,6 +8243,9 @@ dot_quote:
   dw paren_exit
 
 ; CHAR?  ( x -- x flag )
+;
+; Is x an 8-bit number?
+; XXX TODO make this word public and make it consume x.
 
   hdr _hidden,'CHAR?'
 char_question:
@@ -8222,8 +8260,9 @@ char_question:
   hdr _public,'LITERAL',_immediate
 literal:
   call do_colon
-  dw char_question
-  dw question_branch,literal.1
+  dw char_question ; 8-bit number?
+  dw branch_if_false,literal.1 ; no
+  ; yes
   dw compile,c_lit
   dw c_comma
   dw paren_exit
@@ -8948,7 +8987,7 @@ reposf.2:
 ;  $80 fcb 5 + ctoggle
 
   hdr _hidden,'XF5'
-xff:
+xf5:
   call do_colon
   dw c_lit
   db 0x80
@@ -8973,12 +9012,12 @@ file_size:
   dw question_branch,fsiz.1
   dw uid,c_fetch
   dw setusr
-  dw xff
+  dw xf5
   dw fcb
   dw c_lit
   db 16
   dw bdos,drop
-  dw xff
+  dw xf5
   dw fcb
   dw c_lit
   db 35
@@ -9046,7 +9085,7 @@ read_write: equ  two
 ;   aka noop bin immediate
 
   hdr _public,'BIN',_immediate,noop
-binn: equ  next
+bin: equ  next
 
 ; OPEN1  ( a u fam -- | x ior )
 ;          getfh 0= if 2drop 4 ior unnest exit
@@ -10394,12 +10433,12 @@ falign: equ  next
 ;   aka noop faligned immediate
 
   hdr _public,'FALIGNED',_immediate,noop
-falignd: equ  next
+f_aligned: equ  next
 
 ; F,  (F: r -- ) or ( r -- )  , ,
 
   hdr _public,'F,'
-fcomm:
+f_comma:
   call do_colon
   dw comma,comma
   dw paren_exit
