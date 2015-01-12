@@ -150,15 +150,7 @@ f_stack_size:     defl 0 ; bytes
   include zx_spectrum_system_variables.z80s
   include zx_spectrum_rom_routines.z80s
   include zx_spectrum_char_codes.z80s
-
-black_color:    equ 0
-blue_color:     equ 1
-red_color:      equ 2
-magenta_color:  equ 3
-green_color:    equ 4
-cyan_color:     equ 5
-yellow_color:   equ 6
-white_color:    equ 7
+  include zx_spectrum_colors.z80s
 
 lf_char:                    equ 0x0a ; line feed ; XXX OLD
 ff_char:                    equ 0x0c ; form feed (printer only)
