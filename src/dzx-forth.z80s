@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
 version: macro
-  db 'A-00-201501121829'
+  db 'A-01-201501130002'
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -148,10 +148,14 @@ f_stack_size:     defl 0 ; bytes
 ; ------------------------------
 ; ZX Spectrum
 
-  include zx_spectrum_system_variables.z80s
-  include zx_spectrum_rom_routines.z80s
-  include zx_spectrum_char_codes.z80s
-  include zx_spectrum_colors.z80s
+  include "zx_spectrum_system_variables.z80s"
+  include "zx_spectrum_rom_routines.z80s"
+  include "zx_spectrum_char_codes.z80s"
+  include "zx_spectrum_colors.z80s"
+  include "zx_spectrum_+3dos.z80s"
+
+bank1_port: equ 0x07FFD ; "horizontal" and RAM switch port
+bank2_port: equ 0x01FFD ; "vertical" switch port
 
 lf_char:                    equ 0x0a ; line feed ; XXX OLD
 ff_char:                    equ 0x0c ; form feed (printer only)
@@ -576,28 +580,6 @@ compare_de_hl_signed:
   or a
   ret p
   scf
-  ret
-
-; XXX OLD
-get_current_drive:
-  ld a,25  ; get current drive a
-  jp bdoss
-
-; XXX OLD
-get_current_user:
-;;  ld a,0xff  ; get current user a
-
- ; XXX OLD
-set_current_user:
-;;  ld e,a ; set current user a
-;;  ld a,32
-
-; XXX OLD
-bdoss:
-;;  push bc  ; call bdos a
-;;  ld c,a
-;;  call 0x0005
-;;  pop bc
   ret
 
 ; ------------------------------
@@ -4213,6 +4195,74 @@ dot.not_decimal_base:
 ; }}} **********************************************************
 ; DOS {{{
 
+get_current_drive:
+  ld a,25  ; get current drive a
+  jp do_dos
+
+get_current_user:
+  ld a,0xff  ; get current user
+
+set_current_user:
+  ; a = user (0..15 to set; 255 to get)
+  ld iy,dos_set_user
+
+do_dos:
+  ; iy = DOS routine to run
+  push bc
+  call dos
+  pop bc
+  ret
+
+dos:
+ 
+  ; Copied from the ZX Spectrum +3 manual.
+  
+  ; IY holds the address of the DOS routine to be run. All other registers are
+  ; passed intact to the DOS routine and are returned from it.
+  
+  ; Stack is somewhere in central 32K (conforming to DOS requirements), so save
+  ; AF and BC will not be switched out.
+  
+  push af
+  push bc                  ; temp save registers while switching
+  ld   a,(sys_bankm)       ; RAM/ROM switching system variable
+  or   7                   ; want RAM page 7
+  res  4,a                 ; and DOS ROM
+  ld   bc,bank1_port       ; port used for horiz ROM switch and RAM paging
+  di
+  ld   (sys_bankm),a       ; keep system variables up to date
+  out  (c),a               ; RAM page 7 to top and DOS ROM
+  ei
+  pop  bc
+  pop  af
+
+  call call_dos.iy         ; go sub routine address in IY
+
+  push af
+  push bc
+  ld   a,(sys_bankm)
+  and  0F8h                ; reset bits for page 0
+  set  4,a                 ; switch to ROM 3 (48 BASIC)
+  ld   bc,bank1_port
+  di
+  ld   (sys_bankm),a
+  out  (c),a               ; switch back to RAM page 0 and 48 BASIC
+  ei
+  pop  bc
+  pop  af
+  ret
+
+call_dos.iy:
+
+  jp   (iy)                ; standard way to CALL (IY), by calling this jump
+
+olstak:
+
+  dw   0                   ; somewhere to put BASIC's stack pointer
+  ds   100
+
+mystak:                    ; enough stack to meet +3DOS requirements
+
 ; FDOS  ( DE u -- HL A )
 
   hdr _public,'FDOS'
@@ -4221,7 +4271,7 @@ fdos:
 ;;  pop hl
 ;;  ld a,l
 ;;  pop de
-;;  call bdoss
+;;  call do_dos
 ;;  push hl
 ;;  jp push_a
   ; XXX TODO
@@ -7397,6 +7447,7 @@ quit.begin:
   hdr _public,'RETURN'
 return:
   pop bc
+  ld iy,sys_err_nr ; XXX TODO -- check if needed
   ld sp,(system_stack_pointer)
   ret
 
@@ -7406,8 +7457,8 @@ return:
   hdr _public,'BYE'
 bye:
 ;  im 1 ; XXX TODO ?
-;  ld sp,(sys_err_sp) ; XXX TODO -- study whot this actually does
-  ld sp,(system_stack_pointer) ; XXX TODO -- this works
+  ld sp,(system_stack_pointer)
+  ld iy,sys_err_nr ; XXX TODO -- check if needed
   rst 0x08     ; error
   db 0xff      ; 0: "OK"
 
@@ -7661,10 +7712,10 @@ abort_quote:
 cold_boot:
   ; XXX TODO
 ; XXX OLD
-;;  call get_current_drive      ; save default drive and user
-;;  ld (default_drive),a
-;;  call get_current_user
-;;  ld (default_user),a
+  call get_current_drive      ; save default drive and user
+  ld (default_drive),a
+  call get_current_user
+  ld (default_user),a
 ;;
 ;;
 ;;cldd.1:
@@ -8448,20 +8499,21 @@ dzx_forth:
 ; }}} **********************************************************
 ; Files {{{
 
-; RESET-DISKS  ( -- )
-
-  hdr _public,'RESET-DISKS'
-reset_disks:
-  ld a,25
-  call bdoss
-  push af
-  ld a,13
-  call bdoss
-  pop af
-  ld e,a
-  ld a,14
-  call bdoss
-  jp next
+; XXX OLD
+;;; RESET-DISKS  ( -- )
+;;
+;;  hdr _public,'RESET-DISKS'
+;;reset_disks:
+;;  ld a,25
+;;  call do_dos
+;;  push af
+;;  ld a,13
+;;  call do_dos
+;;  pop af
+;;  ld e,a
+;;  ld a,14
+;;  call do_dos
+;;  jp next
 
 ; >DRIVE  ( u1 -- u2 )
 ;   ?dup if 1- else 0 25 bdos then
@@ -8738,35 +8790,35 @@ old_user:
   db 255    ; 255 = ignore
 
 ; XXX OLD
-;;; GETUSR  ( -- u )
-;;;   get user
-;;
-;;  hdr _public,'GETUSR'
-;;getusr:
-;;  call get_current_user
-;;  jp push_a
-;;
-;;; SETUSR  ( u -- )
-;;;   set user
-;;
-;;  hdr _public,'SETUSR'
-;;setusr:
-;;  call get_current_user
-;;  ld (old_user),a  ; save current user
-;;  pop hl
-;;  ld a,l
-;;setusr.1:
-;;  cp 255
-;;  call nz,set_current_user
-;;  jp next
-;;
-;;; RSTUSR  ( -- )
-;;;   restore user
-;;
-;;  hdr _public,'RSTUSR'
-;;rstusr:
-;;  ld a,(old_user)
-;;  jp setusr.1
+; GETUSR  ( -- u )
+;   get user
+
+  hdr _public,'GETUSR'
+getusr:
+  call get_current_user
+  jp push_a
+
+; SETUSR  ( u -- )
+;   set user
+
+  hdr _public,'SETUSR'
+setusr:
+  call get_current_user
+  ld (old_user),a  ; save current user
+  pop hl
+  ld a,l
+setusr.1:
+  cp 255
+  call nz,set_current_user
+  jp next
+
+; RSTUSR  ( -- )
+;   restore user
+
+  hdr _public,'RSTUSR'
+rstusr:
+  ld a,(old_user)
+  jp setusr.1
 
 ; REC@  ( a -- +d )
 ;   dup >r @ r> 2+ c@ 7 0 do d2* loop
@@ -9243,7 +9295,7 @@ open_file:
 ;          5 open3 0
 
   hdr _public,'CREATE-FILE'
-creatf:
+create_file:
   call do_colon
   dw open1
   dw fcb
@@ -9370,7 +9422,7 @@ setsiz:
 setdma:
   pop de
   ld a,26
-  call bdoss
+  call do_dos
   jp next
 
 ; RANRW  ( a size fn# -- a size | a u' )
@@ -10039,7 +10091,7 @@ pfbk:
   dw plus_ext
   dw fnbuf,place
   dw fnbuf,count
-  dw wso,creatf,throw
+  dw wso,create_file,throw
   dw over,zero
   dw paren_question_do,pfbk.2
 pfbk.do.1:
@@ -10169,7 +10221,7 @@ question_create.1:
   dw question_branch,question_create.2
   dw abort
 question_create.2:
-  dw lastfile,read_write,creatf
+  dw lastfile,read_write,create_file
   dw paren_abort_quote
   dcs "can't create file"
   dw paren_exit
