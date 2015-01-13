@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
-version: macro
-  db 'A-01-201501132017'
+_version: macro
+  db 'A-01-201501132148'
   endm
   version.major: equ "A" ; alpha branch_
   version.minor: equ 01
@@ -32,6 +32,9 @@ version: macro
 ; ------------------------------
 ; XXX TODO 
 
+; 2015-01-13: Fix: crash at the press of the delete key. Something to do with the
+; massive label renaming?
+;
 ; 2015-01-12: implement 'allocate' in the ram disk?
 ;
 ; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
@@ -87,7 +90,7 @@ top_prunes:             defl 0 ; XXX OLD ?
 ; ------------------------------
 ; Memory 
 
-start: equ 24000 ; start of_ DZX-Forth_ in memory
+start: equ 25000 ; start of_ DZX-Forth_ in memory
 
 cw: equ 2 ; cell size (bytes)
 fw: equ 4 ; floating point number size (bytes)
@@ -3444,12 +3447,13 @@ branch_:
 
 ; <>0BRANCH  ( flag -- )
 
+  ; XXX TODO remove?
   _header _hidden,'<>0BRANCH'
 not_equals_0_branch_:
-branch_if_not_0:
-branch_if_not_false:
-branch_if_not_zero:
-branch_if_true:
+branch_if_not_0_:
+branch_if_not_false_:
+branch_if_not_zero_:
+branch_if_true_:
   pop hl
   ld a,l
   or h
@@ -3466,10 +3470,10 @@ branch_if_true:
 
   _header _hidden,'?BRANCH'
 question_branch_:
-zero_branch:
-branch_if_0:
-branch_if_false:
-branch_if_zero:
+zero_branch_:
+branch_if_0_:
+branch_if_false_:
+branch_if_zero_:
   pop hl
   ld a,l
   or h
@@ -4276,7 +4280,7 @@ ques_:
 dot_:
   call do_colon
   dw decimal_question_
-  dw branch_if_false,dot_.not_decimal_base
+  dw branch_if_false_,dot_.not_decimal_base
 ;  ; decimal base_
   dw s_to_d_,d_dot_
   dw paren_exit_
@@ -5100,7 +5104,7 @@ header_:
   dw dup_,find_,nip_ ; ( ca f ) found?
   dw from_r_       ; ( ca f f1 ) is_ 'warning' on_?
   dw and_         ; ( ca wf )
-  dw branch_if_zero,header_.1
+  dw branch_if_zero_,header_.1
 ;  ; the name was found and 'warning' is on_
   ; ( ca )
   dw dup_,count_,type_
@@ -5396,7 +5400,7 @@ value_.1:
 constant_:
   call do_colon
   dw char_question_ ; 8-bit number?
-  dw branch_if_false,value_.1 ; no
+  dw branch_if_false_,value_.1 ; no
   ; yes
   dw lit_,do_byte_constant
   dw build_
@@ -5550,7 +5554,7 @@ aka_.alias:
   db alias_mask
   dw xnfa             ; set the alias_ mask of_ the header_
   dw zero_greater_     ; is_ the old word_ immediate_?
-  dw branch_if_false,aka_.end
+  dw branch_if_false_,aka_.end
   dw immediate_        ; make the new word_ immediate_
 aka_.end:
   dw paren_exit_
@@ -6553,7 +6557,7 @@ backspaces_.do:
   db left_char
   dw dup_,emit_,space_,emit_
   dw one_minus_,dup_
-  dw branch_if_not_false,backspaces_.do
+  dw branch_if_not_false_,backspaces_.do
   dw drop_
   dw paren_exit_
 
@@ -6569,11 +6573,11 @@ paren_accept_control_char_:
   dw dup_,c_lit_
   db delete_char
   dw equals_ ; delete?
-  dw branch_if_false,paren_accept_control_char_.edit
+  dw branch_if_false_,paren_accept_control_char_.edit
 ;  ; delete the last char_
   dw drop_ ; c
   dw dup_ ; something to_ delete?
-  dw branch_if_zero,paren_accept_control_char_.end
+  dw branch_if_zero_,paren_accept_control_char_.end
 ;  ; do it
   dw minus_cursor_,one_minus_,one_,backspaces_
   dw paren_exit_
@@ -6583,47 +6587,98 @@ paren_accept_control_char_.edit:
   dw c_lit_
   db edit_char
   dw equals_ ; edit?
-  dw branch_if_false,paren_accept_control_char_.end
+  dw branch_if_false_,paren_accept_control_char_.end
   ; delete the whole input
   dw dup_ ; something to_ delete?
-  dw branch_if_zero,paren_accept_control_char_.end
+  dw branch_if_zero_,paren_accept_control_char_.end
 ;  ; do it
   dw minus_cursor_,zero_,swap_,backspaces_
 
 paren_accept_control_char_.end:
   dw paren_exit_
 
-; (ACCEPT-CHAR)  ( ca len len2 c -- ca len len2' )
+; (ACCEPT-PRINTABLE-CHAR)  ( ca len len2 c -- ca len len2' )
 
-  _header _hidden,'(ACCEPT-CHAR)'
+  _header _hidden,'(ACCEPT-PRINTABLE-CHAR)'
 
-paren_accept_ascii_char_:
+paren_accept_printable_char_:
   call do_colon ; XXX entry not used
 
-paren_accept_ascii_char_.0:
+paren_accept_printable_char_.0:
   dw to_r_,two_dup_,minus_,from_r_,swap_ ; space_ left
-  dw branch_if_0,paren_accept_ascii_char_.no
+  dw branch_if_0_,paren_accept_printable_char_.no
 
-;  ; there's space left for the char_
-  if 0 ; debug ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs '{space left}'
-  endif
+  ; there's space left for the char
   dw dup_,emit_,over_
   dw c_lit_
   db 4
   dw pick_,plus_,c_store_,one_plus_
   dw paren_exit_
 
-paren_accept_ascii_char_.no:
-;  ; no space left for the char_
-  if 0 ; debug ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs '{no space left!}'
-  endif
+paren_accept_printable_char_.no:
+  ; no space left for the char
   dw drop_
   dw paren_exit_
 
+; KEY>CHAR  ( c -- c' )
+;
+; Convert a key code into a char code, using 'keyboard-table'.
+
+  _header _public,'KEY>CHAR'
+
+key_to_char_:
+  ld hl,keyboard_table_.address
+  pop de
+  add hl,de
+  ld a,(hl)
+  if size_optimization
+    jp push_a
+  else
+    ld h,0
+    ld l,a
+    jp push_hl
+  endif
+
+; KEYBOARD-TABLE  ( -- a )
+
+  ; Address of a table used to translate key codes to actual chars.  The table
+  ; has one byte for every key code (0x00..0xFF), representing the char the key
+  ; is translated to.
+
+  _header _public,'KEYBOARD-TABLE'
+
+keyboard_table_:
+  call do_create
+
+keyboard_table_.address:
+  rept 0x80,_char_code
+    db _char_code
+  endm
+
+  ; 195 (0xC3) -> 124 (0x7C)  ("not"  -> "|")
+  ; 197 (0xC5) -> 093 (0x5D)  ("or"   -> "]")
+  ; 198 (0xC6) -> 091 (0x5B)  ("and"  -> "[")
+  ; 203 (0xCB) -> 125 (0x7D)  ("then" -> "}")
+  ; 204 (0xCC) -> 123 (0x7B)  ("to"   -> "{")
+  ; 205 (0xCD) -> 092 (0x5C)  ("step" -> "\")
+  ; 226 (0xE2) -> 126 (0x7E)  ("stop" -> "~")
+
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x80 .. 0x88
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x90 .. 0x98
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xA0 .. 0xA8
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xB0 .. 0xB8
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  db 0x00,0x00,0x00,0x7C,0x00,0x5D,0x5B,0x00 ; 0xC0 .. 0xC8
+  db 0x00,0x00,0x7D,0x7B,0x5C,0x00,0x00,0x00
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xD0 .. 0xD8
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  db 0x00,0x00,0x7E,0x00,0x00,0x00,0x00,0x00 ; 0xE0 .. 0xE8
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xF0 .. 0xF8
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 
 ; (ACCEPT-KEY)  ( ca len len2 c -- ca len len2' )
 
@@ -6631,13 +6686,12 @@ paren_accept_ascii_char_.no:
 
 paren_accept_key_:
   call do_colon
-  dw dup_,bl_,less< ; control char
-  dw branch_if_true,paren_accept_control_char
-  dw branch_if_true,paren_accept_ascii_char_.0 ; ASCII
-  ; not ASCII
-  dw paren_accept_control_char_
+;  dw key_to_char_ ; XXX FIXME
+  dw dup_,bl_,less_ ; control char?
+  dw branch_if_true_,paren_accept_control_char_
+  ; not a control char
+  dw paren_accept_printable_char_
   dw paren_exit_
-
 
 ; (ACCEPT)  ( ca len -- len2 )
 
@@ -6660,7 +6714,7 @@ paren_accept_.do:
   dw c_lit_
   db cr_char
   dw equals_  ; enter key_?
-  dw branch_if_true,paren_accept_.end
+  dw branch_if_true_,paren_accept_.end
   dw paren_accept_key_
   dw branch_,paren_accept_.do
 paren_accept_.end:
@@ -7081,7 +7135,7 @@ interpret_.begin:
     _dcs 'interpret after bl_word',cr_char
   endif
   dw dup_,c_fetch_
-  dw branch_if_0,interpret_.end  ; while_ not end of_ input stream
+  dw branch_if_0_,interpret_.end  ; while_ not end of_ input stream
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret before find',cr_char
@@ -7093,7 +7147,7 @@ interpret_.begin:
 ;    ;dw dot_,dot,bye_
   endif
   dw question_dup_
-  dw branch_if_0,interpret_.not_found
+  dw branch_if_0_,interpret_.not_found
 
   ; found
   ; ( xt 1 | xt -1 )
@@ -7103,7 +7157,7 @@ interpret_.begin:
 ;    ;dw dot_,dot,bye_
   endif
   dw compiling_question_,equals_ ; compiling an immediate_ word_?
-  dw branch_if_false,interpret_.execute
+  dw branch_if_false_,interpret_.execute
 
   ; compiling and not immediate_
   dw compile_comma_
@@ -7187,7 +7241,7 @@ interpret_.check_char:
 ;  ; this check is done at the end, because it's easier not
 ;  ; to_ use_ '(of)' with it.
   ; ( ca len c )
-  if 1;debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char',cr_char
 ;    ; dw dup_,dot_ ; case selector
@@ -7195,17 +7249,17 @@ interpret_.check_char:
   dw c_lit_
   db "'"
   dw equals_ ; is_ the first char_ a single quote?
-  dw branch_if_false,interpret_.number_question ; no
+  dw branch_if_false_,interpret_.number_question ; no
 ;  ; the first char_ is a single quote
-  if 1;debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char first quote',cr_char
 ;    ; dw dup_,dot_ ; case selector
   endif
   dw dup_,three_,equals_ ; len is_ 3?
-  dw branch_if_false,interpret_.number_question ; no
+  dw branch_if_false_,interpret_.number_question ; no
 ;  ; len is 3
-  if 1;debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char len 3',cr_char
 ;    ; dw dup_,dot_ ; case selector
@@ -7214,15 +7268,15 @@ interpret_.check_char:
   dw c_lit_
   db "'"
   dw equals_ ; is_ the last_ char_ a single quote?
-  dw branch_if_false,interpret_.number_question ; no
+  dw branch_if_false_,interpret_.number_question ; no
 ;  ; the last_ char_ is a single quote
-  if 1;debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char last quote',cr_char
 ;    ; dw dup_,dot_ ; case selector
   endif
   dw drop_,one_plus_,c_fetch_
-  if 1;debug ; XXX INFORMER
+  if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char char_='
     dw dup_,dot_,cr_ ; case_ selector
@@ -7254,19 +7308,19 @@ interpret_.number_question_patch: ; XXX not used
     dw paren_dot_quote_
     _dcs 'after number_question',cr_char
   endif
-  dw branch_if_false,interpret_.f_number_patch
+  dw branch_if_false_,interpret_.f_number_patch
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'it is a number!',cr_char
   endif
   dw two_nip_
   dw dpl_,fetch_,zero_less_ ; single number?
-  dw branch_if_false,interpret_.double_number
+  dw branch_if_false_,interpret_.double_number
   dw drop_
 interpret_.single_number:
   dw compiling_question_ ; compiling?
 ;  dw branchiffalse,interpret.9 ; XXX OLD
-  dw branch_if_false,interpret_.number_done ; XXX NEW
+  dw branch_if_false_,interpret_.number_done ; XXX NEW
   dw literal_
 ;interpret.9: ; XXX OLD
 ;  dw branch,interpret.notanumber ; XXX why?
@@ -7275,7 +7329,7 @@ interpret_.single_number:
 interpret_.double_number:
   dw compiling_question_ ; compiling?
 ;  dw questionbranch,interpret.notanumber ; XXX why?
-  dw branch_if_false,interpret_.number_done ; XXX NEW
+  dw branch_if_false_,interpret_.number_done ; XXX NEW
   dw two_literal_
   dw branch_,interpret_.number_done ; XXX NEW
 
@@ -7493,7 +7547,7 @@ quit_.begin:
   endif
   dw interpret_
   dw executing_question_
-  dw branch_if_false,quit_.begin
+  dw branch_if_false_,quit_.begin
   dw paren_dot_quote_
   _dcs ' ok'
   dw branch_,quit_.begin
@@ -7697,7 +7751,7 @@ catch_:
 throw_:
   call do_colon
   dw question_dup_
-  dw branch_if_0,throw_.end
+  dw branch_if_0_,throw_.end
   dw catcher_,fetch_
   if debug
     dw paren_dot_quote_
@@ -7708,7 +7762,7 @@ throw_:
     dw dup_,u_dot_,space_,space_
   endif
   dw question_dup_,zero_equals_
-  dw branch_if_false,throw_.no_error
+  dw branch_if_false_,throw_.no_error
   dw error_
 throw_.no_error:
   dw rp_store_
@@ -7747,7 +7801,7 @@ paren_abort_quote_:
 ;    ; dw dup_,dot,cr_
   endif
   dw from_r_,count_,rot_
-  dw branch_if_false,paren_abort_quote_.noop
+  dw branch_if_false_,paren_abort_quote_.noop
   dw errmsg_,two_store_
   dw lit_,-2,throw_
 paren_abort_quote_.noop:
@@ -7835,27 +7889,40 @@ cold_boot:
 
 ; (BOOT-MESSAGE)  ( -- )
 
-paren_boot_message:
+  _header _public,'(BOOT-MESSAGE)'
+
+paren_boot_message_:
+
   call do_colon
+
   dw paren_dot_quote_
-  db paren_boot_message.end-$-1  ; length
-  db "DZX-Forth_ "
-  db cr_char,"Version "
-  version
-  db cr_char,copy_char," 2014,2015 Marcos Cruz",cr_char
+  db paren_boot_message_.end-$-1  ; length
+  db "DZX-Forth ",cr_char
+  db "Version "
+  _version
+  db cr_char
+  db copy_char," 2014,2015 Marcos Cruz",cr_char
   db "(programandala.net)",cr_char
-  db "DZX-Forth_ comes with",cr_char
+  db "DZX-Forth comes with",cr_char
   db "ABSOLUTELY NO WARRANTY;",cr_char
   db "for details see the license",cr_char
-;  db "Type 'bye' to exit.",crchar
-paren_boot_message.end
+paren_boot_message_.end
+
+do_f_identify_patch:
+  dw f_identify_patch,cr_
+  dw unused_,u_dot_
+  dw paren_dot_quote_
+  _dcs "bytes free",cr_char,"Type 'bye' to exit"
+
   dw paren_exit_
 
 ; BOOT-MESSAGE  ( -- )
 
-boot_message:
+  _header _public,'BOOT-MESSAGE'
+
+boot_message_:
   call fetch_execute_
-  dw paren_boot_message
+  dw paren_boot_message_
 
 ; COLD ( -- )
 
@@ -7956,16 +8023,19 @@ cold_.3:
 ;;  db cold.8-$-1
 
 ;;cold.6:
-  dw page_,boot_message
+  dw page_,boot_message_
 
 ;;cold.7:
 ;;cold.8:
 ;;  dw parendotquote
 ;;  db dofidentifypatch-$-1
 ;;  db crchar,lfchar
-do_f_identify_patch:
-  dw f_identify_patch
-  dw cr_
+
+; XXX OLD -- moved to '(boot-message)'
+;do_f_identify_patch:
+;  dw f_identify_patch
+;  dw cr_
+
 ;;  dw filequestion
 ;;  dw questionbranch,cold.10
 ;;  dw cr
@@ -8032,7 +8102,7 @@ endif
 literal_:
   call do_colon
   dw char_question_ ; 8-bit number?
-  dw branch_if_false,literal_.cell
+  dw branch_if_false_,literal_.cell
   ; 8-bit number
   dw compile_,c_lit_
   dw c_comma_
@@ -8410,7 +8480,7 @@ s_quote_:
   db '"'
   dw parse_dollar_
   dw compiling_question_
-  dw branch_if_false,s_quote_.end
+  dw branch_if_false_,s_quote_.end
   dw s_literal_
 s_quote_.end:
   dw paren_exit_
@@ -10280,7 +10350,7 @@ question_create_.2:
   _header _hidden,'INIT-SCR'
 init_scr_:
   call do_colon    ; init screenfile
-  dw branch_if_0,init_scr_.no_error
+  dw branch_if_0_,init_scr_.no_error
   dw drop_
   dw paren_exit_
 init_scr_.no_error:
@@ -13161,7 +13231,6 @@ f_init_:
   _header _hidden,'FIDENTIFY'
 f_identify_:
   call do_colon
-  dw cr_
   dw paren_dot_quote_
   db f_identify_.end-$-1
   db 'Software floating-point ('
