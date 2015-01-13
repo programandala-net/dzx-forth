@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
 _version: macro
-  db 'A-01-201501132148'
+  db 'A-02-201501140005'
   endm
   version.major: equ "A" ; alpha branch_
   version.minor: equ 01
@@ -4636,7 +4636,6 @@ cpbuf:
 
   _header _public,'PAUSE' ; multitasking support
 pause_:
-;  ; XXX TODO -- use a self-modifing JP instead?
   call fetch_execute_
 pause_.action: ; XXX TODO rename this label
   dw noop_   ; patched by COLD_
@@ -4663,71 +4662,120 @@ key_question_:
   jp push_hl
 endif
 
-; XXX OLD
-;;  call docolon
-;;  dw lit,vkeyq   ; (vkeyq)
-;;  dw fetchexecute       ; @execute
-;;  dw pause       ; pause
-;;  dw parenexit
+; (DECODE)  ( c -- c' )
+;
+; Translate a key code using 'keyboard-table'.
+
+  _header _public,'(DECODE)'
+
+paren_decode_:
+  ld hl,keyboard_table_.address
+  pop de
+  add hl,de
+  ld a,(hl)
+  if size_optimization
+    jp push_a
+  else
+    ld h,0
+    ld l,a
+    jp push_hl
+  endif
+
+; DECODE  ( c -- c' )
+;
+; Translate a key code.
+
+  _header _public,'DECODE'
+decode_:
+  call fetch_execute_
+  dw paren_decode_
+
+; KEYBOARD-TABLE  ( -- a )
+
+  ; Address of a table used to translate key codes to actual chars.  The table
+  ; has one byte for every key code (0x00..0xFF), representing the char the key
+  ; is translated to.
+  ;
+  ; This table can be configured to make non-ASCII characters accessible when
+  ; an 8-bit charset is used, or graphics.
+
+  _header _public,'KEYBOARD-TABLE'
+
+keyboard_table_:
+  call do_create
+
+  ; The first half of the table (0x00..0x79) translates every key to the same
+  ; char:
+
+keyboard_table_.address:
+  rept 0x80,_char_code
+    db _char_code
+  endm
+
+  ; The second half of the table (0x80..0xFF) provides some useful translations
+  ; by default.  They make accessible with Symbol Shift all ASCII characters
+  ; that in Sinclair BASIC need Extended Mode.  This is the same method used by
+  ; ZX Spectrum Abersoft Forth (by John Jones-Steele, 1983).
+  ;
+  ; The copyright symbol has been associated to "I" as its own key is already
+  ; used.
+
+  ; Keys (with Symbol Shift) affected:
+  ;
+  ; Key From code             To code
+  ; --- -----------------     --------------
+  ; "A" 226 (0xE2) "STOP" --> 126 (0x7E) "~"
+  ; "D" 205 (0xCD) "STEP" --> 092 (0x5C) "\"
+  ; "F" 204 (0xCC) "TO"   --> 123 (0x7B) "{"
+  ; "G" 203 (0xCB) "THEN" --> 125 (0x7D) "}"
+  ; "I" 172 (0xAC) "AT"   --> 127 (0x7F) "(C)"
+  ; "S" 195 (0xC3) "NOT"  --> 124 (0x7C) "|"
+  ; "U" 197 (0xC5) "OR"   --> 093 (0x5D) "]"
+  ; "Y" 198 (0xC6) "AND"  --> 091 (0x5B) "["
+
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x80..0x87
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x88..0x8A
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x90..0x97
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x98..0x9A
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xA0..0xA7
+  db 0x00,0x00,0x00,0x00,0x7F,0x00,0x00,0x00 ; 0xA8..0xAA
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xB0..0xB7
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xB8..0xBA
+  db 0x00,0x00,0x00,0x7C,0x00,0x5D,0x5B,0x00 ; 0xC0..0xC7
+  db 0x00,0x00,0x00,0x7D,0x7B,0x5C,0x00,0x00 ; 0xC8..0xCA
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xD0..0xD7
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xD8..0xDA
+  db 0x00,0x00,0x7E,0x00,0x00,0x00,0x00,0x00 ; 0xE0..0xE7
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xE8..0xEA
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xF0..0xF7
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xF8..0xFA
+
+; (KEY)  ( -- c )
+
+  _header _public,'(KEY)'
+paren_key_:
+  ld a,(sys_last_k)
+  ld (previous_key),a
+paren_key_.1
+;  call pause ; XXX FIXME this causes trouble because of the way 'pause' calls 'fetchexecute'
+;  ; call rom_keyboard ; XXX TODO not needed if system interrupts are on_
+  ld a,(sys_last_k)
+previous_key equ $+1
+  cp 0 ; a different key?
+  jp z,paren_key_.1
+  ld h,0
+  ld l,a
+  xor a
+  ld (sys_last_k),a ; delete the last key
+  push hl
+  jp decode_
 
 ; KEY  ( -- c )
 
   _header _public,'KEY'
 key_:
-  ld a,(sys_last_k)
-  ld (previous_key),a
-key_.1
-;  call pause ; XXX FIXME this causes trouble because of the way 'pause' calls 'fetchexecute'
-;  ; call rom_keyboard ; XXX TODO not needed if system interrupts are on_
-  ld a,(sys_last_k)
-previous_key equ $+1
-  cp 0 ; a different key_?
-  jp z,key_.1
-  ld l,a ; save_ the key_
-  xor a
-  ld (sys_last_k),a ; delete the last_ key_
-  jp push_l
-
-; XXX OLD
-;;  call docolon
-;;  dw lit,vkey
-;;  dw fetchexecute
-;;  dw pause
-;;  dw parenexit
-
-;;; INKEY  ( -- c ) ; XXX OLD -- try
-  
-;;  header public,'INKEY'
-;;inkey:
-
-;  ; XXX OLD Unfinished convertion from Benschop's Forth-83:
-;;  push de
-;;  call romkeyboard
-;;  jp nz,noinkey
-;;  call romkeytest
-;;  jp nc,noinkey
-;;  ld c,0
-;;  dec d
-;;  call romkeydecode
-;;  pop de
-;;  ; jr continue ; XXX in 'pkey'
-;;noinkey
-;;  pop de
-;;  ld hl,0
-;;  push hl
-;;  jp next
-
-; XXX unfinished conversion from Boriel's ZX BASIC; moved to 'KEY'
-;;  call romkeyscan
-;;  jp z,inkey
-;;  call romkeytest
-;;  jp nc,inkey
-;;  dec d   ; D is expected to be FLAGS so set bit 3 $FF
-;;          ; 'L' Mode so no keywords
-;;  ld e, a ; main key to A
-;;          ; C is MODE 0 'KLC' from above still
-;;  call romkeydecode
-;;  jp pusha
+  call fetch_execute_
+  dw paren_key_
 
 ; SPACE  ( -- )
 
@@ -5447,10 +5495,10 @@ user_:
 addr_:
   call do_colon
   dw tick_,to_body_           ; ' >body
-  dw compiling_question_         ; state_?
+  dw compiling_question_         ; state?
   dw question_branch_,addr_.1 ; if
-  dw literal_                ;   postpone literal_
-addr_.1:                     ; then_
+  dw literal_                ;   postpone literal
+addr_.1:                     ; then
   dw paren_exit_
 
 ; (TO)  ( x -- )
@@ -5506,8 +5554,11 @@ defer_default_:
 
 ; DEFER  ( "name" -- )
 
-;  ; XXX TODO simpler: use_ 'JP deferdefault' instead?
-  ; It would be faster, but the xt would not be stored in the body.
+  ; XXX TODO simpler: use 'jp deferdefault' instead of 'call fetch_execute' It
+  ; would save one byte per definition and the execution would be faster, but
+  ; the xt would not be stored in the body and 'is' should be changed'.
+  ; 'defer!' and 'defer@' would be required.
+
   _header _public,'DEFER'
 defer_:
   call do_colon
@@ -6569,16 +6620,17 @@ paren_accept_control_char_:
 
   call do_colon
 
+paren_accept_control_char_.0:
   ; check the delete key_
   dw dup_,c_lit_
   db delete_char
   dw equals_ ; delete?
   dw branch_if_false_,paren_accept_control_char_.edit
-;  ; delete the last char_
+  ; delete the last char_
   dw drop_ ; c
   dw dup_ ; something to_ delete?
   dw branch_if_zero_,paren_accept_control_char_.end
-;  ; do it
+  ; do it
   dw minus_cursor_,one_minus_,one_,backspaces_
   dw paren_exit_
 
@@ -6620,77 +6672,16 @@ paren_accept_printable_char_.no:
   dw drop_
   dw paren_exit_
 
-; KEY>CHAR  ( c -- c' )
-;
-; Convert a key code into a char code, using 'keyboard-table'.
-
-  _header _public,'KEY>CHAR'
-
-key_to_char_:
-  ld hl,keyboard_table_.address
-  pop de
-  add hl,de
-  ld a,(hl)
-  if size_optimization
-    jp push_a
-  else
-    ld h,0
-    ld l,a
-    jp push_hl
-  endif
-
-; KEYBOARD-TABLE  ( -- a )
-
-  ; Address of a table used to translate key codes to actual chars.  The table
-  ; has one byte for every key code (0x00..0xFF), representing the char the key
-  ; is translated to.
-
-  _header _public,'KEYBOARD-TABLE'
-
-keyboard_table_:
-  call do_create
-
-keyboard_table_.address:
-  rept 0x80,_char_code
-    db _char_code
-  endm
-
-  ; 195 (0xC3) -> 124 (0x7C)  ("not"  -> "|")
-  ; 197 (0xC5) -> 093 (0x5D)  ("or"   -> "]")
-  ; 198 (0xC6) -> 091 (0x5B)  ("and"  -> "[")
-  ; 203 (0xCB) -> 125 (0x7D)  ("then" -> "}")
-  ; 204 (0xCC) -> 123 (0x7B)  ("to"   -> "{")
-  ; 205 (0xCD) -> 092 (0x5C)  ("step" -> "\")
-  ; 226 (0xE2) -> 126 (0x7E)  ("stop" -> "~")
-
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x80 .. 0x88
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0x90 .. 0x98
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xA0 .. 0xA8
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xB0 .. 0xB8
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-  db 0x00,0x00,0x00,0x7C,0x00,0x5D,0x5B,0x00 ; 0xC0 .. 0xC8
-  db 0x00,0x00,0x7D,0x7B,0x5C,0x00,0x00,0x00
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xD0 .. 0xD8
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-  db 0x00,0x00,0x7E,0x00,0x00,0x00,0x00,0x00 ; 0xE0 .. 0xE8
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0xF0 .. 0xF8
-  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-
 ; (ACCEPT-KEY)  ( ca len len2 c -- ca len len2' )
 
   _header _hidden,'(ACCEPT-KEY)'
 
 paren_accept_key_:
   call do_colon
-;  dw key_to_char_ ; XXX FIXME
   dw dup_,bl_,less_ ; control char?
-  dw branch_if_true_,paren_accept_control_char_
+  dw branch_if_true_,paren_accept_control_char_.0
   ; not a control char
-  dw paren_accept_printable_char_
+  dw branch_,paren_accept_printable_char_.0
   dw paren_exit_
 
 ; (ACCEPT)  ( ca len -- len2 )
