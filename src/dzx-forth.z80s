@@ -1,8 +1,10 @@
 ; DZX-Forth {{{
 
 version: macro
-  db 'A-01-201501130201'
+  db 'A-01-201501130458'
   endm
+  version.major: equ "A" ; alpha branch
+  version.minor: equ 01
 
 ; A direct-threaded Forth for ZX Spectrum
 ;
@@ -30,6 +32,10 @@ version: macro
 ; ------------------------------
 ; XXX TODO 
 
+; 2015-01-12: rename all cfa labels with a trailing "_".
+;
+; 2015-01-12: implement 'allocate' in the ram disk?
+;
 ; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
 ;
 ; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should it be?
@@ -69,6 +75,7 @@ fp_engineering_output_functions:  equ yes
 separated_f_stack:                equ no ; XXX TODO -- not fully implemented in DX-Forth
 
 classic_Forth_behaviours:         equ no
+tib_words:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
 
 fast_emit:                        equ yes ; if yes, 'space' and 'cr' jump directly into '(emit)', don't call 'emit'
 
@@ -76,7 +83,7 @@ fast_emit:                        equ yes ; if yes, 'space' and 'cr' jump direct
 ; Config
 
 max_open_source_files:  equ 6  ; (min = 2)
-max_open_file_handles:  equ 10
+max_open_file_handles:  equ 16 ; (0..15)
 top_prunes:             defl 0 ; XXX OLD ?
 
 ; ------------------------------
@@ -93,15 +100,15 @@ fw: equ 4 ; floating point number size (bytes)
 ; XXX TODO Convert stack sizes to user variables? The point is
 ; a task could need just a little stack.
 
+filename_size:                equ 16+1  ; XXX TODO why 16 in CP/M? ("ud:nnnnnnnn.eee"=15)
+file_descriptor_size:         equ filename_size+(4*cw)  ; XXX OLD?
 block_size:                   equ 1024
-file_descriptor_size:         equ filename_size+(4*cw)  ; ; XXX OLD
-file_handle_size:             equ 6+36      ; (keep even) ; XXX OLD
-filename_size:                equ 10        ; XXX TODO bigger, for +3, divide, etc.
+file_handle_size:             equ 6+36  ; (keep even) ; XXX OLD?
 parsed_string_buffer_size:    equ 255
 pictured_numeric_buffer_size: equ 68
 stack_size:                   equ 256
 return_stack_size:            equ 256
-tib_size:                     equ 80        ; Terminal Input Buffer
+tib_size:                     equ 80    ; Terminal Input Buffer
 user_data_size:               equ 128
 word_buffer_size:             equ 31+5
 
@@ -445,8 +452,8 @@ file_descriptor_blocks_table:
     endm
   endp
 
-tib: ; XXX TODO make 'tib' a word
-  ds tib_size  ; TIB (terminal input buffer)
+tib_address:
+  ds tib_size ; terminal input buffer
 
 user_data:
   ds user_data_size
@@ -470,9 +477,10 @@ parsed_string_buffer:
   else
     ds parsed_string_buffer_size+word_buffer_size ; buffer of S" and WORD
   endif
-hm: equ $   ; system definitions and header memory
 
-dnfa:
+hm: equ $   ; system definitions and header memory ; XXX OLD ?
+
+dummy_nfa: ; XXX OLD ?
   db 0   ; dummy nfa - don't remove! ; XXX NEW -- changed its position in DX-Forth 4.09
 
 ; Identification and version
@@ -491,7 +499,9 @@ return_stack_pointer:
   dw return_stack_0
 
 ; cpu speed (TURBO PASCAL compatible)
-speed: ; XXX OLD -- not needed, unless the OS is not used
+; XXX OLD -- not needed, unless the OS is not used
+; XXX TODO convert
+speed:
   dw 4   ; 1..8191 MHz
 
 ; ------------------------------
@@ -658,8 +668,9 @@ amovd:
 ; }}} **********************************************************
 ; Virtual machine {{{
 
-; XXX TODO -- add headers:
+; XXX TODO -- add headers?
 do_create:        equ next
+do_variable:      equ next
 do_value:         equ fetch
 do_constant:      equ fetch
 do_two_constant:  equ two_fetch
@@ -1436,6 +1447,48 @@ c_toggle.hl:
   xor e
   ld (hl),a
   jp next
+
+; CHAR+  ( ca1 -- ca2 )
+;   aka 1+ char+
+
+  _header _public,'CHAR+',,one_plus
+char_plus: equ one_plus
+
+; CHARS  ( n1 -- n2 )
+;   aka noop chars immediate
+
+  _header _public,'CHARS',_immediate,noop
+chars: equ next
+
+; CELL+  ( a1 -- a2 )
+;   aka 2+ cell+
+
+  _header _public,'CELL+',,two_plus
+cell_plus: equ two_plus
+
+; CELL-  ( a1 -- a2 )
+;   aka 2- cell-
+
+  _header _public,'CELL-',,two_minus
+cell_minus: equ two_minus
+
+; CELLS  ( n1 -- n2 )
+;   aka 2* cells
+
+  _header _public,'CELLS',,two_star
+cells: equ two_star
+
+; ALIGN  ( -- )
+;   aka noop align immediate
+
+  _header _public,'ALIGN',_immediate,noop
+align: equ next
+
+; ALIGNED  ( a -- aa )
+;   aka noop aligned immediate
+
+  _header _public,'ALIGNED',_immediate,noop
+aligned: equ next
 
 ; }}} **********************************************************
 ; Arithmetic and logical {{{
@@ -4219,8 +4272,12 @@ dot.not_decimal_base:
 ; DOS {{{
 
 get_current_drive:
-  ; XXX TODO
-  ret
+  ld a,0xff
+
+set_current_drive:
+  ; a = drive (ASCII 'A'..'P' to set it; 0xff to get it)
+  ld ix,dos_set_drive
+  jr do_dos
 
 get_current_user:
   ld a,0xff
@@ -4278,6 +4335,52 @@ dos:
 call_dos.ix:
 
   jp   (ix)                ; standard way to CALL (IX), by calling this jump
+
+;	DOS-VERSION  ( -- minor major )
+
+	_header _public,'DOS-VERSION'
+dos_version_:
+  ld ix,dos_version
+	call do_dos
+push_version:
+  ; d=issue = major
+  ; e=version (within issue) = minor
+  xor a
+ 	ld h,a
+  ld l,e
+	ld e,d
+  ld d,a
+	jp push_de_hl
+
+;	UNUSED-DISK ( c -- u )
+
+	_header _public,'UNUSED-DISK'
+unused_disk:
+  pop hl
+  ld a,l
+  ld ix,dos_free_space
+	call do_dos
+  jp nc,dos_error.a
+  jp push_hl
+
+;	DOS-ERROR ( +n -- )
+
+	_header _public,'DOS-ERROR'
+
+dos_error:
+  ; XXX TMP entry
+  pop hl
+  ld a,l
+
+dos_error.a:
+  ; XXX TMP entry
+  ; a = DOS error code
+  ld h,0
+  ld l,a
+  ld de,-1000
+  sbc hl,de
+  push hl
+  jp throw
 
 ; FDOS  ( DE u -- HL A )
 
@@ -4472,14 +4575,6 @@ paren_ms.2:
   dec  de
   jp paren_ms.1
 
-; (BEEP)  ( -- )
-
-  _header _hidden,'(BEEP)'
-paren_beep:
-  call do_colon
-  ; XXX TODO
-  dw paren_exit
-
 ; MS  ( ms -- )
 
   _header _public,'MS'
@@ -4487,11 +4582,22 @@ ms:
   call fetch_execute
   dw paren_ms
 
+; }}} **********************************************************
+; Sound {{{
+
 ; SOUND  ( freq ms -- )
 ;
 ;  header  1,'SOUND'
 ;sound:  call fetch_execute
 ;  dw sound0
+
+; (BEEP)  ( -- )
+
+  _header _hidden,'(BEEP)'
+paren_beep:
+  call do_colon
+  ; XXX TODO
+  dw paren_exit
 
 ; BEEP  ( -- )
 
@@ -4502,162 +4608,6 @@ beep:
 
 cpbuf:
   ds 16
-
-; AT-XY  ( u1 u2 -- )
-;   position cursor at col u1, row u2
-
-  _header _public,'AT-XY'
-atxy:
-  ; XXX TODO
-  jp next ; XXX TMP
-;;  pop  de
-;;  pop  hl
-;;  ld d,l
-;;  push  bc
-;;  push  de
-;;  ld hl,tgxy
-;;  ld de,cpbuf
-;;  ld a,16
-;;  call amovd
-;;  pop  de
-;;  ld a,(txpos)
-;;  ld c,a
-;;  ld a,(txofs)
-;;  add  a,d
-;;  push  de
-;;  call atxy.3
-;;  pop  de
-;;  ld a,(typos)
-;;  ld c,a
-;;  ld a,(tyofs)
-;;  add  a,e
-;;  call atxy.3
-;;  pop  bc
-;;  ld de,tgxyd
-;;  ld hl,cpbuf
-;;atxy.1:
-;;  push  de
-;;  push  hl
-;;atxy.2:
-;;  call do_colon
-;;  dw count,tuck
-;;  dw type    ; send string
-;;  dw zero_not_equals
-;;  dw swap,fetch
-;;  dw and_,ms    ; delay only if string not empty
-;;  dw paren_exit
-;;
-;;atxy.3:
-;;  ld hl,cpbuf
-;;  ld b,0
-;;  add  hl,bc
-;;  ex de,hl
-;;  ld hl,tisbin
-;;  inc  (hl)
-;;  dec  (hl)
-;;  jp z,atxy.4
-;;  ld (de),a
-;;  ret
-;;
-;;atxy.4:
-;;  dec  de
-;;  dec  de
-;;  ld hl,atxy.8-1
-;;  ld b,3
-;;atxy.5:
-;;  inc  hl
-;;  ld c,'0'-1
-;;atxy.6:
-;;  inc  c
-;;  sub  (hl)
-;;  jp nc,atxy.6
-;;  add  a,(hl)
-;;  push  af
-;;  ld a,c
-;;  cp  '0'
-;;  jp z,atxy.7
-;;  ld (de),a
-;;atxy.7:
-;;  inc  de
-;;  pop  af
-;;  dec  b
-;;  jp nz,atxy.5
-;;  ret
-;;
-;;atxy.8:
-;;  db 100,10,1
-
-; PAGE  ( -- )
-  _header _public,'PAGE'
-
-page:
-  _save_ip
-  call rom_cl_all
-  ld a,2
-  call rom_chan_open
-  jp restore_ip_next
-
-; NORMAL  ( -- )
-
-  _header _public,'NORMAL'
-vnorm:
-; XXX TODO
-  jp next
-;;  ld hl,tlovid
-;;vnorm.1:
-;;  ld de,tceold
-;;  jp atxy.1
-
-; HIGHLIGHT  ( -- )
-
-  _header _public,'HIGHLIGHT'
-hilit:
-; XXX TODO
-  jp next
-;;  ld hl,thivid
-;;  jp vnorm.1
-
-; CLEAR-LINE  ( -- )
-
-  _header _public,'CLEAR-LINE'
-cleol:
-; XXX TODO
-  jp next
-;;  ld hl,tceol
-;;  jp vnorm.1
-
-; INSERT-LINE  ( -- )
-
-  _header _public,'INSERT-LINE'
-insln:
-; XXX TODO
-  jp next
-;;  ld hl,tinsln
-;;insln.1:
-;;  ld de,tclsd
-;;  jp atxy.1
-
-; DELETE-LINE  ( -- )
-
-  _header _public,'DELETE-LINE'
-delln:
-; XXX TODO
-  jp next
-;;  ld hl,tdelln
-;;  jp insln.1
-
-; XXX OLD
-;;;  INIT-VIDEO  ( -- )
-;;
-;;  _header  1,'INIT-VIDEO'
-;;invid:  ld hl,tinit
-;;  jp insln.1
-;;
-;;;  EXIT-VIDEO  ( -- )
-;;
-;;  _header  1,'EXIT-VIDEO'
-;;exvid:  ld hl,texit
-;;  jp insln.1
 
 ; }}} **********************************************************
 ; Input/output {{{
@@ -5350,7 +5300,7 @@ semicolon:
   dw paren_exit
 
 ; :NONAME  ( -- xt )
-;   warning? drop here dup (dnfa) last 2!
+;   warning? drop here dup (dummy_nfa) last 2!
 ;       (do_colon) ,call bal off !csp sp@ cs0 ! ]
 
   _header _public,':NONAME'
@@ -5361,7 +5311,7 @@ nonam:
   endif
   dw here
   dw dup    ; allow RECURSE etc
-  dw lit,dnfa  ; allow IMMEDIATE etc
+  dw lit,dummy_nfa  ; allow IMMEDIATE etc
   dw last,two_store
   dw lit,do_colon
   dw comma_call
@@ -5471,7 +5421,7 @@ user:
   dw paren_exit
 
 ; ADDR  ( "name" -- a )
-; immediate, state-smart
+; Note: immediate, state-smart
 
   _header _public,'ADDR',_immediate
 addr:
@@ -5502,7 +5452,7 @@ paren_to:
 ; TO  ( x "name" -- )
 ;
 ;   ' state? if postpone (to) , else >body !  then ; immediate
-; state-smart
+; Note: state-smart
 
   _header _public,'TO',_immediate
 to:
@@ -5547,9 +5497,11 @@ defer:
   dw paren_exit
 
 ; IS  ( xt "name" -- )
+;
+; Note: state-smart
 
   ; XXX TODO simpler: see note in 'defer'
-  _header _public,'IS',_immediate,to  ; state-smart
+  _header _public,'IS',_immediate,to
 is: equ to
 
 paren_is: equ paren_to
@@ -6703,6 +6655,28 @@ accept:
   call fetch_execute
   dw paren_accept
 
+if tib_words
+
+; TIB  ( -- a )
+; address of the terminal input buffer
+
+  _header _public,'TIB'
+
+tib:
+  ld hl,tib_address
+  jp push_hl
+
+; #TIB  ( -- u )
+; characters in the terminal input buffer
+
+  _header _public,'#TIB'
+
+number_tib:
+  call do_variable
+  dw 0
+
+endif
+
 ; PAD  ( -- a )
 ;   dp @ (npno) @ +
 
@@ -7147,6 +7121,8 @@ interpret.not_found:
   ; XXX TODO -- factor out to a new word the number recognition with prefixes
   ; -- see Gforth's '>number', 'number?', 'snumber?'...
 
+  ; XXX TODO recognize also chars: 'c'
+
   dw c_lit
   db '$'
   dw paren_of,interpret.check_binary
@@ -7346,7 +7322,7 @@ evaluate:
 ;   while
 ;     dup blk ! block b/buf
 ; else
-;   (tib) dup 80 accept space
+;   tib dup 80 accept space
 ; then
 ; 'source 2! >in off true then
 
@@ -7367,11 +7343,18 @@ paren_refill:
   dw block,bytes_per_buffer
   dw branch,paren_refill.2
 paren_refill.1:
-  dw lit,tib
+  if tib_words
+    dw tib
+  else
+    dw lit,tib_address
+  endif
   dw dup
   dw c_lit
   db 32*2-1 ; XXX TMP -- ZX Spectrum's chars per line; XXX TODO use a variable instead?
   dw cr,accept
+  if tib_words
+    dw dup,number_tib,store ; update '#tib'
+  endif
 paren_refill.2:
   dw tick_source,two_store
   dw in_,off
@@ -7791,24 +7774,29 @@ cold_boot:
 
   jp cold ; XXX TMP
 
-; BOOT-MESSAGE  ( -- )
+; (BOOT-MESSAGE)  ( -- )
 
-; XXX TODO -- defered
-
-boot_message:
+paren_boot_message:
   call do_colon
   dw paren_dot_quote
-  db boot_message.end-$-1  ; length
+  db paren_boot_message.end-$-1  ; length
   db "DZX-Forth "
   db cr_char,"Version "
   version
-  db cr_char,copy_char," 2014,2015 Marcos Cruz "
-  db "(programandala.net)"
-  db cr_char
-; XXX OLD
-;  db cr_char,"Type 'bye' to exit.",cr_char
-boot_message.end
+  db cr_char,copy_char," 2014,2015 Marcos Cruz",cr_char
+  db "(programandala.net)",cr_char
+  db "DZX-Forth comes with",cr_char
+  db "ABSOLUTELY NO WARRANTY;",cr_char
+  db "for details see the license",cr_char
+;  db "Type 'bye' to exit.",cr_char
+paren_boot_message.end
   dw paren_exit
+
+; BOOT-MESSAGE  ( -- )
+
+boot_message:
+  call fetch_execute
+  dw paren_boot_message
 
 ; COLD ( -- )
 
@@ -7977,6 +7965,60 @@ endif
 ;;  ld l,a
 ;;  ld (ulimit),hl
 ;;  jp next
+
+; LITERAL  ( n -- ) char? if postpone c_lit c, exit then
+;       postpone lit , ; immediate
+
+  _header _public,'LITERAL',_immediate
+literal:
+  call do_colon
+  dw char_question ; 8-bit number?
+  dw branch_if_false,literal.1 ; no
+  ; yes
+  dw compile,c_lit
+  dw c_comma
+  dw paren_exit
+literal.1:
+  dw compile,lit
+  dw comma
+  dw paren_exit
+
+; 2LITERAL  ( d -- )
+;   postpone 2lit , , ; immediate
+
+  _header _public,'2LITERAL',_immediate
+two_literal:
+  call do_colon
+  dw compile,two_lit
+  dw comma,comma
+  dw paren_exit
+
+; [']     ' [compile] literal  ; immediate
+
+  _header _public,"[']",_immediate
+bracket_tick:
+  call do_colon
+  dw tick
+  dw literal
+  dw paren_exit
+
+; [COMPILE]   ' compile,  ; immediate
+
+  _header _public,'[COMPILE]',_immediate
+bracket_compile:
+  call do_colon
+  dw tick
+  dw compile_comma
+  dw paren_exit
+
+; RECURSE  ( -- )
+; last cell+ @ compile, ; immediate
+
+  _header _public,'RECURSE',_immediate
+recurse:
+  ld hl,(last.xt)
+  push hl
+  jp compile_comma
 
 ; }}} **********************************************************
 ; Dictionary support {{{
@@ -8239,10 +8281,10 @@ marker:
   dw paren_exit
 
 ; }}} **********************************************************
-; XXX {{{
+; Strings {{{
 
 ; S,  ( ca u -- )
-; 255 min 0max here over 1+ allot place
+;   255 min 0max here over 1+ allot place
 
   _header _hidden,'S,'
 s_comma:
@@ -8268,18 +8310,8 @@ comma_quote:
   dw s_comma
   dw paren_exit
 
-; XXX OLD -- DX-Forth 4.00
-;;; (s")  ( -- ca u ) r> count 2dup + >r
-;;
-;;  _header x,'(S")'
-;;paren_s_quot:
-;;  call do_colon
-;;  dw from_r,count
-;;  dw two_dup,plus,to_r
-;;  dw paren_exit
-
-; XXX NEW -- DX-Forth 4.09
-; (S")  ( -- ca u ) r> count 2dup + >r
+; (S")  ( -- ca u )
+;   r> count 2dup + >r
 
   _header _hidden,'(S")'
 paren_s_quot:
@@ -8304,9 +8336,12 @@ s_literal:
   dw s_comma
   dw paren_exit
 
-; S"  ( -- ca u ) [char] " parse$ state? if postpone sliteral
-;       then ; immediate
-; state-smart
+; S"  ( -- ca u )
+;
+;   [char] " parse$ state? if postpone sliteral
+;   then ; immediate
+;
+; Note: this word is state-smart
 
   _header _public,'S"',_immediate
 s_quote:
@@ -8368,60 +8403,6 @@ char_question:
   ld l,h
   jp zero_equals_hl
 
-; LITERAL  ( n -- ) char? if postpone c_lit c, exit then
-;       postpone lit , ; immediate
-
-  _header _public,'LITERAL',_immediate
-literal:
-  call do_colon
-  dw char_question ; 8-bit number?
-  dw branch_if_false,literal.1 ; no
-  ; yes
-  dw compile,c_lit
-  dw c_comma
-  dw paren_exit
-literal.1:
-  dw compile,lit
-  dw comma
-  dw paren_exit
-
-; 2LITERAL  ( d -- )
-;   postpone 2lit , , ; immediate
-
-  _header _public,'2LITERAL',_immediate
-two_literal:
-  call do_colon
-  dw compile,two_lit
-  dw comma,comma
-  dw paren_exit
-
-; [']     ' [compile] literal  ; immediate
-
-  _header _public,"[']",_immediate
-bracket_tick:
-  call do_colon
-  dw tick
-  dw literal
-  dw paren_exit
-
-; [COMPILE]   ' compile,  ; immediate
-
-  _header _public,'[COMPILE]',_immediate
-bracket_compile:
-  call do_colon
-  dw tick
-  dw compile_comma
-  dw paren_exit
-
-; RECURSE  ( -- )
-; last cell+ @ compile, ; immediate
-
-  _header _public,'RECURSE',_immediate
-recurse:
-  ld hl,(last.xt)
-  push hl
-  jp compile_comma
-
 ; CHAR  ( -- c ) bl word 1+ c@
 
   _header _public,'CHAR'
@@ -8439,6 +8420,9 @@ bracket_char:
   dw char
   dw literal
   dw paren_exit
+
+; }}} **********************************************************
+; Misc {{{
 
 ; Y/N  ( -- flag )
 ;   ." (y/n) N\bs" key upcase [char] Y = dup
@@ -8464,54 +8448,12 @@ yn2:
   dw emit,space
   dw paren_exit
 
-; CHAR+  ( ca1 -- ca2 )
-;   aka 1+ char+
-
-  _header _public,'CHAR+',,one_plus
-char_plus: equ one_plus
-
-; CHARS  ( n1 -- n2 )
-;   aka noop chars immediate
-
-  _header _public,'CHARS',_immediate,noop
-chars: equ next
-
-; CELL+  ( a1 -- a2 )
-;   aka 2+ cell+
-
-  _header _public,'CELL+',,two_plus
-cell_plus: equ two_plus
-
-; CELL-  ( a1 -- a2 )
-;   aka 2- cell-
-
-  _header _public,'CELL-',,two_minus
-cell_minus: equ two_minus
-
-; CELLS  ( n1 -- n2 )
-;   aka 2* cells
-
-  _header _public,'CELLS',,two_star
-cells: equ two_star
-
-; ALIGN  ( -- )
-;   aka noop align immediate
-
-  _header _public,'ALIGN',_immediate,noop
-align: equ next
-
-; ALIGNED  ( a -- aa )
-;   aka noop aligned immediate
-
-  _header _public,'ALIGNED',_immediate,noop
-aligned: equ next
-
 ; DZX-FORTH  ( -- minor major )
 
   _header _public,'DZX-FORTH'
 dzx_forth:
-; XXX TODO
-  jp next
+  ld de,version.major shl 8 + version.minor
+  jp push_version
 
 ; }}} **********************************************************
 ; Files {{{
@@ -8808,6 +8750,7 @@ set_fcb.19:
   _header _public,'GET-USER'
 get_user:
   call get_current_user
+  jp nc,dos_error.a ; XXX TODO needed? when this could fail?
   jp push_a
 
 ; SET-USER  ( u -- )
@@ -8821,6 +8764,7 @@ set_user:
 set_user.a:
   cp 255
   call nz,set_current_user
+  jp nc,dos_error.a
   jp next
 
 ; RESTORE-USER  ( -- )
@@ -8830,6 +8774,30 @@ restore_user:
 old_user: equ $+1
   ld a,0xff  ; old user (0xff = ignore)
   jp set_user.a
+
+; GET-DRIVE  ( -- u )
+
+  _header _public,'GET-DRIVE'
+get_drive:
+  call get_current_drive
+  jp nc,dos_error.a
+  jp push_a
+
+; SET-DRIVE  ( u -- )
+;
+; Set the default drive (i.e. the drive implied by all filenames that do not
+; specify a drive).
+;
+; u = drive (ASCII 'A'..'P')
+
+  _header _public,'SET-DRIVE'
+set_drive:
+  pop hl
+  ld a,l
+set_drive.a:
+  call set_current_drive
+  jp nc,dos_error.a
+  jp next
 
 ; REC@  ( a -- +d )
 ;   dup >r @ r> 2+ c@ 7 0 do d2* loop
@@ -9189,20 +9157,20 @@ close_file:
 ; R/O  ( -- fam )
 ;   aka 0 r/o
 
-  _header _public,'R/O',,zero
-rso: equ  zero
+  _header _public,'R/O',,one
+read_only: equ one
 
 ; W/O  ( -- fam )
 ;   aka 1 w/o
 
-  _header _public,'W/O',,one
-wso: equ  one
+  _header _public,'W/O',,two
+write_only: equ two
 
 ; R/W  ( -- fam )
 ;   aka 2 r/w
 
-  _header _public,'R/W',,two
-read_write: equ  two
+  _header _public,'R/W',,three
+read_write: equ three
 
 ; BIN  ( fam1 -- fam2 )
 ;   aka noop bin immediate
@@ -9419,18 +9387,20 @@ offs:
   _header _hidden,'SETSIZ'
 setsiz:
   call do_colon
-  dw rwp_fetch,over
-  dw c_lit
-  db 0x7f
-  dw and_
-  dw paren_to,offs
-  dw fcb
-  dw c_lit
-  db 33
-  dw plus,rec_store
-  dw c_lit
-  db recsiz
-  dw offs,minus
+  ; XXX TODO
+  ; XXX OLD
+  ; dw rwp_fetch,over
+  ; dw c_lit
+  ; db 0x7f
+  ; dw and_
+  ; dw paren_to,offs
+  ; dw fcb
+  ; dw c_lit
+  ; db 33
+  ; dw plus,rec_store
+  ; dw c_lit
+  ; db recsiz
+  ; dw offs,minus
   dw paren_exit
 
 ; SETDMA  ( a -- )
@@ -10106,7 +10076,7 @@ pfbk:
   dw plus_ext
   dw fnbuf,place
   dw fnbuf,count
-  dw wso,create_file,throw
+  dw write_only,create_file,throw
   dw over,zero
   dw paren_question_do,pfbk.2
 pfbk.do.1:
@@ -10222,7 +10192,7 @@ dot_lastfile:
   _header _hidden,'?CREATE'
 question_create:
   call do_colon
-  dw rso,open_file  ; test if file exists
+  dw read_only,open_file  ; test if file exists
   dw zero_equals,tuck
   dw question_branch,question_create.1
   dw close_file
@@ -10452,8 +10422,163 @@ turnkey_system:
 ;;  dw branch,turnkey.1
 
 ; }}} **********************************************************
-; Graphics {{{
+; Screen and graphics {{{
 
+; AT-XY  ( u1 u2 -- )
+;   position cursor at col u1, row u2
+
+  _header _public,'AT-XY'
+at_xy:
+  ; XXX TODO
+  jp next ; XXX TMP
+;;  pop  de
+;;  pop  hl
+;;  ld d,l
+;;  push  bc
+;;  push  de
+;;  ld hl,tgxy
+;;  ld de,cpbuf
+;;  ld a,16
+;;  call amovd
+;;  pop  de
+;;  ld a,(txpos)
+;;  ld c,a
+;;  ld a,(txofs)
+;;  add  a,d
+;;  push  de
+;;  call at_xy.3
+;;  pop  de
+;;  ld a,(typos)
+;;  ld c,a
+;;  ld a,(tyofs)
+;;  add  a,e
+;;  call at_xy.3
+;;  pop  bc
+;;  ld de,tgxyd
+;;  ld hl,cpbuf
+;;at_xy.1:
+;;  push  de
+;;  push  hl
+;;at_xy.2:
+;;  call do_colon
+;;  dw count,tuck
+;;  dw type    ; send string
+;;  dw zero_not_equals
+;;  dw swap,fetch
+;;  dw and_,ms    ; delay only if string not empty
+;;  dw paren_exit
+;;
+;;at_xy.3:
+;;  ld hl,cpbuf
+;;  ld b,0
+;;  add  hl,bc
+;;  ex de,hl
+;;  ld hl,tisbin
+;;  inc  (hl)
+;;  dec  (hl)
+;;  jp z,at_xy.4
+;;  ld (de),a
+;;  ret
+;;
+;;at_xy.4:
+;;  dec  de
+;;  dec  de
+;;  ld hl,at_xy.8-1
+;;  ld b,3
+;;at_xy.5:
+;;  inc  hl
+;;  ld c,'0'-1
+;;at_xy.6:
+;;  inc  c
+;;  sub  (hl)
+;;  jp nc,at_xy.6
+;;  add  a,(hl)
+;;  push  af
+;;  ld a,c
+;;  cp  '0'
+;;  jp z,at_xy.7
+;;  ld (de),a
+;;at_xy.7:
+;;  inc  de
+;;  pop  af
+;;  dec  b
+;;  jp nz,at_xy.5
+;;  ret
+;;
+;;at_xy.8:
+;;  db 100,10,1
+
+; PAGE  ( -- )
+  _header _public,'PAGE'
+
+page:
+  _save_ip
+  call rom_cl_all
+  ld a,2
+  call rom_chan_open
+  jp restore_ip_next
+
+; NORMAL  ( -- )
+
+  _header _public,'NORMAL'
+vnorm:
+; XXX TODO
+  jp next
+;;  ld hl,tlovid
+;;vnorm.1:
+;;  ld de,tceold
+;;  jp at_xy.1
+
+; HIGHLIGHT  ( -- )
+
+  _header _public,'HIGHLIGHT'
+hilit:
+; XXX TODO
+  jp next
+;;  ld hl,thivid
+;;  jp vnorm.1
+
+; CLEAR-LINE  ( -- )
+
+  _header _public,'CLEAR-LINE'
+cleol:
+; XXX TODO
+  jp next
+;;  ld hl,tceol
+;;  jp vnorm.1
+
+; INSERT-LINE  ( -- )
+
+  _header _public,'INSERT-LINE'
+insln:
+; XXX TODO
+  jp next
+;;  ld hl,tinsln
+;;insln.1:
+;;  ld de,tclsd
+;;  jp at_xy.1
+
+; DELETE-LINE  ( -- )
+
+  _header _public,'DELETE-LINE'
+delln:
+; XXX TODO
+  jp next
+;;  ld hl,tdelln
+;;  jp insln.1
+
+; XXX OLD
+;;;  INIT-VIDEO  ( -- )
+;;
+;;  _header  1,'INIT-VIDEO'
+;;invid:  ld hl,tinit
+;;  jp insln.1
+;;
+;;;  EXIT-VIDEO  ( -- )
+;;
+;;  _header  1,'EXIT-VIDEO'
+;;exvid:  ld hl,texit
+;;  jp insln.1
 ; BORDER  ( n -- )
 
   _header _public,'BORDER'
