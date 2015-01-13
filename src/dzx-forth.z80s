@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
 version: macro
-  db 'A-01-201501130458'
+  db 'A-01-201501131915'
   endm
   version.major: equ "A" ; alpha branch
   version.minor: equ 01
@@ -294,11 +294,11 @@ cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 ; Word header
 
 alias_bit:          equ 7
-alias_mask:         equ 1 << alias_bit
+alias_mask:         equ 1 shl alias_bit
 immediate_bit:      equ 6
-immediate_mask:     equ 1 << immediate_bit
+immediate_mask:     equ 1 shl immediate_bit
 smudge_bit:         equ 5
-smudge_mask:        equ 1 << smudge_bit
+smudge_mask:        equ 1 shl smudge_bit
 
 _public:      equ yes
 _hidden:      equ not _public ; change this to make all hidden words public
@@ -1061,18 +1061,6 @@ if control_flow_stack_extensions
 ; -ROLL  ( xu .. xu+1 x0 u -- x0 xu .. xu+1 )
 
   _header _public,'-ROLL'
-
-; XXX OLD -- DX-Forth 4.00
-;;minus_roll:
-;;  call do_colon
-;;  dw cells,two_to_r
-;;  dw sp_fetch,sp_fetch,tuck
-;;  dw r_fetch,cmove
-;;  dw sp_fetch,two_from_r
-;;  dw rot,plus,store
-;;  dw paren_exit
-
-; XXX NEW -- DX-Forth 4.09
 minus_roll:
   pop hl
   add hl,hl
@@ -2276,8 +2264,12 @@ zero_equals:
 zero_equals_hl:
   ld a,l
   or h
-  jp z,true
-  jp false
+  if size_optimization
+    jr true_if_z
+  else
+    jp z,true
+    jp false
+  endif
 
 ; 0<>  ( x -- flag )
 
@@ -2299,6 +2291,7 @@ equals:
   pop hl
 equals.de_hl:
   call compare_de_hl_unsigned
+true_if_z:
   jp z,true
   jp false
 
@@ -2319,7 +2312,7 @@ zero_less:
   pop hl
 zero_less.hl:
   add hl,hl
-zero_less.2:
+true_if_cy: ; XXX TODO macro for this jump
   jp c,true
   jp false
 
@@ -2331,8 +2324,12 @@ zero_greater:
   ld hl,0
 zero_greater.1:
   call compare_de_hl_signed
-  jp c,true
-  jp false
+  if size_optimization
+    jp true_if_cy
+  else
+    jp c,true
+    jp false
+  endif
 
 ; <  ( n1 n2 -- flag )
 
@@ -2358,8 +2355,12 @@ u_less:
   pop hl
 u_less.de_hl:
   call compare_de_hl_unsigned
-  jp c,true
-  jp false
+  if size_optimization
+    jp true_if_cy
+  else
+    jp c,true
+    jp false
+  endif
 
 ; U>  ( u1 u2 -- flag )
 
@@ -2457,7 +2458,12 @@ between:
   pop de
   call compare_de_hl_unsigned
   jp z,true
-  jp zero_less.2
+  if size_optimization
+    jp true_if_cy
+  else
+    jp c,true
+    jp false
+  endif
 
 ; D0=  ( d -- flag )
 ;   or 0=
@@ -4336,36 +4342,36 @@ call_dos.ix:
 
   jp   (ix)                ; standard way to CALL (IX), by calling this jump
 
-;	DOS-VERSION  ( -- minor major )
+; DOS-VERSION  ( -- minor major )
 
-	_header _public,'DOS-VERSION'
+  _header _public,'DOS-VERSION'
 dos_version_:
   ld ix,dos_version
-	call do_dos
+  call do_dos
 push_version:
   ; d=issue = major
   ; e=version (within issue) = minor
   xor a
- 	ld h,a
+  ld h,a
   ld l,e
-	ld e,d
+  ld e,d
   ld d,a
-	jp push_de_hl
+  jp push_de_hl
 
-;	UNUSED-DISK ( c -- u )
+; UNUSED-DISK ( c -- u )
 
-	_header _public,'UNUSED-DISK'
+  _header _public,'UNUSED-DISK'
 unused_disk:
   pop hl
   ld a,l
   ld ix,dos_free_space
-	call do_dos
+  call do_dos
   jp nc,dos_error.a
   jp push_hl
 
-;	DOS-ERROR ( +n -- )
+; DOS-ERROR ( +n -- )
 
-	_header _public,'DOS-ERROR'
+  _header _public,'DOS-ERROR'
 
 dos_error:
   ; XXX TMP entry
@@ -6178,16 +6184,22 @@ namef:
 wordlist_to_name: equ fetch
 
 ; -ALIAS  ( nfa -- nfa flag )
+; false if alias
+; XXX TODO rename
 ;   dup c@ $80 <
 
   _header _hidden,'-ALIAS'
-  ; false if alias
 minus_alias:
   pop hl
   push hl
   ld a,(hl)
-  cp 0x80
-  jp zero_less.2
+  cp alias_mask
+  if size_optimization
+    jp true_if_cy
+  else
+    jp c,true
+    jp false
+  endif
 
 ; XXX OLD -- DX-Forth 4.00
 ;;; >name  ( xt -- nfa | 0 )
@@ -7123,6 +7135,7 @@ interpret.not_found:
 
   ; XXX TODO recognize also chars: 'c'
 
+  ; ( ca len c )
   dw c_lit
   db '$'
   dw paren_of,interpret.check_binary
@@ -7135,6 +7148,7 @@ interpret.not_found:
   dw branch,interpret.remove_the_prefix
 
 interpret.check_binary:
+  ; ( ca len c )
   dw c_lit
   db '%'
   dw paren_of,interpret.check_decimal
@@ -7147,9 +7161,10 @@ interpret.check_binary:
   dw branch,interpret.remove_the_prefix
 
 interpret.check_decimal:
+  ; ( ca len c )
   dw c_lit
   db '#'
-  dw paren_of,interpret.no_prefix_found
+  dw paren_of,interpret.check_char
   ; it's "#" -- decimal number
   if debug ; XXX INFORMER
     dw paren_dot_quote
@@ -7158,18 +7173,53 @@ interpret.check_decimal:
   dw decimal,one
   dw branch,interpret.remove_the_prefix
 
-interpret.no_prefix_found: ; endcase
-  if debug ; XXX INFORMER
+interpret.check_char:
+  ; there is no number prefix.
+  ; does the string represent a char?
+  ; this check is done at the end, because it's easier not
+  ; to use '(of)' with it.
+  ; ( ca len c )
+  if 1;debug ; XXX INFORMER
     dw paren_dot_quote
-    _dcs 'interpret.no_prefix_found',cr_char
+    _dcs 'interpret.check_char',cr_char
     ; dw dup,dot ; case selector
   endif
-  dw drop ; discard the case selector
-  ; XXX changed: it ran into .remove_the_prefix when no prefix was found
-  ; XXX TODO omit the jump when size_optimization is on:
-  dw branch,interpret.number_question
-
-  ; XXX FIXME maybe a jump to .number_question would be faster?
+  dw c_lit
+  db "'"
+  dw equals ; is the first char a single quote?
+  dw branch_if_false,interpret.number_question ; no
+  ; the first char is a single quote
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    _dcs 'interpret.check_char first quote',cr_char
+    ; dw dup,dot ; case selector
+  endif
+  dw dup,three,equals ; len is 3?
+  dw branch_if_false,interpret.number_question ; no
+  ; len is 3
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    _dcs 'interpret.check_char len 3',cr_char
+    ; dw dup,dot ; case selector
+  endif
+  dw two_dup,plus,one_minus,c_fetch
+  dw c_lit
+  db "'"
+  dw equals ; is the last char a single quote?
+  dw branch_if_false,interpret.number_question ; no
+  ; the last char is a single quote
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    _dcs 'interpret.check_char last quote',cr_char
+    ; dw dup,dot ; case selector
+  endif
+  dw drop,one_plus,c_fetch
+  if 1;debug ; XXX INFORMER
+    dw paren_dot_quote
+    _dcs 'interpret.check_char char='
+    dw dup,dot,cr ; case selector
+  endif
+  dw branch,interpret.single_number
 
 interpret.remove_the_prefix:
   ; ( ca len n )
@@ -7205,6 +7255,7 @@ interpret.number_question_patch: ; XXX not used
   dw dpl,fetch,zero_less ; single number?
   dw branch_if_false,interpret.double_number
   dw drop
+interpret.single_number:
   dw compiling_question ; compiling?
 ;  dw branch_if_false,interpret.9 ; XXX OLD
   dw branch_if_false,interpret.number_done ; XXX NEW
@@ -7973,12 +8024,13 @@ endif
 literal:
   call do_colon
   dw char_question ; 8-bit number?
-  dw branch_if_false,literal.1 ; no
-  ; yes
+  dw branch_if_false,literal.cell
+  ; 8-bit number
   dw compile,c_lit
   dw c_comma
   dw paren_exit
-literal.1:
+literal.cell:
+  ; 16-bit number
   dw compile,lit
   dw comma
   dw paren_exit
