@@ -1,7 +1,7 @@
 ; DZX-Forth {{{
 
 _version: macro
-  db 'A-02-201501140005'
+  db 'A-02-201501140202'
   endm
   version.major: equ "A" ; alpha branch_
   version.minor: equ 01
@@ -32,8 +32,7 @@ _version: macro
 ; ------------------------------
 ; XXX TODO 
 
-; 2015-01-13: Fix: crash at the press of the delete key. Something to do with the
-; massive label renaming?
+; 2015-01-14: change the format of headers created by 'defer'?
 ;
 ; 2015-01-12: implement 'allocate' in the ram disk?
 ;
@@ -70,6 +69,12 @@ warning_options:                  equ no ; XXX TODO does_ this causes trouble?
 ; XXX FIXME when yes, some things don't work fine:
 size_optimization:                equ no ; if yes, the code will be smaller but slower
 
+; Where the xt of a defered body is stored and managed.
+; yes = the xt is stored into the pfa, so 'is' and 'to' are synonyms.
+; no  = the xt is stored as a jump address; this saves one byte and is faster.
+; XXX TODO -- the 'no' option is not fully implemented yet
+defer_uses_body:                  equ yes
+
 floored_division:                 equ no  ; integer division method
 floating_point_support:           equ yes
 fp_engineering_output_functions:  equ yes
@@ -90,7 +95,7 @@ top_prunes:             defl 0 ; XXX OLD ?
 ; ------------------------------
 ; Memory 
 
-start: equ 25000 ; start of_ DZX-Forth_ in memory
+start: equ 24000 ; start of_ DZX-Forth_ in memory
 
 cw: equ 2 ; cell size (bytes)
 fw: equ 4 ; floating point number size (bytes)
@@ -324,7 +329,7 @@ _header: macro enabled,name,immediate,alias_xt
       bits: defl bits | immediate_mask
     endif
     if not nul alias_xt
-;      ; set alias bit
+      ; set alias bit
       bits: defl bits | alias_mask
     endif
     local _first ; address of_ the first char_ of_ the name
@@ -385,8 +390,8 @@ endm
 ; Size-optimized jumps
 
 _jump: macro p1,p2
-;  ; Create a relative or absolute jump,
-;  ; depending on the configured optimization
+  ; Create a relative or absolute jump,
+  ; depending on the configured optimization
   ; XXX FIXME -- this can not work?
   if nul p2
     if size_optimization
@@ -915,7 +920,7 @@ r_fetch_:
   _header _public,'2>R'
 two_to_r_:
   ld hl,(return_stack_pointer)
-;  ; XXX TODO faster per macro loop with 'inc hl'?
+  ; XXX TODO faster per macro loop with 'inc hl'?
   ld de,-cw*2
   add hl,de
   ld (return_stack_pointer),hl
@@ -1232,7 +1237,7 @@ maxdepth_dot_s_:
   _header _public,'.S'
 dot_s_:
   call do_colon
-;  ; show the depth:
+  ; show the depth:
   dw depth_
   dw c_lit_
   db '<'
@@ -1240,9 +1245,9 @@ dot_s_:
   dw c_lit_
   db '>'
   dw emit_,space_
-;  ; calculate the items to show:
+  ; calculate the items to show:
   dw depth_,zero_,max_,maxdepth_dot_s_,fetch_,min_
-;  ; do it:
+  ; do it:
   dw dup_,zero_
   dw paren_question_do_,dot_s_.end
 dot_s_.do:
@@ -2608,7 +2613,7 @@ digit_:
   pop hl
   pop de
   ld a,e
-  call uppercase_a
+  call toupper_.a
   sub  '0'
   jp m,false_
   cp 10
@@ -2951,8 +2956,8 @@ place_:
 ; AFFIX  ( ca c -- ca )
 ;   over count + c!
 
-;  ; append char_ to counted string
-;  ; count unchanged
+  ; append char_ to counted string
+  ; count unchanged
   _header _hidden,'AFFIX'
 affix_:
   call do_colon
@@ -3077,14 +3082,14 @@ slash_string_:
 
 patch_compare_strings:
 
-;  ; Patch an address with the address of the routine 'compare' and 'search' use_
-;  ; to_ compare_ strings, which depends on_ a user variable.
+  ; Patch an address with the address of the routine 'compare' and 'search' use_
+  ; to_ compare_ strings, which depends on_ a user variable.
   ;
-;  ; This routine is_ called at the start of 'compare' and 'search', in order to_
+  ; This routine is_ called at the start of 'compare' and 'search', in order to_
   ; patch themselves.
 
   ; Input:
-;  ;   DE = address to patch with the routine address
+  ;   DE = address to patch with the routine address
 
   push bc
   ld hl,(user_data_pointer)
@@ -3122,10 +3127,10 @@ compare_strings_case_insensitive:
   ret z
   push bc
   ld a,(bc)
-  call uppercase_a
+  call toupper_.a
   ld c,a
   ld a,(hl)
-  call uppercase_a
+  call toupper_.a
   cp c
   pop bc
   ret nz
@@ -3281,24 +3286,12 @@ string_1_addr equ $+1
   ld hl,0  ; address of_ the first string
   jp search_.3
 
-;;; +STRING  ( ca1 u1 ca2 u2 -- ca2 u3)
-;;;         2swap swap 2over + 2 pick cmove +
-;;
-;;  header 1,'+STRING'
-;;pstr:
-;;  call docolon
-;;  dw twoswap,swap
-;;  dw twoover,plus
-;;  dw two,pick
-;;  dw cmove,plus
-;;  dw parenexit
-
-; XXX NEW -- DX-Forth 4.09
 ; +STRING  ( ca1 u1 ca2 u2 -- ca2 u3)
 ;          2swap swap 2over + 2 pick cmove +
+; Note: uses temps 1-3
 
-  _header _public,'+STRING'  ; uses temps 1-3
-pstr_:
+  _header _public,'+STRING'
+plus_string:
   ld l,c
   ld h,b
   ld (t3),hl    ; bsave
@@ -3325,25 +3318,16 @@ t3: ds cw
 
 ; XXX NEW -- DX-Forth 4.09
 ; S.R  ( ca n1 n2 -- )
+; Type a string right-justified
 ;   over - spaces type
 
-  _header _public,'S.R'    ; type_ string right-justified
+  _header _public,'S.R'
 s_dot_r_:
   call do_colon
   dw over_,minus_
   dw spaces_
   dw type_
   dw paren_exit_
-
-; UPCASE  ( c1 -- c2 )
-
-  ; XXX FIXME repeated
-  _header _public,'UPCASE'  ; make char_ uppercase
-upcas_:
-  pop hl
-  ld a,l
-  call uppercase_a
-  jp push_a
 
 ; UPPER  ( ca u -- )
 
@@ -3356,7 +3340,7 @@ upper_.1:
   or e
   jp z,next
   ld a,(hl)
-  call uppercase_a
+  call toupper_.a
   ld (hl),a
   inc hl
   dec de
@@ -3365,15 +3349,14 @@ upper_.1:
 ; XXX NEW -- after Gforth
 ; TOUPPER  ( c1 -- c2 )
 
-  _header _public,'TOUPPER' ; make char_ uppercase
+  _header _public,'TOUPPER'
 
 toupper_:
   pop hl
   ld a,l
-  call uppercase_a
-  jp next
-
-uppercase_a:
+  call toupper_.a
+  jp push_a
+toupper_.a:
   cp 'a'
   ret c
   cp 'z'+1
@@ -3393,7 +3376,7 @@ lower_.1:
   or e
   jp z,next
   ld a,(hl)
-  call lowercase_a
+  call tolower_.a
   ld (hl),a
   inc hl
   dec de
@@ -3407,10 +3390,9 @@ lower_.1:
 tolower_:
   pop hl
   ld a,l
-  call lowercase_a
-  jp next
-
-lowercase_a:
+  call tolower_.a
+  jp push_a
+tolower_.a:
   cp 'A'
   ret c
   cp 'Z'+1
@@ -3699,7 +3681,7 @@ then_:
 
 ; IF  ( -- orig )
 ;   postpone ?branch >mark
-;         ; immediate
+         ; immediate
 
   _header _public,'IF',_immediate
 iff_:
@@ -3710,7 +3692,7 @@ iff_:
 
 ; AHEAD  ( -- orig )
 ;   postpone branch >mark
-;         ; immediate
+         ; immediate
 
   _header _public,'AHEAD',_immediate
 ahead_:
@@ -3733,7 +3715,7 @@ else_:
 
 ; UNTIL  ( dest -- )
 ;   postpone ?branch <resolve
-;         ; immediate
+         ; immediate
 
   _header _public,'UNTIL',_immediate
 until_:
@@ -3766,7 +3748,7 @@ while_:
 
 ; REPEAT  ( orig dest -- )
 ;   postpone again postpone then
-;         ; immediate
+         ; immediate
 
   _header _public,'REPEAT',_immediate
 repeat_:
@@ -3858,7 +3840,7 @@ j_:
 
 ; LEAVE  ( -- )
 ;   postpone (leave) lv ?orig ,
-;         ; immediate
+         ; immediate
 
   _header _public,'LEAVE',_immediate
 leave_:
@@ -4068,7 +4050,7 @@ case_: equ cond_
 
 ; ENDCASE  ( sys -- )
 ;   postpone drop postpone thens
-;   ; immediate
+   ; immediate
 
   _header _public,'ENDCASE',_immediate
 endcase_:
@@ -4095,7 +4077,7 @@ endcase_:
 ;     then
 ;     ?dup 0=
 ;   until
-; ; immediate
+ ; immediate
 
   _header _public,'[ELSE]',_immediate
 bracket_else_:
@@ -4281,7 +4263,7 @@ dot_:
   call do_colon
   dw decimal_question_
   dw branch_if_false_,dot_.not_decimal_base
-;  ; decimal base_
+  ; decimal base_
   dw s_to_d_,d_dot_
   dw paren_exit_
 dot_.not_decimal_base:
@@ -4295,7 +4277,7 @@ get_current_drive:
   ld a,0xff
 
 set_current_drive:
-;  ; a = drive (ASCII 'A'..'P' to_ set it; 0xff to get it)
+  ; a = drive (ASCII 'A'..'P' to_ set it; 0xff to get it)
   ld ix,dos_set_drive
   jr do_dos
 
@@ -4303,11 +4285,11 @@ get_current_user:
   ld a,0xff
 
 set_current_user:
-;  ; a = user_ (0x00..0x0f to_ set it; 0xff to get it)
+  ; a = user_ (0x00..0x0f to_ set it; 0xff to get it)
   ld ix,dos_set_user
 
 do_dos:
-;  ; ix = DOS routine to run
+  ; ix = DOS routine to run
   push bc
   call dos
   pop bc
@@ -4317,10 +4299,10 @@ dos:
  
   ; Adapted from the ZX Spectrum +3 manual.
   
-;  ; IX holds the address of_ the DOS routine to be run. All other registers are
-;  ; passed intact to the DOS routine and are returned from it.
+  ; IX holds the address of_ the DOS routine to be run. All other registers are
+  ; passed intact to the DOS routine and are returned from it.
   
-;  ; Stack must be somewhere in central 32K (conforming to DOS requirements), so
+  ; Stack must be somewhere in central 32K (conforming to DOS requirements), so
   ; saved AF and BC will not be switched out.
   
   push af
@@ -4364,7 +4346,7 @@ dos_version_:
   call do_dos
 push_version:
   ; d=issue = major
-;  ; e=version (within issue) = minor
+  ; e=version (within issue) = minor
   xor a
   ld h,a
   ld l,e
@@ -4394,7 +4376,7 @@ dos_error_:
 
 dos_error_.a:
   ; XXX TMP entry
-;  ; a = DOS error code
+  ; a = DOS error code
   ld h,0
   ld l,a
   ld de,-1000
@@ -4758,7 +4740,7 @@ paren_key_:
   ld (previous_key),a
 paren_key_.1
 ;  call pause ; XXX FIXME this causes trouble because of the way 'pause' calls 'fetchexecute'
-;  ; call rom_keyboard ; XXX TODO not needed if system interrupts are on_
+  ; call rom_keyboard ; XXX TODO not needed if system interrupts are on_
   ld a,(sys_last_k)
 previous_key equ $+1
   cp 0 ; a different key?
@@ -4861,7 +4843,7 @@ spaces_.end:
 
   _header _public,'CR'
 cr_:
-;  ; XXX TODO -- printer_ too? lfchar?
+  ; XXX TODO -- printer_ too? lfchar?
   if fast_emit
     ld a,cr_char
     jp paren_emit_a
@@ -4873,7 +4855,7 @@ cr_:
 
 ; CONSOLE  ( -- )
 ;   (vcon) @ (vemit) !
-;  ; set EMIT_ to terminal
+  ; set EMIT_ to terminal
 
   _header _public,'CONSOLE'
 console_:
@@ -4884,7 +4866,7 @@ console_:
   jp next
 
 ; PRINTER  ( -- )
-;  ; set EMIT_ to printer_
+  ; set EMIT_ to printer_
   _header _public,'PRINTER'
 printer_:
   ; XXX TODO
@@ -4946,12 +4928,12 @@ wordlist_find_.5:
   inc de
   ld a,(de)
   if case_insensitive_names
-    call uppercase_a
+    call toupper_.a
   endif
   ld c,a
   ld a,(hl)
   if case_insensitive_names
-    call uppercase_a
+    call toupper_.a
   endif
   xor c
   jp nz,wordlist_find_.4 ; no match
@@ -5099,7 +5081,7 @@ smudge_:
   ld e,smudge_mask
 smudge_.1:
   push de
-;  jp xnfa ; XXX OLD -- already commented out in DX-Forth
+;  jp xnfa ; XXX OLD -- already commented out in DX-Forth, because 'xnfa' is headerless
 
 ; XNFA  ( x -- )
 ;   toggle nfa bit
@@ -5153,13 +5135,13 @@ header_:
   dw from_r_       ; ( ca f f1 ) is_ 'warning' on_?
   dw and_         ; ( ca wf )
   dw branch_if_zero_,header_.1
-;  ; the name was found and 'warning' is on_
+  ; the name was found and 'warning' is on_
   ; ( ca )
   dw dup_,count_,type_
   dw paren_dot_quote_
   _dcs ' is redefined'
 header_.1:
-;  ; the name was not found or 'warning' is off_
+  ; the name was not found or 'warning' is off_
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'header.1',cr_char
@@ -5174,7 +5156,7 @@ header_.1:
   db 5
   dw plus_ ; ( len1+cell ca+5 )
   dw dph,fetch_ ; ( len1+cell ca+5 dp_ )
-;  ; XXX TODO -- keep on_ studying from here:
+  ; XXX TODO -- keep on_ studying from here:
   dw over_,dph,plus_store_
   dw dup_
   dw get_current_
@@ -5310,17 +5292,17 @@ exit_: ; XXX TODO rename 'exit'
 
   if  0;debug ; XXX INFORMER
     ; XXX FIXME this resets the machine:
-;    ;dw lit,2,border_
-;    ;dw paren_dotquote_
-;    ;_dcs 'exit',crchar
+    ;dw lit,2,border_
+    ;dw paren_dotquote_
+    ;_dcs 'exit',crchar
   endif
 
   dw compile_,paren_exit_
   if  0;debug ; XXX INFORMER
     ; XXX FIXME this resets the machine
-;    ;dw lit,3,border_
-;    ;dw paren_dotquote_
-;    ;_dcs 'exit',crchar
+    ;dw lit,3,border_
+    ;dw paren_dotquote_
+    ;_dcs 'exit',crchar
   endif
   dw paren_exit_
 
@@ -5328,7 +5310,7 @@ exit_: ; XXX TODO rename 'exit'
 ; : ;  ( -- )
 ;   postpone exit  bal @ ?bal ?csp smudge
 ;   postpone [
-;   ; immediate
+   ; immediate
 
   _header _public,';',_immediate
 semicolon_:
@@ -5341,10 +5323,10 @@ semicolon_:
   endif
   dw exit_
   if 0;debug ; XXX INFORMER
-;    ;dw lit,2,border_
+    ;dw lit,2,border_
     ; XXX FIXME this resets the machine:
-;    ;dw paren_dotquote_
-;    ;_dcs 'semicolon after compiling (exit)',crchar
+    ;dw paren_dotquote_
+    ;_dcs 'semicolon after compiling (exit)',crchar
   endif
   dw bal_,fetch_
   if 0;debug ; XXX INFORMER
@@ -5552,12 +5534,11 @@ defer_default_:
   call fetch_execute_
   dw paren_defer_default_
 
-; DEFER  ( "name" -- )
+; DEFER  ( "name" -- )  comus 2012
 
-  ; XXX TODO simpler: use 'jp deferdefault' instead of 'call fetch_execute' It
-  ; would save one byte per definition and the execution would be faster, but
-  ; the xt would not be stored in the body and 'is' should be changed'.
-  ; 'defer!' and 'defer@' would be required.
+  ; XXX TODO use 'jp deferdefault' instead of 'call fetch_execute'. It would
+  ; save one byte per definition and the execution would be faster, but then xt
+  ; would not be stored in the body and 'is' could not be a synonym of 'to'.
 
   _header _public,'DEFER'
 defer_:
@@ -5567,47 +5548,107 @@ defer_:
   dw lit_,defer_default_,comma_
   dw paren_exit_
 
+; DEFER!  ( xt1 xt2 -- )  2012
+
+  _header _public,'DEFER!'
+defer_store_:
+  call do_colon
+  if defer_uses_body
+    dw to_body_
+  else ; XXX TODO -- not used yet
+    dw one_plus_
+  endif 
+  dw store_
+  dw paren_exit_
+
+; DEFER@  ( xt -- )  2012
+
+  _header _public,'DEFER@'
+defer_fetch_:
+  ; XXX TODO faster with ix?
+  pop de ; xt
+  if defer_uses_body
+    inc de ; address after the 'call' opcode
+    inc de
+    inc de ; pfa
+  else ; XXX TODO -- not used yet
+    inc de ; address after the 'jp' opcode
+  endif 
+  ld a,(de)
+  ld l,a
+  inc de
+  ld a,(de)
+  ld h,a
+  jp push_hl
+
 ; IS  ( xt "name" -- )
 ;
 ; Note: state-smart
 
-  ; XXX TODO simpler: see note in 'defer'
+  ; XXX TODO see note in 'defer'
   _header _public,'IS',_immediate,to_
 is_: equ to_
 
 paren_is: equ paren_to_
 
-; ALIAS  ( xt "newname" -- )
+; ALIAS  ( xt "newname" -- )  Gforth
 
-; XXX NEW -- after Gforth; alias don't copy the precedence bit of the xt
-; XXX TODO -- test
+; Note: alias doesn't copy the precedence bit of the xt
 
   _header _public,'ALIAS'
 alias_:
   call do_colon
-  dw lit_,-1 ; flag for a not immediate_ word_
-  dw branch_,aka_.alias
+  dw header_
+  dw c_lit_
+  db alias_mask
+  dw xnfa             ; set the alias mask of the header
+  dw paren_exit_
 
 ; AKA  ( "oldname" "newname" -- )
 ;   defined tuck ?defined (header)
 ;   $80 xnfa 0> if immediate then
+; XXX TODO move this to a Forth source file.
   
   _header _public,'AKA'
 aka_:
   call do_colon
   dw defined_         ; ( ca|xt -1|0|1 )
-  dw tuck_             ; save_ for later
-  dw question_defined_ ; abort_ if not defined
+  dw tuck_             ; save for later
+  dw question_defined_ ; abort if not defined
 aka_.alias:
+  ; ( -1|1 xt "newname" )
+  dw header_           ; ( -1|1 )
+  dw c_lit_
+  db alias_mask
+  dw xnfa             ; set the alias mask of the header
+  dw zero_greater_     ; is the old word immediate?
+  dw branch_if_false_,aka_.end
+  dw immediate_        ; make the new word immediate too
+aka_.end:
+  dw paren_exit_
+
+; SYNONYM ( "newname" "oldname" -- )  2012
+;   defined tuck ?defined (header)
+;   $80 xnfa 0> if immediate then
+
+  ; XXX TODO so far this is a copy of 'aka'
+  
+  _header _public,'SYNONYM'
+synonym_:
+  call do_colon
+  dw defined_         ; ( ca|xt -1|0|1 )
+  dw tuck_             ; save for later
+  dw question_defined_ ; abort if not defined
+synonym_.alias:
   ; ( -1|1 xt "newname" )
   dw header_           ; ( -1|1 )
   dw c_lit_
   db alias_mask
   dw xnfa             ; set the alias_ mask of_ the header_
   dw zero_greater_     ; is_ the old word_ immediate_?
-  dw branch_if_false_,aka_.end
+  dw branch_if_false_,synonym_.end
   dw immediate_        ; make the new word_ immediate_
-aka_.end:
+synonym_.end:
   dw paren_exit_
 
 ; }}} **********************************************************
@@ -6643,7 +6684,7 @@ paren_accept_control_char_.edit:
   ; delete the whole input
   dw dup_ ; something to_ delete?
   dw branch_if_zero_,paren_accept_control_char_.end
-;  ; do it
+  ; do it
   dw minus_cursor_,zero_,swap_,backspaces_
 
 paren_accept_control_char_.end:
@@ -7045,7 +7086,7 @@ wordlist_:
 
 ; VOCABULARY  ( "name" )
 ;       sys? system wordlist
-;       ;;  create dup ,  ;; XXX OLD -- DX-Forth 4.00
+       ;;  create dup ,  ;; XXX OLD -- DX-Forth 4.00
 ;       dup value  ;; XXX NEW -- DX-Forth 4.09
 ;       last @
 ;       swap cell+ cell+ ! sys ! does> @ context !
@@ -7135,7 +7176,7 @@ interpret_.begin:
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret after find',cr_char
-;    ;dw dot_,dot,bye_
+    ;dw dot_,dot,bye_
   endif
   dw question_dup_
   dw branch_if_0_,interpret_.not_found
@@ -7145,7 +7186,7 @@ interpret_.begin:
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret -- found',cr_char
-;    ;dw dot_,dot,bye_
+    ;dw dot_,dot,bye_
   endif
   dw compiling_question_,equals_ ; compiling an immediate_ word_?
   dw branch_if_false_,interpret_.execute
@@ -7173,7 +7214,7 @@ interpret_.not_found:
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret: the string address is '
-;    ;dw decimal_,dot_,cr,bye_
+    ;dw decimal_,dot_,cr,bye_
   endif
   dw count_,over_,c_fetch_ ; get the string and its first char_
   ; ( ca len c )
@@ -7183,16 +7224,16 @@ interpret_.not_found:
     dw dup_,decimal_,dot_,cr_,bye_
   endif
 
-;  ; XXX TODO -- factor out to_ a new word the number recognition with prefixes
+  ; XXX TODO -- factor out to_ a new word the number recognition with prefixes
   ; -- see Gforth's '>number', 'number?', 'snumber?'...
 
-;  ; XXX TODO recognize also chars: 'c'
+  ; XXX TODO recognize also chars: 'c'
 
   ; ( ca len c )
   dw c_lit_
   db '$'
   dw paren_of_,interpret_.check_binary
-;  ; it's "$" -- hex number
+  ; it's "$" -- hex number
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret: hex prefix found',cr_char
@@ -7205,7 +7246,7 @@ interpret_.check_binary:
   dw c_lit_
   db '%'
   dw paren_of_,interpret_.check_decimal
-;  ; it's "%" -- binary number
+  ; it's "%" -- binary number
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret: binary prefix found',cr_char
@@ -7218,7 +7259,7 @@ interpret_.check_decimal:
   dw c_lit_
   db '#'
   dw paren_of_,interpret_.check_char
-;  ; it's "#" -- decimal number
+  ; it's "#" -- decimal number
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret: decimal prefix found',cr_char
@@ -7227,44 +7268,44 @@ interpret_.check_decimal:
   dw branch_,interpret_.remove_the_prefix
 
 interpret_.check_char:
-;  ; there is no number prefix.
-;  ; does_ the string represent_ a char?
-;  ; this check is done at the end, because it's easier not
-;  ; to_ use_ '(of)' with it.
+  ; there is no number prefix.
+  ; does_ the string represent_ a char?
+  ; this check is done at the end, because it's easier not
+  ; to_ use_ '(of)' with it.
   ; ( ca len c )
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char',cr_char
-;    ; dw dup_,dot_ ; case selector
+    ; dw dup_,dot_ ; case selector
   endif
   dw c_lit_
   db "'"
   dw equals_ ; is_ the first char_ a single quote?
   dw branch_if_false_,interpret_.number_question ; no
-;  ; the first char_ is a single quote
+  ; the first char_ is a single quote
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char first quote',cr_char
-;    ; dw dup_,dot_ ; case selector
+    ; dw dup_,dot_ ; case selector
   endif
   dw dup_,three_,equals_ ; len is_ 3?
   dw branch_if_false_,interpret_.number_question ; no
-;  ; len is 3
+  ; len is 3
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char len 3',cr_char
-;    ; dw dup_,dot_ ; case selector
+    ; dw dup_,dot_ ; case selector
   endif
   dw two_dup_,plus_,one_minus_,c_fetch_
   dw c_lit_
   db "'"
   dw equals_ ; is_ the last_ char_ a single quote?
   dw branch_if_false_,interpret_.number_question ; no
-;  ; the last_ char_ is a single quote
+  ; the last_ char_ is a single quote
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.check_char last quote',cr_char
-;    ; dw dup_,dot_ ; case selector
+    ; dw dup_,dot_ ; case selector
   endif
   dw drop_,one_plus_,c_fetch_
   if 0;debug ; XXX INFORMER
@@ -7279,13 +7320,13 @@ interpret_.remove_the_prefix:
   if debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'interpret.remove_the_prefix',cr_char
-;    ;dw dot_,dot_,dot,bye_
+    ;dw dot_,dot_,dot,bye_
   endif
   dw slash_string_
 
 interpret_.number_question:
   ; The number prefix, if any, has been removed.
-;  ; Is_ the string a number in the current base?
+  ; Is_ the string a number in the current base?
   ; ( ca len )
   if 0;debug ; XXX INFORMER
     dw paren_dot_quote_
@@ -7340,7 +7381,7 @@ interpret_.f_number_patch:
 ; XXX OLD
 ;interpret.questiondefined:
   ; ( flag -- )
-;  ; abort if flag<>0
+  ; abort if flag<>0
   if 0; debug ; XXX INFORMER
     dw paren_dot_quote_
     _dcs 'before question_defined',cr_char
@@ -7566,7 +7607,7 @@ bye_:
   db 0xff      ; 0: "OK"
 
 if 0
-;  ; XXX TODO -- Code from Benschop's ZX Spectrum Forth-83
+  ; XXX TODO -- Code from Benschop's ZX Spectrum Forth-83
   ld sp,(sys_err_sp) 
   pop bc
   ld bc,0x1303 
@@ -7668,7 +7709,7 @@ dot_error_.1:
 ;       -2 of boot cell+ @ 0= if  .error  then
 ;       space errmsg 2@ type (abort) then
 ;       ."  exception = " . (abort)
-;   ;
+   ;
 
   ; XXX -- used only by 'throw'; I don't understand it yet
 
@@ -7713,7 +7754,7 @@ error_.3:
 ; : CATCH  ( xt -- n | 0 )
 ;   sp@ >r fsp @ >r catcher @ >r rp@ catcher
 ;   ! execute r> catcher ! 2r> 2drop 0
-;   ;
+   ;
 
   _header _public,'CATCH'
 catch_:
@@ -7735,7 +7776,7 @@ catch_:
 ;     catcher @ ?dup 0= if  error  then
 ;     rp! r> catcher ! r> fsp ! r> swap >r sp! drop r>
 ;   then
-;   ;
+   ;
 ; XXX FIXME -- it's not in theh glossary
 
   _header _public,'THROW'
@@ -7768,7 +7809,7 @@ throw_.end:
 ; XXX TMP NEW layout
 ; : ABORT  ( -- )
 ;   -1 throw
-;   ;
+   ;
 
   _header _public,'ABORT'
 abort_:
@@ -7779,7 +7820,7 @@ abort_:
 ; XXX TMP NEW layout
 ; : (ABORT")  ( n -- )
 ;   r> count rot if  errmsg 2! -2 throw  then + >r
-;   ;
+   ;
 
   _header _hidden,'(ABORT")'
 paren_abort_quote_:
@@ -7789,7 +7830,7 @@ paren_abort_quote_:
     dw paren_dot_quote_
     _dcs 'abort" parameter = '
     dw dot_s_,cr_
-;    ; dw dup_,dot,cr_
+    ; dw dup_,dot,cr_
   endif
   dw from_r_,count_,rot_
   dw branch_if_false_,paren_abort_quote_.noop
@@ -7802,7 +7843,7 @@ paren_abort_quote_.noop:
 ; XXX TMP NEW layout
 ; : ABORT"  ( compilation: "ccc<quote>" -- )
 ;   postpone (abort") ,"
-;   ; immediate
+   ; immediate
 
   _header _public,'ABORT"',_immediate
 abort_quote_:
@@ -7815,7 +7856,7 @@ abort_quote_:
 cold_boot:
 
   ; XXX TODO
-;  ; save default drive and user_
+  ; save default drive and user_
 ;  call getcurrentdrive
 ;  ld (defaultdrive),a
 ;  call getcurrentuser
@@ -7823,7 +7864,7 @@ cold_boot:
 
 
 ;;cldd.1:
-;  ; Save_ the system stack pointer
+  ; Save_ the system stack pointer
   ld hl,0
   add hl,sp
   ld (system_stack_pointer),hl
@@ -7961,7 +8002,7 @@ cold_:
 ;  push hl
 ;  jp return
 
-;  ; init the user data
+  ; init the user data
   ld hl,(user_data_pointer)
   ex de,hl
   ld hl,init_user_variables
@@ -7976,11 +8017,11 @@ cold_:
 ; XXX INFORMER -- this works:
 ;  jp bye
 
-;  ; patch 'pause' to_ do nothing
+  ; patch 'pause' to_ do nothing
   ld hl,noop_
   ld (pause_.action),hl
 
-;  ; delete the last key_
+  ; delete the last key_
   ; XXX needed by 'key?'?
   xor a
   ld (sys_last_k),a
@@ -8226,7 +8267,7 @@ name_question_:
 ;   swap begin 2dup @ - while @
 ;          dup while n>link repeat then nip
 
-;  ; find link field containing nfa, 0=none
+  ; find link field containing nfa, 0=none
 
   _header _hidden,'LFIND'
 lfind_:
@@ -8248,7 +8289,7 @@ lfind_.end:
 ;   name? nip name? nip 2dup u< if swap
 ;   then n>name get-context rot lfind !
 
-;  ; unlink word heads
+  ; unlink word heads
   _header _public,'BEHEAD'
 behead_:
   call do_colon
@@ -8548,13 +8589,14 @@ bracket_char_:
 ; Y/N  ( -- flag )
 ;   ." (y/n) N\bs" key upcase [char] Y = dup
 ;       if [char] Y else [char] N then emit space
+; XXX TODO move to a .fs file
 
   _header _public,'Y/N'
 yn_:
   call do_colon
   dw paren_dot_quote_
   _dcs '(y/n) N',bs_char
-  dw key_,upcas_
+  dw key_,toupper_
   dw c_lit_
   db 'Y'
   dw equals_,dup_
@@ -8635,7 +8677,7 @@ path_:
 ;        2dup [char] : scan dup if 1 /string 2swap
 ;        then 2drop
 
-;  ; XXX TODO simpler, because ':' always is at the same position
+  ; XXX TODO simpler, because ':' always is at the same position
 
   _header _public,'-PATH'
 minus_path_:
@@ -8686,9 +8728,9 @@ plus_ext_.1:
   dw zbuf_,fetch_    ; unused_
   dw one_plus_
   dw zero_
-  dw pstr_
-  dw pstr_
-  dw pstr_
+  dw plus_string
+  dw plus_string
+  dw plus_string
   dw paren_exit_
 
 ; -EXT  ( a1 u1 -- a2 u2 )
@@ -8812,7 +8854,7 @@ set_fcb_.12:
   ld a,c
   ret  z
   ld a,(de)
-  call uppercase_a
+  call toupper_.a
   and a
   ret
 
@@ -9510,18 +9552,18 @@ setsiz_:
   call do_colon
   ; XXX TODO
   ; XXX OLD
-;  ; dw rwp_fetch,over_
-;  ; dw clit_
+  ; dw rwp_fetch,over_
+  ; dw clit_
   ; db 0x7f
   ; dw and_
-;  ; dw paren_to,offs_
+  ; dw paren_to,offs_
   ; dw fcb_
-;  ; dw clit_
+  ; dw clit_
   ; db 33
-;  ; dw plus_,recstore_
-;  ; dw clit_
+  ; dw plus_,recstore_
+  ; dw clit_
   ; db recsiz
-;  ; dw offs,minus_
+  ; dw offs,minus_
   dw paren_exit_
 
 ; SETDMA  ( a -- )
@@ -10119,7 +10161,7 @@ block_.2:
 
 ; -->  ( -- )
 ;   blk @ 0= abort" loading only" (refill) drop
-;        ; immediate
+        ; immediate
 
   _header _public,'-->',_immediate
 next_block_:
@@ -10323,7 +10365,7 @@ question_create_.1:
   dw dot_lastfile_
   dw paren_dot_quote_
   _dcs 'exists - delete it? '
-  dw yn_,zero_equals_
+  dw yn_,zero_equals_ ; XXX TODO make this configurable
   dw question_branch_,question_create_.2
   dw abort_
 question_create_.2:
@@ -10406,7 +10448,7 @@ parse_filename_:
 ;          ?create 0 init-scr then 0 0 scr 2!
 ; open/make a screen file
 
-;  ; XXX TODO rename to 'use' (rename 'use' first)
+  ; XXX TODO rename to 'use' (rename 'use' first)
   ; XXX TODO write non-parsing version 'used'
   _header _public,'USING'
 using_:
@@ -10424,7 +10466,7 @@ using_:
   dw branch_,using_.2
 using_.1:
   dw paren_dot_quote_
-  _dcs 'not found - create it? ' ; XXX OLD remove this!, use_ other word_ to_ create_ it.
+  _dcs 'not found - create it? ' ; XXX OLD remove this!, use other word to create it.
   dw yn_
 using_.2:
   dw zero_equals_
@@ -10704,15 +10746,15 @@ delln_:
 
   _header _public,'BORDER'
 border_:
-;  ; Code based on_ Benschop's Forth-83:
-;  ;   : BORDER  ( n -- )
-;  ;     DUP_ DUP_ 4 < 7 AND SWAP 8 * + 23624 C! 254 P! ;
-;  ; And this is the translation in Z80:
+  ; Code based on_ Benschop's Forth-83:
+  ;   : BORDER  ( n -- )
+  ;     DUP_ DUP_ 4 < 7 AND SWAP 8 * + 23624 C! 254 P! ;
+  ; And this is the translation in Z80:
   pop hl
 border_.l:
   if 0
     ; XXX OLD -- the screen will be used as a whole, not like Sinclair BASIC
-;    ; Set the paper_ of the bottom screen
+    ; Set the paper_ of the bottom screen
     ld a,l
     cp 4 ; dark color?
     jp nc,border_.a
@@ -10743,22 +10785,22 @@ ink_:
 ; GOVER ( n -- )
   _header _public,'GOVER'
 gover_:
-;  ; XXX TODO -- Benschop's Forth_-83 does this:
-;  ; 23697 DUP_ C@ 252 AND ROT_ 3 * OR SWAP C!
+  ; XXX TODO -- Benschop's Forth_-83 does this:
+  ; 23697 DUP_ C@ 252 AND ROT_ 3 * OR SWAP C!
   jp next
 
 ; INVERSE  ( n -- )
   _header _public,'INVERSE'
 inverse_:
-;  ; XXX TODO -- Benschop's Forth_-83 does this:
-;  ; 23697 DUP_ C@ 243 AND ROT_ 12 * OR SWAP C!
+  ; XXX TODO -- Benschop's Forth_-83 does this:
+  ; 23697 DUP_ C@ 243 AND ROT_ 12 * OR SWAP C!
   jp next
 
 ; NORMAL  ( -- )
   _header _public,'NORMAL'
 normal_:
-;  ; XXX TODO -- Benschop's Forth_-83 does this:
-;  ; 0 INK_ 7 PAPER_ 0 FLASH 0 BRIGHT 7 BORDER_ 0 GOVER 0 INV
+  ; XXX TODO -- Benschop's Forth_-83 does this:
+  ; 0 INK_ 7 PAPER_ 0 FLASH 0 BRIGHT 7 BORDER_ 0 GOVER 0 INV
   jp next
 
 ; }}} **********************************************************
@@ -12234,7 +12276,7 @@ fin.8:
   jp z,fin.10
   cp '-'
   jp z,fin.10
-  call uppercase_a
+  call toupper_.a
   cp 'E'
   jp z,fin.9
   cp 'D'
@@ -13246,8 +13288,8 @@ f_number_:
   dw paren_s_quot_
   _dcs 'E'
   if  case_insensitive_names
-;    ; XXX FIXME -- the logic is wrong, because conditional compilation
-;    ; sets a user_ variable_ to be modifed.
+    ; XXX FIXME -- the logic is wrong, because conditional compilation
+    ; sets a user_ variable_ to be modifed.
     ;; dw caps ; XXX OLD
     dw case_sensitive_search_,off_ ; XXX NEW
   endif
@@ -13271,10 +13313,11 @@ f_number_.4:
   dw from_r_
   dw paren_exit_
 
-;   ( -- )
+; (-FP)  ( -- )
 ;        :noname ['] noop dup (dofinitpatch) ! (dofidentifypatch) !
 ;        ['] false (interpret.fnumberpatch) ! (nfps) off (nfpm) off
 ;        ; remember
+;        XXX OLD -- needed?
 
   _header _hidden,'(-FP)'
 paren_minus_fp_:
