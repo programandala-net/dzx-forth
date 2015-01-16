@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501162308"
+  db version.major,"-0",version.minor+"0","-201501170021"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -832,16 +832,21 @@ next:
   inc bc      ; 6T
   jp (hl)     ; 4T
 
-; UNNEST  ( -- )
+; RDROP  ( -- ) ; XXX NEW
 
-; XXX TODO 'rdrop' is just this
-  _header _public,'UNNEST'
-unnest_:
+  _header _public,'RDROP'
+r_drop_:
+rdrop_:
   ld hl,(return_stack_pointer)
   inc hl
   inc hl
   ld (return_stack_pointer),hl
   jp next
+
+; UNNEST  ( -- )
+
+  _header _public,'UNNEST',,r_drop_
+unnest_: equ r_drop_
 
 ; (EXIT)  ( -- )
 ;   exit colon definition
@@ -3026,7 +3031,6 @@ blank_:
   _header _public,'COUNT'
 count_:
   pop de
-;;count.1: ; XXX OLD
   ld a,(de)
   inc de
   push de
@@ -10099,15 +10103,39 @@ fwrite_:
 ;;fwrite_.4:
 ;;  dw parenexit
 
+; (READ-FILE)  ( ca len fid +n -- ior )
+;
+; +n = RAM bank paged at 0xC000..0xFFFF
+
+  _header _public,'(READ-FILE)'
+parent_read_file_:
+  pop hl ; l = bank
+  ld a,l
+paren_read_file_.bank_a:
+  call save_ip
+  ld c,a
+  pop hl
+  ld b,l ; fid
+  pop de ; len
+  pop hl ; ca
+  ld ix,dos_read
+  call dos
+  call restore_ip
+  _jump back_from_dos
+
 ; READ-FILE  ( a u1 fid -- u2 ior )
-;   1 rdini uid c@ set-user fread
-;          restore-user nip - 0
 
   _header _public,'READ-FILE'
 read_file_:
-  call do_colon
+  ld a,(sys_bankm) ; XXX TODO factor out if size_optimization
+  and %111 ; current page for 0xC000..0xFFFF
+  _jump paren_read_file_.bank_a
+
+;  call do_colon
 ; XXX TODO
 ; XXX OLD
+;   1 rdini uid c@ set-user fread
+;          restore-user nip - 0
 ;;  dw one,rdini
 ;;  dw uid,cfetch
 ;;  dw setuser
@@ -10116,11 +10144,11 @@ read_file_:
 ;;  dw nip
 ;;  dw minus
 ;;  dw zero
-  dw paren_exit_
+;  dw paren_exit_
 
 ; (WRITE-FILE)  ( ca len fid +n -- ior )
 ;
-; +n = RAM bank paged at 
+; +n = RAM bank paged at 0xC000..0xFFFF
 
   _header _public,'(WRITE-FILE)'
 parent_write_file_:
@@ -10146,36 +10174,30 @@ write_file_:
   and %111 ; current page for 0xC000..0xFFFF
   _jump paren_write_file_.bank_a
 
-; XXX OLD
-;   2 wrini uid c@ set-user fwrite
-;          restore-user nip 0<> 255 ?ior
-;  call do_colon
-;;  dw two_,wrini_
-;;  dw uid_,c_fetch_
-;;  dw set_user_
-;;  dw fwrite_
-;;  dw restore_user_
-;;  dw nip_
-;;  dw zero_not_equals_
-;;  dw c_lit_
-;;  db 255
-;;  dw question_ior_
-;;  dw paren_exit_
+; NEW-LINE  ( -- ca len )  Gforth's 'newline' ; XXX NEW
+; String used by 'WRITE-LINE' as end of line
+
+  _header _public,'NEW-LINE'
+new_line_:
+  call do_two_constant
+  dw new_line_.string,1 ; address and length
+new_line_.string:
+  db cr_char
 
 ; WRITE-LINE  ( ca u fileid -- ior )
-;        dup >r write-file ?dup if r> drop exit
-;        then s" \r" r> write-file
-
+;     dup >r write-file ?dup if  r> rdrop exit  then
+;     new-line r> write-file
   _header _public,'WRITE-LINE'
 write_line_:
   call do_colon
   dw dup_,to_r_
-  dw write_file_,question_dup_
-  dw question_branch_,write_line_.end_of_line
-  dw from_r_,drop_
+  dw write_file_
+  dw question_dup_
+  dw branch_if_0_,write_line_.end_of_line
+  dw r_drop_
   dw paren_exit_
 write_line_.end_of_line:
-  _dcs cr_char
+  dw new_line_
   dw from_r_
   dw write_file_
   dw paren_exit_
