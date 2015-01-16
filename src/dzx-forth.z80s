@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501161719"
+  db version.major,"-0",version.minor+"0","-201501161957"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -98,12 +98,16 @@ _version: macro
 ; In order to prevent name clashes and make the code more legible, the
 ; following convention was adopted:
 
+; A "?" suffix means the label is a boolean used for configuration by
+; conditional assembling.
+
 ; A "_" prefix means the label is a Z80 macro or a macro parameter.
 
-; A "_" suffix means the code of a Forth word (its actual address, the xt, not
-; the cfa).  The rest of labels in the word add its own suffix, separated by a
-; dot.  The label itself is the name of the word, as spelled in its latest
-; standard (Forth 2012, Forth 94, Forth 83...).
+; A "_" suffix means the label is the code address of a Forth word (its actual
+; code address, the xt, not the cfa).  The label itself is the name of the
+; word, after its latest standard (Forth 2012, Forth 94, Forth 83...).  Other
+; labels in the same word share that name but add its own suffix, separated by
+; a dot.
 
 ; Other labels have no affix.
 
@@ -138,13 +142,19 @@ size_optimization?:                equ no ; if yes, the code will be smaller but
 defer_uses_body?:                  equ yes
 
 floored_division?:                 equ no  ; integer division method
+
 floating_point?:           equ yes
-floating_point_engineering_output?:  equ yes
-floating_point_stack?:                equ no ; XXX TODO -- not fully implemented in DX-Forth
+; XXX Note: aprox. 2336 bytes used
+
+if floating_point?
+  floating_point_engineering_output?:  equ yes
+  floating_point_stack?:                equ no ; XXX TODO -- not fully implemented in DX-Forth
+endif
 
 block_files?:                     equ yes
+; XXX Note: aprox. 1743 bytes used
 
-classic_Forth_behaviours?:         equ no
+classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
 tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
 
 fast_emit?:                        equ yes ; if yes, some words jump directly into '(emit_)', don't call 'emit'
@@ -174,7 +184,7 @@ filename_size:                equ 16+1  ; XXX TODO why 16 in CP/M? ("ud:nnnnnnnn
 file_descriptor_size:         equ filename_size+(4*cell)  ; XXX OLD?
 block_size:                   equ 1024
 file_handle_size:             equ 6+36  ; (keep even) ; XXX OLD?
-parsed_string_buffer_size:    equ 255
+parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
 pictured_numeric_buffer_size: equ 68
 stack_size:                   equ 256
 return_stack_size:            equ 256
@@ -185,7 +195,7 @@ word_buffer_size:             equ 31+5
 ; ------------------------------
 ; DOS ; XXX OLD
 
-;;dosfcb: equ 0x005c   ; default file control block
+;;dosfcb: equ 0x005C   ; default file control block
 ;;dosbuf: equ 0x0080   ; default DTA and command-line buffer
 recsiz: equ 128   ; CP/M record size ; XXX OLD
 
@@ -227,8 +237,8 @@ f_stack_size:     defl 0 ; bytes
 bank1_port: equ 0x07FFD ; "horizontal" and RAM switch port
 bank2_port: equ 0x01FFD ; "vertical" switch port
 
-lf_char:                    equ 0x0a ; line feed ; XXX OLD
-ff_char:                    equ 0x0c ; form feed (printer only)
+lf_char:                    equ 0x0A ; line feed ; XXX OLD
+ff_char:                    equ 0x0C ; form feed (printer only)
 cursor_left_word_char:      equ 0x18 ; XXX TODO -- implement
 cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 
@@ -432,17 +442,35 @@ _dcs: macro string.1,string.2,string.3,string.4 ; allow comma separated strings
 endm
 
 ; ------------------------------
-; Save the IP
+; Save and restore the Forth IP
 
-; This is used by words that call ROM routines.
-; 'savedip' is defined in the word 'type'.
-; See the word 'cls' as a usage example.
+; This is used when a ROM call needs many parameters and all of them can not be
+; taken from stack in order to push BC before the call
+
+_do_save_ip: macro
+  ld h,b           ;  4 t
+  ld l,c           ;  4 t
+  ld (saved_ip),hl ; 16 t
+  endm
 
 _save_ip: macro
-  ld h,b
-  ld l,c
-  ld (saved_ip),hl
+  if size_optimization?
+    call save_ip
+  else
+    _do_save_ip ; inline code
+  endif
 endm
+
+if 1;size_optimization? ; XXX TMP
+  save_ip:
+    _do_save_ip
+    ret
+endif
+
+restore_ip:
+saved_ip: equ $+1
+  ld bc,0 ; patched by save_ip
+  ret
 
 ; ------------------------------
 ; Size-optimized jumps
@@ -480,6 +508,17 @@ _show_depth: macro
   dw paren_dot_quote_
   _dcs 'Depth is '
   dw depth_,dot_,cr_
+  endm
+
+_border_halt: macro color
+  local border_color
+  border_color: defl 2 ; red
+  if not nul color
+    border_color: defl color
+  endif
+  ld a,border_color
+  out (254),a
+  jr $
   endm
 
 ; ------------------------------
@@ -544,7 +583,7 @@ return_stack_0:
 
 parsed_string_buffer:
   if classic_Forth_behaviours?
-    ds parsed_string_buffer_size   ; buffer of S"
+    ds parsed_string_buffer_size
   else
     ds parsed_string_buffer_size+word_buffer_size ; buffer of S" and WORD
   endif
@@ -4331,26 +4370,22 @@ hex_dot_:
 ; DOS {{{
 
 get_current_drive:
-  ld a,0xff
+  ld a,0xFF
 
 set_current_drive:
-  ; a = drive (ASCII 'A'..'P' to set it; 0xff to get it)
+  ; a = drive (ASCII 'A'..'P' to set it; 0xFF to get it)
   ld ix,dos_set_drive
   jr do_dos
 
 get_current_user:
-  ld a,0xff
+  ld a,0xFF
 
 set_current_user:
-  ; a = user (0x00..0x0f to set it; 0xff to get it)
+  ; a = user (0x00..0x0f to set it; 0xFF to get it)
   ld ix,dos_set_user
 
-do_dos:
-  ; ix = DOS routine to run
-  push bc
-  call dos
-  pop bc
-  ret
+; ------------------------------
+; DOS call
 
 dos:
  
@@ -4375,6 +4410,7 @@ dos:
   pop  bc
   pop  af
 
+  ;_border_halt blue_color ; XXX INFORMER
   call call_dos.ix         ; go sub routine address in IX
 
   push af
@@ -4394,6 +4430,19 @@ dos:
 call_dos.ix:
 
   jp   (ix)                ; standard way to CALL (IX), by calling this jump
+
+; ------------------------------
+; DOS call preserving Forth IP
+
+; This is used when the BC register (the Forth IP) is not a parameter of the
+; DOS routine
+
+do_dos:
+  ; IX = DOS routine to run
+  push bc
+  call dos
+  pop bc
+  ret
 
 ; DOS-VERSION  ( -- minor major )
 
@@ -4833,7 +4882,7 @@ emit_l:
   ld a,l
 emit_a:
   rst 0x10
-  ld a,0xff
+  ld a,0xFF
   ld(sys_scr_ct),a ; no "scroll?" message
   ret
 
@@ -4844,22 +4893,27 @@ emit_:
   call fetch_execute_
   dw paren_emit_
 
-; XXX OLD
-;;;   (vemit) @execute 1 out +! pause
-;;  call docolon
-;;  dw lit,vemit
-;;  dw fetchexecute
-;;  dw one,out,plusstore
-;;  dw pause
-;;  dw parenexit
-
 ; TYPE  ( ca u -- )
-; 0max 0 ?do count emit loop drop
-; XXX TODO use ROM call instead
   _header _public,'TYPE'
 type_:
 
+  ; XXX INFORMER
+  ; ld a,2
+  ; out (254),a
+  ; jr $
+
+  push bc ; save the Forth IP  
+  call rom_chan_s ; set print to screen
+  pop hl  ; IP
+  pop bc ; length
+  pop de ; address
+  push hl ; IP
+  call rom_print_string
+  pop bc ; restore the Forth IP
+  jp next
+
 ; XXX OLD
+; 0max 0 ?do count emit loop drop
 ;;  call docolon
 ;;  dw zeromax,zero
 ;;  dw parenquestiondo,type.2
@@ -4870,15 +4924,6 @@ type_:
 ;;  dw drop
 ;;  dw parenexit
 
-  _save_ip
-  call rom_chan_s ; set print to screen
-  pop bc ; length
-  pop de ; address
-  call rom_print_string
-restore_ip_next: equ $
-saved_ip: equ $+1
-  ld bc,0 ; restore IP
-  jp next
 
 ; SPACE  ( -- )
 
@@ -4973,11 +5018,11 @@ wordlist_find_.3:
   push hl    ; save nfa
   ld c,(hl)
   ld a,c
-  and 0x1f
+  and 0x1F
   ld b,a   ; dict name length
   ld a,(de)    ; string length
   xor c   ; check lengths/smudge bit
-  and 0x3f
+  and 0x3F
   jp z,wordlist_find_.5
   inc hl    ; to link
 wordlist_find_.4:
@@ -5100,7 +5145,7 @@ if warning_options
 minus_question_:
   ld hl,warning_.variable
   ld a,(hl)
-  and 0xfe    ; clear bit 0
+  and 0xFE    ; clear bit 0
   ld (hl),a
   jp next
 
@@ -5122,7 +5167,7 @@ warning_question_:
   dw true_    ; enable all warnings
   dw branch_,warning_question_.2
 warning_question_.1:
-  dw lit_,0x7fff  ; disable compile warning
+  dw lit_,0x7FFF  ; disable compile warning
   dw and_
   dw one_   ; enable redefinition warning
 warning_question_.2:
@@ -5257,7 +5302,7 @@ comma_call_:
     dw key_,drop_
   endif
   dw c_lit_
-  db 0xcd    ; Z80 'call' opcode
+  db 0xCD    ; Z80 'call' opcode
   dw c_comma_
   if 0;debug? ; XXX INFORMER
     dw paren_dot_quote_
@@ -6326,7 +6371,7 @@ ncnt_: equ  paren_name_
 ;;nlnk:
 ;;  pop hl
 ;;  ld a,(hl)  ; name length and flags
-;;  and 0x1f    ; name length only
+;;  and 0x1F    ; name length only
 ;;  ld e,a
 ;;  ld d,0
 ;;  add hl,de
@@ -6480,7 +6525,7 @@ paren_name_:
   pop de
   ld a,(de)
   inc  de
-  and 0x1f
+  and 0x1F
   ld l,a
   ld h,0
   jp push_de_hl
@@ -6938,10 +6983,17 @@ ppsb_:
   dw paren_exit_
 
 ; PARSE$  ( c "ccc" -- a n )
-;         0 begin >r dup parse 2dup r> +psb >r
-;         1+ + dup source + u< while 2dup c@ =
-;         while 1 dup >in +! r> +psb repeat
-;         then 2drop (parsedstringbuffer) r>
+;         0 begin
+;           >r dup parse 2dup r> +psb >r
+;           1+ + dup source + u<
+;         while
+;           2dup c@ =
+;         while
+;             1 dup >in +! r> +psb
+;         repeat then
+;         2drop (parsedstringbuffer) r>
+
+; XXX TODO -- rewrite in Z80; create a circular buffer
 
   _header _public,'PARSE$'
 parse_dollar_:
@@ -7224,7 +7276,7 @@ forth_:
   _header _public,'UNUSED'
 unused_:
   call do_colon
-  dw lit_,0xffff,here_,minus_
+  dw lit_,0xFFFF,here_,minus_
   dw paren_exit_
 
 ; INTERPRET  ( -- )
@@ -7492,38 +7544,37 @@ interpret_.end:
 ;
 ; does not restore block contents
 ;
-;         blk @ >in @ 2>r source 2>r blk !
+;         blk @ >in @ 2>r
+;         source 2>r blk !
 ;         'source 2! >in off interpret 2r>
-;         'source 2! 2r> >in ! blk !
+;         'source 2!
+;         2r> >in ! blk !
 
   _header _hidden,'(EVALUATE)'
 paren_evaluate_:
   call do_colon
-  dw blk_,fetch_
-  dw in_,fetch_
-  dw two_to_r_
+  if block_files?
+    dw blk_,fetch_
+    dw in_,fetch_
+    dw two_to_r_
+  else
+    dw in_,fetch_
+    dw to_r_
+  endif
   dw source_,two_to_r_
   dw blk_,store_
   dw tick_source_,two_store_
   dw in_,off_     ; reset >IN
   dw interpret_
   dw two_from_r_,tick_source_,two_store_
-  dw two_from_r_
-  dw in_,store_
-  dw blk_,store_
-  dw paren_exit_
-
-; ?BLOCK   ( -- )
-; reload block
-; blk @ ?dup if block drop then
-
-  _header _hidden,'?BLOCK'
-question_block_:
-  call do_colon
-  dw blk_,fetch_,question_dup_
-  dw question_branch_,question_block_.end
-  dw block_,drop_
-question_block_.end:
+  if block_files?
+    dw two_from_r_
+    dw in_,store_
+    dw blk_,store_
+  else
+    dw from_r_
+    dw in_,store_
+  endif
   dw paren_exit_
 
 ; EVALUATE  ( ca u -- ) 0 (evaluate) ?block
@@ -7532,20 +7583,28 @@ question_block_.end:
 evaluate_:
   call do_colon
   dw zero_,paren_evaluate_
-  dw question_block_
+  if block_files?
+    dw question_block_
+  endif
   dw paren_exit_
 
 ; (REFILL)  ( -- flag )
 ; doesn't correctly handle source
 
 ; blk @ ?dup if
+;   \ block
 ;   1+ dup #screens u< and dup
 ;   while
 ;     dup blk ! block b/buf
+;     \ continue -->
 ; else
+;   \ no block
 ;   tib dup 80 accept space
+;   \ continue -->
 ; then
-; 'source 2! >in off true then
+;   \ --> continued here
+;   'source 2! >in off true
+; then
 
   _header _hidden,'(REFILL)'
 paren_refill_:
@@ -7554,16 +7613,19 @@ paren_refill_:
     dw paren_dot_quote_
     _dcs '(REFILL_) '
   endif
+
+  if block_files?
+
   dw blk_,fetch_,question_dup_
-  dw question_branch_,paren_refill_.1
+  dw branch_if_0_,paren_refill_.no_block
   dw one_plus_,dup_
   dw nscr_,u_less_
   dw and_,dup_
-  dw question_branch_,paren_refill_.end
+  dw branch_if_0_,paren_refill_.end
   dw dup_,blk_,store_
   dw block_,bytes_per_buffer_
   dw branch_,paren_refill_.2
-paren_refill_.1:
+paren_refill_.no_block:
   if tib?
     dw tib_
   else
@@ -7582,6 +7644,31 @@ paren_refill_.2:
   dw true_
 paren_refill_.end:
   dw paren_exit_
+
+  else
+
+  ; XXX TMP -- version without blocks
+
+  if tib?
+    dw tib_
+  else
+    dw lit_,tib_address
+  endif
+  dw dup_
+  dw c_lit_
+  db 32*2-1 ; XXX TMP -- ZX Spectrum's chars per line; XXX TODO use a variable instead?
+  dw cr_,accept_
+  if tib?
+    dw dup_,number_tib_,store_ ; update '#tib'
+  endif
+paren_refill_.2:
+  dw tick_source_,two_store_
+  dw in_,off_
+  dw true_
+paren_refill_.end:
+  dw paren_exit_
+
+  endif
 
 ; REFILL  ( -- flag )
 
@@ -7680,7 +7767,7 @@ bye_:
   ld sp,(system_stack_pointer)
   ld iy,sys_err_nr ; XXX TODO -- check if needed
   rst 0x08     ; error
-  db 0xff      ; 0: "OK"
+  db 0xFF      ; 0: "OK"
 
 if 0
   ; XXX TODO -- Code from Benschop's ZX Spectrum Forth-83
@@ -7691,7 +7778,7 @@ if 0
   im 1
   ld (IY+31),2 ; update sys_e_line
   rst 0x08     ; error
-  db 0xff      ; error 0: OK
+  db 0xFF      ; error 0: OK
 endif
 
 ; XXX OLD
@@ -7734,15 +7821,24 @@ paren_abort_:
   dw branch_,quit_.start
 
 ; .ERROR  ( -- )
-;       cr blk @ ?dup if file? and if filename type
-;       >in @ 2- 0max blk @ 2dup scr 2! ."  Scr "
-;       u. c/l / ." Line " . cr then then ." Error: "
+;       cr
+;       blk @ ?dup if
+;         file? and if
+;           filename type
+;           >in @ 2- 0max blk @ 2dup scr 2! ."  Scr "
+;           u. c/l / ." Line " . cr
+;         then
+;       then
+;       ." Error: "
 ;       [char] " dup emit pwa count 31 min type emit
 
   _header _hidden,'.ERROR'
 dot_error_:
   call do_colon
   dw cr_
+
+  if block_files?
+
   dw blk_,fetch_
   dw question_dup_
   dw question_branch_,dot_error_.1
@@ -7765,6 +7861,9 @@ dot_error_:
   _dcs 'Line '
   dw dot_
   dw cr_
+
+  endif
+
 dot_error_.1:
   dw paren_dot_quote_
   _dcs 'Error: '
@@ -7988,7 +8087,7 @@ cold_boot:
 ;;  ex de,hl
 ;;  ld (limit.1),hl   ; patch LIMIT
 ;;
-;;  db 0xc3      ; 'jmp'
+;;  db 0xC3      ; 'jmp'
 ;;cldd.7:
 ;;  dw movpat      ; later patched to 'cold'
 
@@ -8089,8 +8188,8 @@ cold_:
   ld (sys_last_k),a
 
   ; init +3DOS
-  ld ix,dos_initialise
-  call do_dos
+;  ld ix,dos_initialise
+;  call do_dos
 
   call do_colon
 ;;  dw zfh     ; reset handles
@@ -8188,7 +8287,7 @@ endif
 ;;setlimit:
 ;;  pop hl
 ;;  ld a,l
-;;  and 0x00f0
+;;  and 0x00F0
 ;;  ld l,a
 ;;  ld (ulimit),hl
 ;;  jp next
@@ -9034,7 +9133,7 @@ set_user_.a:
   _header _public,'RESTORE-USER'
 restore_user_:
 old_user: equ $+1
-  ld a,0xff  ; old user (0xff = ignore)
+  ld a,0xFF  ; old user (0xFF = ignore)
   jp set_user_.a
 
 ; GET-DRIVE  ( -- u )
@@ -9262,7 +9361,7 @@ to_ior_:
   ld a,h
   or l
   _jump_z to_ior_.end
-  ld h,0xfe
+  ld h,0xFE
 to_ior_.end:
   if size_optimization?
     jp push_hl
@@ -9814,7 +9913,7 @@ setsiz_:
   ; XXX OLD
   ; dw rwp_fetch,over_
   ; dw clit_
-  ; db 0x7f
+  ; db 0x7F
   ; dw and_
   ; dw paren_to,offs_
   ; dw fcb_
@@ -10018,17 +10117,37 @@ read_file_:
 ;;  dw zero
   dw paren_exit_
 
+; (WRITE-FILE)  ( ca len fid +n -- ior )
+;
+; +n = RAM bank paged at 
+
+  _header _public,'(WRITE-FILE)'
+parent_write_file_:
+  pop hl ; l = bank
+  ld a,l
+paren_write_file_.bank_a:
+  call save_ip
+  ld c,a
+  pop hl
+  ld b,l ; fid
+  pop de ; len
+  pop hl ; ca
+  ld ix,dos_write
+  call dos
+  call restore_ip
+  _jump back_from_dos
+
 ; WRITE-FILE  ( a u fid -- ior )
-;   2 wrini uid c@ set-user fwrite
-;          restore-user nip 0<> 255 ?ior
 
   _header _public,'WRITE-FILE'
 write_file_:
-  call do_colon
-; XXX TODO
-  dw paren_exit_
+  ld a,(sys_bankm)
+  and %111 ; current page for 0xC000..0xFFFF
+  _jump paren_write_file_.bank_a
 
 ; XXX OLD
+;   2 wrini uid c@ set-user fwrite
+;          restore-user nip 0<> 255 ?ior
 ;  call do_colon
 ;;  dw two_,wrini_
 ;;  dw uid_,c_fetch_
@@ -10128,13 +10247,107 @@ read_line_:
 ;;  dw dup,zeronotequals,zero
 ;;  dw parenexit
 
+; PARSE-FILENAME  ( "filename" -- ca u )
+;   token dup 0= abort" specify filename"
+
+  _header _public,'PARSE-FILENAME'
+parse_filename_:
+  call do_colon
+  dw token_
+  dw dup_,zero_equals_
+  dw paren_abort_quote_
+  _dcs 'specify filename'
+  dw paren_exit_
+
+; SAVE-SYSTEM  ( "filename[.COM]" -- )
+;        0 0 freeze parsefilename s" com" +ext
+;        ?create >r over swap boot 2! (cold.6) (zb1)
+;        dup (zbsize*2) erase (cold.7-cold.6) cmove
+;        $100 dp @ over - r@ write-file boot cell+
+;        off ?dup 0= if (hm) dph @ over - rot 0=
+;        and r@ write-file then r> close-file or
+;        abort" can't save file"
+
+  _header _public,'SAVE-SYSTEM'
+save_system_:
+  call do_colon
+  ; XXX TODO
+  ; XXX OLD
+;;  dw zero,zero
+  ; XXX 'turnkey' jumps here with ( 1 xt ) 
+  ; XXX 'turnkey-system' jumps here with ( 0 xt )
+  ; ( f xt )
+  ; f = save only the application without the system?
+  ; xf = boot word or 0
+;;save-system_.1:
+;;  dw freeze_
+;;  dw parse_filename_
+;;  dw paren_s_quot_
+;;  dcs 'bin'
+;;  dw plus_ext_
+;;  dw question_create_
+;;  dw to_r_    ; fid
+;;  dw over_,swap  ; set boot flags
+;;  dw boot_,two_store_
+;;  dw lit_,cold.6  ; insert compiler logo
+;;  dw lit_,zb1
+;;  dw dup_
+;;  dw c_lit_
+;;  db zbsize*2
+;;  dw erase_
+;;  dw c_lit_
+;;  db cold.7-cold.6
+;;  dw cmove_
+;;  dw lit,0x0100
+;;  dw dp_,fetch_
+;;  dw over_,minus_
+;;  dw r_fetch_,write_file_  ; save application
+;;  dw boot_,cell_plus_,off_  ; reset Forth flag
+;;  dw question_dup_,zero_equals_
+;;  dw question_branch_,save-system_.2
+;;  dw lit_,hm
+;;  dw dph_,fetch_
+;;  dw over_,minus_
+;;  dw rot_,zero_equals_,and_  ; system size
+;;  dw r_fetch_,write_file_  ; save system
+;;save-system_.2:
+;;  dw from_r_,close_file_,or_
+;;  dw paren_abort_quote_
+;;  dcs  "can't save file"
+  dw paren_exit_
+
+; TURNKEY  ( "bootword" "filename[.COM]" -- )
+
+  _header _public,'TURNKEY'
+turnkey_:
+  call do_colon
+  ; XXX TODO
+  dw paren_exit_
+  ; XXX OLD
+;;  dw true
+;;turnkey_.1:
+;;  dw tick
+;;  dw branch,save-system_.1
+
+; TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
+
+  _header _public,'TURNKEY-SYSTEM'
+turnkey_system_:
+  call do_colon
+  ; XXX TODO
+  dw paren_exit_
+  ; XXX OLD
+;;  dw zero
+;;  dw branch,turnkey_.1
+
+
 ; }}} **********************************************************
 ; Block files {{{
 
 if block_files?
 
 block_updated_mask: equ 0x8000
-block_number_mask:  equ 0x7fff
+block_number_mask:  equ 0x7FFF
 
 ; SFP  ( -- a )
 ; screen file selector
@@ -10256,6 +10469,10 @@ blk_number_.variable:
   ds cell
 
 ; FILE?  ( -- flag )
+;
+; XXX TODO rename
+;
+; XXX TODO rename
 
   _header _public,'FILE?'
 file_question_:
@@ -10774,101 +10991,20 @@ loaded_:
   dw question_block_
   dw paren_exit_
 
+; ?BLOCK   ( -- )
+; reload block
+; blk @ ?dup if block drop then
+
+  _header _hidden,'?BLOCK'
+question_block_:
+  call do_colon
+  dw blk_,fetch_,question_dup_
+  dw question_branch_,question_block_.end
+  dw block_,drop_
+question_block_.end:
+  dw paren_exit_
 
 endif ; end of block file words
-
-; PARSE-FILENAME  ( "filename" -- ca u )
-;   token dup 0= abort" specify filename"
-
-  _header _public,'PARSE-FILENAME'
-parse_filename_:
-  call do_colon
-  dw token_
-  dw dup_,zero_equals_
-  dw paren_abort_quote_
-  _dcs 'specify filename'
-  dw paren_exit_
-
-; SAVE-SYSTEM  ( "filename[.COM]" -- )
-;        0 0 freeze parsefilename s" com" +ext
-;        ?create >r over swap boot 2! (cold.6) (zb1)
-;        dup (zbsize*2) erase (cold.7-cold.6) cmove
-;        $100 dp @ over - r@ write-file boot cell+
-;        off ?dup 0= if (hm) dph @ over - rot 0=
-;        and r@ write-file then r> close-file or
-;        abort" can't save file"
-
-  _header _public,'SAVE-SYSTEM'
-save_system_:
-  call do_colon
-  ; XXX TODO
-  ; XXX OLD
-;;  dw zero,zero
-  ; XXX 'turnkey' jumps here with ( 1 xt ) 
-  ; XXX 'turnkey-system' jumps here with ( 0 xt )
-  ; ( f xt )
-  ; f = save only the application without the system?
-  ; xf = boot word or 0
-;;save-system_.1:
-;;  dw freeze_
-;;  dw parse_filename_
-;;  dw paren_s_quot_
-;;  dcs 'bin'
-;;  dw plus_ext_
-;;  dw question_create_
-;;  dw to_r_    ; fid
-;;  dw over_,swap  ; set boot flags
-;;  dw boot_,two_store_
-;;  dw lit_,cold.6  ; insert compiler logo
-;;  dw lit_,zb1
-;;  dw dup_
-;;  dw c_lit_
-;;  db zbsize*2
-;;  dw erase_
-;;  dw c_lit_
-;;  db cold.7-cold.6
-;;  dw cmove_
-;;  dw lit,0x0100
-;;  dw dp_,fetch_
-;;  dw over_,minus_
-;;  dw r_fetch_,write_file_  ; save application
-;;  dw boot_,cell_plus_,off_  ; reset Forth flag
-;;  dw question_dup_,zero_equals_
-;;  dw question_branch_,save-system_.2
-;;  dw lit_,hm
-;;  dw dph_,fetch_
-;;  dw over_,minus_
-;;  dw rot_,zero_equals_,and_  ; system size
-;;  dw r_fetch_,write_file_  ; save system
-;;save-system_.2:
-;;  dw from_r_,close_file_,or_
-;;  dw paren_abort_quote_
-;;  dcs  "can't save file"
-  dw paren_exit_
-
-; TURNKEY  ( "bootword" "filename[.COM]" -- )
-
-  _header _public,'TURNKEY'
-turnkey_:
-  call do_colon
-  ; XXX TODO
-  dw paren_exit_
-  ; XXX OLD
-;;  dw true
-;;turnkey_.1:
-;;  dw tick
-;;  dw branch,save-system_.1
-
-; TURNKEY-SYSTEM  ( "bootword" "filename[.COM]" -- )
-
-  _header _public,'TURNKEY-SYSTEM'
-turnkey_system_:
-  call do_colon
-  ; XXX TODO
-  dw paren_exit_
-  ; XXX OLD
-;;  dw zero
-;;  dw branch,turnkey_.1
 
 ; }}} **********************************************************
 ; Screen and graphics {{{
@@ -10939,11 +11075,18 @@ home_:
   _header _public,'PAGE'
 page_:
   ; XXX TODO adapt to printer too; check Forth-2012
-  _save_ip
+
+  ; XXX INFORMER
+;  ld a,2
+;  out (254),a
+;  jr $
+
+  push bc
   call rom_cl_all
   ld a,2
   call rom_chan_open ; XXX TODO needed?
-  jp restore_ip_next
+  pop bc
+  jp next
 
 ; XXX OLD
 ;;; NORMAL  ( -- )
@@ -11354,7 +11497,7 @@ zro:
 ; overflow - set regs to maximum, set cy
 
 ovf:
-  ld bc,0x7fff
+  ld bc,0x7FFF
   ld a,c
   ld d,c
   scf
@@ -12453,9 +12596,9 @@ f_random_.1:
   jp svop
 
 f_random_.2:
-  db 0x98,0x35,0x44,0x7a
+  db 0x98,0x35,0x44,0x7A
 f_random_.3:
-  db 0x68,0x28,0xb1,0x46
+  db 0x68,0x28,0xB1,0x46
 f_random_.4:
   db 0x80,0x31,0x41,0x59    ; seed
 
@@ -12635,7 +12778,7 @@ fin.15:
 fin.16:
   call fmu    ; mul by 10
   ret  c    ; overflow
-  ld a,0xff
+  ld a,0xFF
   jp fin.15
 
 ; get next char, return z if end reached
@@ -12725,7 +12868,7 @@ represent_.1:
 represent_.2:
   dw f_dup_    ; begin
   dw f_lit_
-  db 0x7d,0x4c,0xcc,0xcd
+  db 0x7D,0x4C,0xCC,0xCD
   dw f_less_
   dw question_branch_,represent_.3  ; while
   dw f_ten,f_star_
@@ -13313,11 +13456,11 @@ exp.1:
 
 exp.4:
   db 7
-  db 0x74,0x59,0x88,0x7c
-  db 0x77,0x26,0x97,0x00e0
-  db 0x7a,0x1e,0x1d,0xc4
-  db 0x7c,0x63,0x50,0x5e
-  db 0x7e,0x75,0xfe,0x1a
+  db 0x74,0x59,0x88,0x7C
+  db 0x77,0x26,0x97,0x00E0
+  db 0x7A,0x1E,0x1D,0xC4
+  db 0x7C,0x63,0x50,0x5E
+  db 0x7E,0x75,0xFE,0x1A
 ln2:
   db 0x80,0x31,0x72,0x18    ; ln2
 fp1:
@@ -13344,15 +13487,15 @@ log:
 
 log.2:
   db 9
-  db 0x82,0x94,0xee,0xd8
-  db 0x84,0x7d,0xaa,0xa9
-  db 0x86,0xbf,0x99,0x7d
-  db 0x87,0x28,0xe5,0x7b
-  db 0x87,0x00c0,0x71,0x8a
-  db 0x87,0x14,0x95,0x6e
-  db 0x86,0x00a0,0x1e,0xb2
-  db 0x85,0x02,0x7a,0xad
-  db 0x83,0x8d,0x9d,0x09
+  db 0x82,0x94,0xEE,0xD8
+  db 0x84,0x7D,0xAA,0xA9
+  db 0x86,0xBF,0x99,0x7D
+  db 0x87,0x28,0xE5,0x7B
+  db 0x87,0x00C0,0x71,0x8A
+  db 0x87,0x14,0x95,0x6E
+  db 0x86,0x00A0,0x1E,0xB2
+  db 0x85,0x02,0x7A,0xAD
+  db 0x83,0x8D,0x9D,0x09
 
 ;  sin / cos
 
@@ -13395,20 +13538,20 @@ sin.1:
 
 sin.7:
   db 5
-  db 0x86,0x1e,0xd7,0xfb
+  db 0x86,0x1E,0xD7,0xFB
   db 0x87,0x99,0x26,0x64
   db 0x87,0x23,0x34,0x58
-  db 0x86,0xa5,0x5d,0xe1
+  db 0x86,0xA5,0x5D,0xE1
 f2pi:
-  db 0x83,0x49,0x0f,0xdb ; 2pi
+  db 0x83,0x49,0x0F,0xDB ; 2pi
 
 fpi.2:
-  db 0x81,0x49,0x0f,0xdb ; pi/2
+  db 0x81,0x49,0x0F,0xDB ; pi/2
 
 fp50:
   db 0x80,0,0,0  ; 0.5
 fp25:
-  db 0x7f,0,0,0  ; 0.25
+  db 0x7F,0,0,0  ; 0.25
 
 ;  atan
 
@@ -13456,20 +13599,20 @@ atan.4:
 atan.6:
   db 2
 atan.7:
-  db 0x81,0x5d,0xb3,0xd7
+  db 0x81,0x5D,0xB3,0xD7
   db 0x81,0x80,0,0    ; -1.0
 
 atan.8:
   db 4
-  db 0x7e,0x83,0x35,0x62
-  db 0x7e,0x4c,0x24,0x50
-  db 0x7f,0xaa,0xa9,0x79
+  db 0x7E,0x83,0x35,0x62
+  db 0x7E,0x4C,0x24,0x50
+  db 0x7F,0xAA,0xA9,0x79
   db 0x81,0,0,0
 
 atan.9:
-  db 0x7f,0x09,0x38,0xa3
+  db 0x7F,0x09,0x38,0xA3
 atan.10:
-  db 0x80,0x06,0x0a,0x92
+  db 0x80,0x06,0x0A,0x92
 
 atan.11:
   ds float
@@ -13537,7 +13680,7 @@ f_atan_:
   _header _public,'PI'
 f_pi_:
   call do_f_constant
-  db 0x82,0x49,0x0f,0xdb  ; pi
+  db 0x82,0x49,0x0F,0xDB  ; pi
 
 ; FINIT  ( -- )
 ;   max-precision set-precision fdp on
