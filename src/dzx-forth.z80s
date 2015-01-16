@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501161957"
+  db version.major,"-0",version.minor+"0","-201501162308"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -89,6 +89,17 @@ _version: macro
 ;
 ; See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM routines.
 
+
+; }}} **********************************************************
+; Boot {{{
+
+start: equ 24000 ; start of DZX-Forth in memory
+
+  org start
+
+  jp cold_boot
+;  jp warmboot  ; XXX TODO
+
 ; }}} **********************************************************
 ; Labels {{{
 
@@ -168,8 +179,6 @@ top_prunes:             defl 0 ; XXX OLD ?
 
 ; ------------------------------
 ; Memory 
-
-start: equ 24000 ; start of DZX-Forth in memory
 
 cell: equ 2 ; cell size (bytes)
 float: equ 4 ; floating point number size (bytes)
@@ -534,14 +543,6 @@ _border_halt: macro color
 ;       @a  defl  @a+filedescriptorsize
 ;     endm
 ;    endm
-
-; }}} **********************************************************
-; Boot {{{
-
-  org start
-
-  jp cold_boot
-;  jp warmboot  ; XXX TODO
 
 ; }}} **********************************************************
 ; Data zones {{{
