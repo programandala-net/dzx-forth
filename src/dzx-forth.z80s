@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501170227"
+  db version.major,"-0",version.minor+"0","-201501212214"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -180,7 +180,8 @@ fast_emit?:                        equ yes ; if yes, some words jump directly in
 ; Config
 
 max_open_source_files:  equ 6  ; (min = 2)
-max_open_file_handle:   equ 15 ; (0..15)
+;max_file_ids:  equ 16 ; (0..15) ; XXX OLD
+max_file_id:  equ 15 ; 0..15 are the possible file numbers in +3DOS
 top_prunes:             defl 0 ; XXX OLD ?
 
 ; ------------------------------
@@ -195,8 +196,8 @@ float: equ 4 ; floating point number size (bytes)
 ; XXX TODO Convert stack sizes to user variables? The point is
 ; a task could need just a little stack.
 
-filename_size:                equ 16+1  ; XXX TODO why 16 in CP/M? ("ud:nnnnnnnn.eee"=15)
-file_descriptor_size:         equ filename_size+(4*cell)  ; XXX OLD?
+filename_size:                equ 16+1 ; ("uud:nnnnnnnn.eee"+0xFF)
+file_descriptor_size:         equ filename_size+(4*cell)  ; XXX OLD
 block_size:                   equ 1024
 file_handle_size:             equ 6+36  ; (keep even) ; XXX OLD?
 parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
@@ -553,8 +554,8 @@ _border_halt: macro color
 ; }}} **********************************************************
 ; Data zones {{{
 
-block_buffer:
-  ds block_size    ; block buffer
+free_file_handles: ; XXX NEW
+  ds max_file_id+1
 
 file_descriptor_blocks:
   ds file_descriptor_size*max_open_source_files
@@ -5898,14 +5899,37 @@ tick_next_:
 tick_next_.variable:
   dw next
 
-; #FCB  ( -- u )
-;   number of file handles
+; MAX-FCB  ( -- u )
+; XXX NEW
+;   max number of file handle
+; XXX TODO rename
 
-  _header _public,'#FCB'
-nfcb_:
+  _header _public,'MAX-FCB'
+max_fcb_:
   call do_value
-nfcb_.value:
-  dw max_open_file_handle
+max_fcb_.value:
+  dw max_file_id
+
+; #FCB  ( -- u )
+; number of file handles
+; XXX TODO rename
+
+; XXX OLD
+  ; _header _public,'#FCB'
+; nfcb_:
+  ; call do_value
+; nfcb_.value:
+  ; dw max_file_ids
+
+; FID-TABLE  ( -- a )
+; XXX NEW
+; XXX TODO rename
+
+  _header _public,'FID-TABLE'
+fid_table_:
+  call do_value
+fid_table_.value:
+  dw free_file_handles
 
 ; SYS-VEC  ( -- a )
 ;   system vector table
@@ -9149,22 +9173,46 @@ to_ior_.end:
 ;
 ; XXX the DX-Forth name was 'getfh', and it was hidden
 ; XXX This word was used only by open1
-; XXX TODO rewrite
+; XXX OLD
+
+;  _header _public,'GET-FILE-HANDLE'
+;get_file_handle_:
+;  call do_colon
+  ; dw nfcb_
+  ; dw one_plus_
+; get_file_handle_.1:
+  ; dw one_minus_
+  ; dw dup_
+  ; dw question_branch_,get_file_handle_.end
+  ; dw dup_
+  ; dw paren_to_,fh_
+  ; dw use_,c_fetch_
+  ; dw zero_equals_
+  ; dw question_branch_,get_file_handle_.1
+; get_file_handle_.end:
+  ; dw paren_exit_
+
+; GET-FILE-HANDLE  ( -- fid true | false )
+;
+; Return fid of a free file handle and true flag; false flag if none
 
   _header _public,'GET-FILE-HANDLE'
 get_file_handle_:
   call do_colon
-  dw nfcb_
-  dw one_plus_
-get_file_handle_.1:
-  dw one_minus_
+  dw max_fcb_
+get_file_handle_.begin:
   dw dup_
-  dw question_branch_,get_file_handle_.end
-  dw dup_
-  dw paren_to_,fh_
-  dw use_,c_fetch_
-  dw zero_equals_
-  dw question_branch_,get_file_handle_.1
+  dw fid_table_,plus_,dup_,c_fetch_
+  dw branch_if_0_,get_file_handle_.found
+  dw drop_,one_minus_,dup_,zero_less_
+  ; XXX TODO use '0>=' when available, and save one branch 
+  dw branch_if_0_,get_file_handle_.begin
+  dw branch_,get_file_handle_.begin
+get_file_handle_.found:
+  dw c_lit_
+  db 0xFF
+  dw swap_,c_store_
+  dw true_
 get_file_handle_.end:
   dw paren_exit_
 
@@ -9398,9 +9446,8 @@ open_file_:
   call do_colon
   dw to_r_,to_fname_,one_plus_,from_r_
   ; ( ca2 fam )
-  ;dw get_file_handle_
-  dw two_ ; XXX TMP
-  dw question_dup_
+  dw get_file_handle_
+  ; dw two_,true_ ; XXX TMP
   dw branch_if_zero_,open_file_.no_file_handle
   ;  ( ca2 fam fid )
   dw paren_open_file_
@@ -9482,10 +9529,9 @@ create_file_:
   dw to_r_,to_fname_,one_plus_,from_r_
   ; ( ca2 fam )
 
-  ;dw get_file_handle_
-  dw two_ ; XXX TMP
+  dw get_file_handle_
+  ;dw two_,true_ ; XXX TMP
 
-  dw question_dup_
   dw branch_if_zero_,create_file_.no_file_handle
   ;  ( ca2 fam fid )
   dw paren_create_file_
@@ -9843,6 +9889,9 @@ flush_file_:
 
 if block_files?
 
+block_buffer:
+  ds block_size
+
 block_updated_mask: equ 0x8000
 block_number_mask:  equ 0x7FFF
 
@@ -9852,7 +9901,7 @@ block_number_mask:  equ 0x7FFF
   _header _hidden,'SFP'
 sfp_:
   call do_create
-  dw file_descriptor_blocks_table    ; current
+  dw file_descriptor_blocks_table       ; current
   dw file_descriptor_blocks_table+cell  ; swap_-file
 
 ; SWAP-FILE  ( -- )
@@ -10393,13 +10442,14 @@ init_scr_.no_error:
 ; XXX TODO
 
   _header _public,'OPEN-BLOCK-FILE'
-open_:
+open_block_file_:
   call do_colon
   dw fdb_,drop_  ; free slot?
   dw to_r_
   dw paren_s_quot_
   _dcs 'fb'
   dw plus_ext_
+;  dw two_dup_,type_,cr_ ; XXX INFORMER
   dw from_r_,open_file_
   dw tuck_
   dw init_scr_
@@ -10413,7 +10463,8 @@ open_:
   _header _hidden,'(OPEN)'
 paren_open_:
   call do_colon
-  dw read_write_,open_
+  dw read_write_,open_block_file_
+  ; XXX FIXME
   dw paren_abort_quote_
   _dcs "can't open file"
   dw paren_exit_
@@ -10448,7 +10499,7 @@ load_file_:
   ; call do_colon
   ; dw close_
   ; dw parse_filename_
-  ; dw read_write_,open_,question_dup_
+  ; dw read_write_,open_block_file_,question_dup_
   ; dw question_branch_,using_.4
   ; dw dot_lastfile_
   ; dw lit_,-507,equals_
