@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501212214"
+  db version.major,"-0",version.minor+"0","-20150122044"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -75,10 +75,14 @@ _version: macro
 ; + 'rdrop'
 ; + 'write-line', 'read-file', 'open-file'
 ; ! 'token' renamed to 'parse-name', after Gforth and Forth 2012
+; + 'file-id'
+; + 'reposition-file', 'abandon-file'
 
 ; ------------------------------
 ; XXX TODO
 
+; 2015-01-21: erases 'fid-table' in 'cold'.
+;
 ; 2015-01-16: finish '(create-file)'. fix the strange issue with its fam.
 ;
 ; 2015-01-14: change the format of headers created by 'defer'?
@@ -180,8 +184,8 @@ fast_emit?:                        equ yes ; if yes, some words jump directly in
 ; Config
 
 max_open_source_files:  equ 6  ; (min = 2)
-;max_file_ids:  equ 16 ; (0..15) ; XXX OLD
-max_file_id:  equ 15 ; 0..15 are the possible file numbers in +3DOS
+max_file_id:            equ 15 ; 0..15 are the possible file numbers in +3DOS
+max_file_ids:           equ max_file_id+1
 top_prunes:             defl 0 ; XXX OLD ?
 
 ; ------------------------------
@@ -554,8 +558,8 @@ _border_halt: macro color
 ; }}} **********************************************************
 ; Data zones {{{
 
-free_file_handles: ; XXX NEW
-  ds max_file_id+1
+file_id_table: ; XXX NEW
+  ds max_file_ids
 
 file_descriptor_blocks:
   ds file_descriptor_size*max_open_source_files
@@ -3416,8 +3420,15 @@ string_1_addr equ $+1
   jp search_.3
 
 ; +STRING  ( ca1 len1 ca2 len2 -- ca2 len3 )
-;          2swap swap 2over + 2 pick cmove +
-; Note: uses temps 1-3
+;
+; Append the string ca1 len1 to the end of string ca2 len2
+; returning the resulting string ca2 u3.  It is the programmer's
+; responsibility to ensure sufficient room is available at ca2
+; to hold both strings.
+;
+; Note: uses temp 1-3.
+;
+;   2swap swap 2over + 2 pick cmove +
 
   _header _public,'+STRING'
 plus_string:
@@ -3445,10 +3456,13 @@ t1: ds cell
 t2: ds cell
 t3: ds cell
 
-; XXX NEW -- DX-Forth 4.09
-; S.R  ( ca n1 n2 -- )
+; S.R  ( ca len n -- )
+;
 ; Type a string right-justified
+;
 ;   over - spaces type
+;
+; XXX TODO -- rename to 'type.r' or 'type>'?
 
   _header _public,'S.R'
 s_dot_r_:
@@ -4394,7 +4408,7 @@ get_current_user:
   ld a,0xFF
 
 set_current_user:
-  ; a = user (0x00..0x0f to set it; 0xFF to get it)
+  ; a = user (0x00..0x0F to set it; 0xFF to get it)
   ld ix,dos_set_user
 
 ; ------------------------------
@@ -4445,7 +4459,7 @@ call_dos.ix:
   jp   (ix)                ; standard way to CALL (IX), by calling this jump
 
 ; ------------------------------
-; DOS call preserving Forth IP
+; DOS call preserving the Forth IP
 
 ; This is used when the BC register (the Forth IP) is not a parameter of the
 ; DOS routine
@@ -5921,15 +5935,14 @@ max_fcb_.value:
 ; nfcb_.value:
   ; dw max_file_ids
 
-; FID-TABLE  ( -- a )
+; FILE-ID-TABLE  ( -- a )
 ; XXX NEW
-; XXX TODO rename
+; XXX TODO rename?
 
-  _header _public,'FID-TABLE'
-fid_table_:
-  call do_value
-fid_table_.value:
-  dw free_file_handles
+  _header _public,'FILE-ID-TABLE'
+file_id_table_:
+  ld hl,file_id_table
+  jp push_hl
 
 ; SYS-VEC  ( -- a )
 ;   system vector table
@@ -7733,19 +7746,29 @@ reset_interpreter_:
 reset_forth_:
   call do_colon
 ; XXX TODO
+
 ; XXX OLD
 ;;  dw zero
 ;;  dw setlimit
+
   dw empty_   ; reset vocabulary pointers
   dw warning_,on_  ; enable warnings
   dw checking_,on_  ; enable checking
+
+  ; XXX OLD
 ;;  dw lit,filedescriptorblocks  ; clear files
 ;;  dw lit,filedescriptorsize*maxopensourcefiles ;
 ;;  dw erase   ;
-;;  dw emptybuffers   ; mark screen buffer as empty
-;;  dw resetinterpreter   ; reset interpreter
-;;  dw ticksource,off  ; clear parsed word buffer
-;;  dw blword,drop ;
+  ; XXX NEW
+  dw file_id_table_
+  dw c_lit_
+  db max_file_ids
+  dw erase_
+
+  dw empty_buffers_   ; mark screen buffer as empty
+  dw reset_interpreter_
+  dw tick_source_,off_  ; clear parsed word buffer
+;;  dw bl_word_,drop_ ; XXX what for?
   dw decimal_ ; XXX NEW -- moved here from cold_boot
   dw case_sensitive_search_,off_
   dw paren_exit_
@@ -8694,19 +8717,8 @@ s_quote_:
 s_quote_.end:
   dw paren_exit_
 
-; XXX OLD -- DX-Forth 4.00
-;;; (.")      r> count 2dup + >r type
-;;
-;;  header x,'(.")'
-;;parendotquote:
-;;  call docolon
-;;  dw fromr,count
-;;  dw twodup,plus,tor
-;;  dw type
-;;  dw parenexit
-
-; XXX NEW -- DX-Forth 4.09
-; (.")      r> count 2dup + >r type
+; (.")
+;   r> count 2dup + >r type
 
   _header _hidden,'(.")'
 paren_dot_quote_:
@@ -8721,7 +8733,8 @@ paren_dot_quote_:
   ld c,l      ; update the IP
   jp type_
 
-; ."      compile (.") ," ; immediate
+; ."
+;   compile (.") ," ; immediate
 
   _header _public,'."',_immediate
 dot_quote_:
@@ -8813,62 +8826,60 @@ dzx_forth_:
 ; characters allowed:
 ;     "#'@^_{}~` (the ASCII '`' is ZX Spectrum's pound sign)
 
-; >DRIVE  ( u1 -- u2 )
-;   ?dup if 1- else 0 25 bdos then
-;
-; Convert logical drive number (0=default, 1=A, 2=B, etc) to absolute
-; drive number (0=A, 1=B, 2=C, etc).
-; XXX OLD?
+; ; >DRIVE  ( u1 -- u2 )
+; ;   ?dup if 1- else 0 25 bdos then
+; ;
+; ; Convert logical drive number (0=default, 1=A, 2=B, etc) to absolute
+; ; drive number (0=A, 1=B, 2=C, etc).
+; ; XXX OLD?
 
-  _header _public,'>DRIVE'
-to_drive_:
-  pop de
-  ld a,e
-  dec  a
-  call m,get_current_drive
-  jp push_a
+;   _header _public,'>DRIVE'
+; to_drive_:
+;   pop de
+;   ld a,e
+;   dec  a
+;   call m,get_current_drive
+;   jp push_a
 
-; PATH  ( u1 -- ca u2 ior )
-;        255 32 bdos 0 <# [char] : hold #s rot >drive
-;        [char] A + hold #> 0
-;
-; Get the full directory path for disk drive u1.  If an error occurs,
-; ior is non-zero.  The returned string ca u2 includes the drive
-; letter, current user number and trailing colon.  For the currently
-; selected drive u1 = 0, otherwise u1 = 1 for drive A, 2 for drive B
-; etc.
-;
-; Note: The returned string resides in a transient region which may
-; be overwritten by subsequent operations.
-;
-; XXX OLD?
+; ; PATH  ( u1 -- ca u2 ior )
+; ;        255 32 bdos 0 <# [char] : hold #s rot >drive
+; ;        [char] A + hold #> 0
+; ;
+; ; Get the full directory path for disk drive u1.  If an error occurs,
+; ; ior is non-zero.  The returned string ca u2 includes the drive
+; ; letter, current user number and trailing colon.  For the currently
+; ; selected drive u1 = 0, otherwise u1 = 1 for drive A, 2 for drive B
+; ; etc.
+; ;
+; ; Note: The returned string resides in a transient region which may
+; ; be overwritten by subsequent operations.
+; ;
+; ; XXX OLD?
 
-  _header _public,'PATH'  ; uses numeric buffer
-path_:
-  call do_colon
-  dw c_lit_
-  db 255
-  dw c_lit_
-  db 32
-  dw bdos_
-  dw zero_,less_number_sign_
-  dw c_lit_
-  db ':'
-  dw hold_
-  dw number_sign_s_
-  dw rot_,to_drive_
-  dw c_lit_
-  db 'A'
-  dw plus_
-  dw hold_,number_sign_greater_
-  dw zero_
-  dw paren_exit_
+;   _header _public,'PATH'  ; uses numeric buffer
+; path_:
+;   call do_colon
+;   dw c_lit_
+;   db 255
+;   dw c_lit_
+;   db 32
+;   dw bdos_
+;   dw zero_,less_number_sign_
+;   dw c_lit_
+;   db ':'
+;   dw hold_
+;   dw number_sign_s_
+;   dw rot_,to_drive_
+;   dw c_lit_
+;   db 'A'
+;   dw plus_
+;   dw hold_,number_sign_greater_
+;   dw zero_
+;   dw paren_exit_
 
 ; -PATH  ( ca1 len1 -- ca2 len2 )
-;        2dup [char] : scan dup if 1 /string 2swap
-;        then 2drop
-
-  ; XXX TODO simpler, because ':' always is at the same position
+;
+;   2dup [char] : scan dup if  1 /string 2swap  then  2drop
 
   _header _public,'-PATH'
 minus_path_:
@@ -8884,13 +8895,12 @@ minus_path_.1:
   dw two_drop_
   dw paren_exit_
 
-; FILETYPE?  ( ca1 len1 -- u2 )
-;   -path [char] . scan nip
+; FILETYPE?  ( ca1 len1 -- len2 )
+; length of the filetype extension, including the dot
 ;
 ; XXX OLD?  -- probably useless
-; XXX FIXME -- the check is just the wether the string contains a dot!
 
-  _header _hidden,'FILETYPE?'  ; get filetype length
+  _header _hidden,'FILETYPE?'
 filetype_question_:
   call do_colon
   dw minus_path_ ; XXX why?
@@ -8900,9 +8910,10 @@ filetype_question_:
   dw paren_exit_
 
 ; +EXT  ( ca1 len1 ca2 len2 -- ca3 len3 )
-;        2over filetype? if 2drop exit then 3 min
-;        s" ." 2rot -trailing (filenamesize-5) min zbuf
-;        @ 1+ 0 +string +string +string
+;
+;        2over filetype? if 2drop exit then
+;        3 min s" ." 2rot -trailing (filenamesize-5) min
+;        zbuf @ 1+ 0 +string +string +string
 
   _header _public,'+EXT'  ; uses filename buffer
 plus_ext_:
@@ -8968,7 +8979,9 @@ old_user: equ $+1
   ld a,0xFF  ; old user (0xFF = ignore)
   jp set_user_.a
 
-; GET-DRIVE  ( -- u )
+; GET-DRIVE  ( -- c )
+
+; c = drive (ASCII 'A'..'P')
 
   _header _public,'GET-DRIVE'
 get_drive_:
@@ -8976,12 +8989,12 @@ get_drive_:
   jp nc,dos_error_.a
   jp push_a
 
-; SET-DRIVE  ( u -- )
+; SET-DRIVE  ( c -- )
 ;
 ; Set the default drive (i.e. the drive implied by all filenames that do not
 ; specify a drive).
 ;
-; u = drive (ASCII 'A'..'P')
+; c = drive (ASCII 'A'..'P')
 
   _header _public,'SET-DRIVE'
 set_drive_:
@@ -8997,7 +9010,7 @@ set_drive_.a:
 ;   (filenamesize-1) min zbuf @ packed 0 affix
 ;   zbuf 2@ swap zbuf 2!
 
-; Convert the string ca u to a zero-terminated counted string
+; Convert the string ca u to a 0xFF-terminated counted string
 ; ca2 in the filename buffer.  A maximum of two filenames can
 ; exist in the buffer at one time.  ca2 returns the counted
 ; string, whereas ca2 + 1 returns the zero-terminated string.
@@ -9007,23 +9020,6 @@ set_drive_.a:
 
   _header _public,'>FNAME'
 to_fname_:
-
-if 0 ; XXX OLD -- original
-
-  call do_colon
-  dw c_lit_
-  db filename_size-1
-  dw min_
-  dw zbuf_,fetch_
-  dw packed_
-  dw zero_,affix_  ; trailing null ; XXX OLD
-  dw zbuf_,two_fetch_
-  dw swap_
-  dw zbuf_,two_store_
-  dw paren_exit_
-
-else
-
 
   call do_colon
   dw c_lit_
@@ -9039,18 +9035,14 @@ else
   dw zbuf_,two_store_
   dw paren_exit_
 
-endif
-
-
 ; FH  ( -- a )
 ; current file handle
-; XXX OLD -- it probably will be useless after rewriting 'get-file-handle'
-
-  _header _hidden,'FH'
-fh_:
-  call do_value
-fh_.value:
-  dw 0
+; XXX OLD -- useless after rewriting 'get-file-handle'
+  ; _header _hidden,'FH'
+; fh_:
+  ; call do_value
+; fh_.value:
+  ; dw 0
 
 ; /FH  ( -- )
 ;   #fcb (filehandlesize) * hbuf over - swap erase
@@ -9070,21 +9062,21 @@ fh_.value:
 
 ; USE  ( -- a )
 ; fh (file_handle_size) negate * hbuf +
-; XXX OLD -- only used by 'get-file-handle', that will be rewritten
+; XXX OLD -- only used by 'getfh' ('get-file-handle'), that was rewritten
 
-  _header _hidden,'USE'
-use_:
-  ld hl,(fh_.value)
-  ld de,-file_handle_size
-  call hl_by_de_to_hlde_unsigned
-  ld hl,(hbuf_.value)
-  add hl,de
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  ; _header _hidden,'USE'
+; use_:
+  ; ld hl,(fh_.value)
+  ; ld de,-file_handle_size
+  ; call hl_by_de_to_hlde_unsigned
+  ; ld hl,(hbuf_.value)
+  ; add hl,de
+  ; if size_optimization?
+  ;   jp push_hl
+  ; else
+  ;   push hl
+  ;   jp next
+  ; endif
 
 ; UID  ( -- a )
 ;   use 1+
@@ -9152,120 +9144,50 @@ to_ior_.end:
     jp next
   endif
 
-; ?IOR  ( flag err# -- ior )
-;   and ior ;
-; XXX was hidden
+; FILE-ID  ( -- fid true | false )
 
-  ; _header _public,'?IOR'
-; question_ior_:
-  ; call do_colon
-  ; dw and_
-  ; dw to_ior_
-  ; dw paren_exit_
-
-; GET-FILE-HANDLE  ( -- fid | 0 )
-; Return fid of a free file handle, 0 if none
-;
-;   #fcb 1+ begin
-;     1- dup while
-;     dup to fh
-;   use c@ 0= until then
-;
-; XXX the DX-Forth name was 'getfh', and it was hidden
-; XXX This word was used only by open1
-; XXX OLD
-
-;  _header _public,'GET-FILE-HANDLE'
-;get_file_handle_:
-;  call do_colon
-  ; dw nfcb_
-  ; dw one_plus_
-; get_file_handle_.1:
-  ; dw one_minus_
-  ; dw dup_
-  ; dw question_branch_,get_file_handle_.end
-  ; dw dup_
-  ; dw paren_to_,fh_
-  ; dw use_,c_fetch_
-  ; dw zero_equals_
-  ; dw question_branch_,get_file_handle_.1
-; get_file_handle_.end:
-  ; dw paren_exit_
-
-; GET-FILE-HANDLE  ( -- fid true | false )
-;
-; Return fid of a free file handle and true flag; false flag if none
-
-  _header _public,'GET-FILE-HANDLE'
-get_file_handle_:
+  _header _public,'FILE-ID'
+file_id_:
   call do_colon
   dw max_fcb_
-get_file_handle_.begin:
+file_id_.begin:
   dw dup_
-  dw fid_table_,plus_,dup_,c_fetch_
-  dw branch_if_0_,get_file_handle_.found
+  dw file_id_table_,plus_,dup_,c_fetch_
+  dw branch_if_0_,file_id_.found
   dw drop_,one_minus_,dup_,zero_less_
   ; XXX TODO use '0>=' when available, and save one branch 
-  dw branch_if_0_,get_file_handle_.begin
-  dw branch_,get_file_handle_.begin
-get_file_handle_.found:
+  dw branch_if_0_,file_id_.begin
+  dw branch_,file_id_.begin
+file_id_.found:
   dw c_lit_
   db 0xFF
   dw swap_,c_store_
   dw true_
-get_file_handle_.end:
+file_id_.end:
   dw paren_exit_
 
-; SET-FH  ( fid mask -- 0 | err )
-; select/check handle
-;
-; mode mask: 1=read 2=write 3=r/w
-;
-;   swap dup 1- 0 #fcb within if to fh
-;          use c@ and 0= 5 and exit then 2drop
-;          6
-; XXX the DX-Forth name was 'setfh', and it was hidden
-; XXX TODO change the order of the parameters; save 'swap' and rename 'fh!'
-; XXX Note -- it seems fids are 1..16 and fh are 0..15
-
-  ; _header _hidden,'SET-FH'
-; set_fh_:
-  ; call do_colon
-  ; dw swap_
-  ; dw dup_,one_minus_
-  ; dw zero_,nfcb_,within_ ; in range?
-  ; dw branch_if_false_,set_fh_.not_valid
-  ; dw paren_to_,fh_
-  ; dw use_,c_fetch_
-  ; dw and_,zero_equals_
-  ; dw c_lit_
-  ; db 5 ; XXX TODO use an error label
-  ; dw and_
-  ; dw paren_exit_
-; set_fh_.not_valid:
-  ; dw two_drop_
-  ; dw c_lit_
-  ; db 6 ; XXX TODO use an error label
-  ; dw paren_exit_
-
 ; FILE-POSITION  ( fid -- ud ior )
+;
+; ud = file pointer
+;
+; Note: the most significant byte of ud is zero, because the file pointer range
+; is 0x000000..0xFFFFFF (0..16777215).
 
   _header _public,'FILE-POSITION'
 file_position_:
   pop hl
-  push bc
-  ld b,l
+  push bc ; save the Forth IP
+  ld b,l ; fid
   ld ix,dos_get_position
   call dos
-  pop bc
+  pop bc ; restore the Forth IP
   jr nc,file_position_.error
 
-  ; ehl = position
-  push hl
+  ; ehl = file pointer
+  push hl ; low part
   ld d,0
-  push de
-  xor a ; no error
-  jp push_a
+  push de ; high part
+  jp false_ ; no error
 
 file_position_.error
   ; a = error code
@@ -9275,75 +9197,32 @@ file_position_.error
   jp push_hl ; error code
 
 ; REPOSITION-FILE  ( ud fid -- ior )
-;   3 set-fh dup >r if 2drop else
-;              rwp! then r> ior
+;
+; ud = file pointer
+;
+; Note: the most significant byte of ud is ignored, because the file pointer
+; range is 0x000000..0xFFFFFF (0..16777215).
 
-  ; XXX TODO
   _header _public,'REPOSITION-FILE'
 reposition_file_:
-  call do_colon
-  ; dw three_,set_fh_
-  ; dw dup_,to_r_
-  ; dw question_branch_,reposition_file_.1
-  ; dw two_drop_
-  ; dw branch_,reposition_file_.2
-; reposition_file_.1:
-  ; dw rwpst_
-; reposition_file_.2:
-  ; dw from_r_
-  ; dw to_ior_
-  dw paren_exit_
-
-; XF5  ( -- )
-;  $80 fcb 5 + ctoggle
-
-  ; _header _hidden,'XF5'
-; xf5_:
-  ; call do_colon
-  ; dw c_lit_
-  ; db 0x80
-  ; dw fcb_
-  ; dw c_lit_
-  ; db 5
-  ; dw plus_
-  ; dw c_toggle_
-  ; dw paren_exit_
+  pop hl
+  ld d,l  ; fid
+  pop hl  ; high 16-bit part of the file pointer
+  ld e,l  ; actual most significant byte of the file pointer
+  pop hl  ; low 16-bit part of the file pointer
+  push bc ; save the Forth IP
+  ld b,d  ; fid
+  ld ix,dos_set_position
+  call dos
+  pop bc  ; restore the Forth IP
+  jp back_from_dos
 
 ; FILE-SIZE  ( fid -- ud ior )
-;   3 set-fh dup 0= if uid c@ set-user
-;          xf5 fcb 16 bdos drop xf5 fcb 35
-;          bdos drop restore-user then fcb 33 +
-;          rec@ rot ior
 
   _header _public,'FILE-SIZE'
 file_size_:
   call do_colon
 ; XXX TODO
-; XXX OLD
-;;  dw three_,set_fh_
-;;  dw dup_,zero_equals_
-;;  dw question_branch_,file_size_.1
-;;  dw uid_,c_fetch_
-;;  dw set_user_
-;;  dw xf5_
-;;  dw fcb_
-;;  dw c_lit_
-;;  db 16
-;;  dw bdos_,drop_
-;;  dw xf5_
-;;  dw fcb_
-;;  dw c_lit_
-;;  db 35
-;;  dw bdos_,drop_
-;;  dw restore_user_
-;;file_size_.1:
-;;  dw fcb_
-;;  dw c_lit_
-;;  db 33
-;;  dw plus_
-;;  dw rec_fetch_
-;;  dw rot_
-;;  dw to_ior_
   dw paren_exit_
 
 ; CLOSE-FILE  ( fid -- ior )
@@ -9351,14 +9230,22 @@ file_size_:
   _header _public,'CLOSE-FILE'
 close_file_:
   pop hl
-  push bc ; save Forth IP
+  push hl ; save the fid
+  push bc ; save the Forth IP
   ld b,l  ; fid
   ld ix,dos_close
   call dos
-  pop bc  ; restore Forth IP
+  pop bc  ; restore the Forth IP
+  pop de  ; restore the fid
+  _jump_nc back_from_dos.error
+  ; No error; mark the file id as free
+  ld hl,file_id_table
+  add hl,de
+  ld (hl),0
 
 back_from_dos:
   jp c,false_   ; no error
+back_from_dos.error:
   ; a = error code
   call convert_dos_error_code
   ; hl = error code
@@ -9383,28 +9270,73 @@ delete_file_:
   dw paren_delete_file_
   dw paren_exit_
 
+; ABANDON-FILE  ( fid -- ior )
+
+  _header _public,'ABANDON-FILE'
+abandon_file_:
+  pop hl
+  push bc ; save the Forth IP
+  ld b,l  ; fid
+  ld ix,dos_abandon
+  call dos
+  pop bc  ; restore the Forth IP
+  _jump back_from_dos
+
 ; R/O  ( -- fam )
+;
+; read-only file access method
 
   _header _public,'R/O',,one_
 read_only_: equ one_
 
 ; W/O  ( -- fam )
+;
+; write-only file access method
 
   _header _public,'W/O',,two_
 write_only_: equ two_
 
 ; R/W  ( -- fam )
+;
+; read-write file access method
 
   _header _public,'R/W',,three_
 read_write_: equ three_
 
+; S/R  ( -- fam )
+;
+; shared-read file access method
+
+  _header _public,'S/R'
+shared_read_:
+  call do_byte_constant
+  db 5
+
 ; BIN  ( fam1 -- fam2 )
-;   aka noop bin immediate
 
   _header _public,'BIN',_immediate,noop_
 bin_: equ  next
 
+; HEADED  ( fam1 -- fam2 )
+
+  _header _public,'HEADED'
+headed_:
+  ; XXX TODO
+  ret
+
+; HEADED?  ( ca len -- wf )
+;
+; Does a file have a DOS header?
+
+  _header _public,'HEADED?'
+headed_question:
+  ; XXX TODO
+  call do_colon
+  dw paren_exit_
+
 ; (OPEN-FILE)  ( ca fam fid -- fid ior )
+;
+; ca = filename as a counted string
 
   _header _public,'(OPEN-FILE)'
 paren_open_file_:
@@ -9413,15 +9345,15 @@ paren_open_file_:
   pop hl
   ld d,l  ; fam
   pop hl  ; ca
-  push de ; save fid (actually, fid + 256*fam)
-  push bc ; save Forth IP
+  push de ; save the fid (actually, fid + 256*fam)
+  push bc ; save the Forth IP
   ld b,e  ; fid
   ld c,d  ; fam
   ld d,0  ; create action: error, file does not exist
   ld e,1  ; open action: position after the header ; XXX TODO configurable
   ld ix,dos_open
   call dos
-  pop bc  ; restore Forth IP
+  pop bc  ; restore the Forth IP
   ; (sp) = fid + 256*fam
   _jump_nc paren_open_file_.error
   ; no error
@@ -9438,7 +9370,14 @@ paren_open_file_.error
   ; hl = error code
   jp push_hl
 
+; OPEN-DISK  ( c fam -- fid ior )
+;
+; XXX TODO -- DOS OPEN DRIVE
+
+
 ; OPEN-FILE  ( ca len fam -- fid ior )
+;
+; ca len = filename
 
   _header _public,'OPEN-FILE'
 open_file_:
@@ -9446,13 +9385,12 @@ open_file_:
   call do_colon
   dw to_r_,to_fname_,one_plus_,from_r_
   ; ( ca2 fam )
-  dw get_file_handle_
-  ; dw two_,true_ ; XXX TMP
-  dw branch_if_zero_,open_file_.no_file_handle
+  dw file_id_
+  dw branch_if_zero_,open_file_.no_free_fid
   ;  ( ca2 fam fid )
   dw paren_open_file_
   dw paren_exit_
-open_file_.no_file_handle
+open_file_.no_free_fid
   ;  ( ca2 fam )
   dw drop_ ; leave only ca2, as an undefined fid
   dw c_lit_
@@ -9465,6 +9403,8 @@ open_file_.no_file_handle
   dw paren_exit_
 
 ; (CREATE-FILE)  ( ca fam fid -- fid ior )
+;
+; ca = filename as a counted string
 
   _header _public,'(CREATE-FILE)'
 paren_create_file_:
@@ -9488,8 +9428,8 @@ paren_create_file_:
   ; ld a,h
   ; ld (sys_seed+1),a
 
-  push de ; save fid (actually, fid + 256*fam)
-  push bc ; save Forth IP
+  push de ; save the fid (actually, fid + 256*fam)
+  push bc ; save the Forth IP
 
   ld b,e  ; fid
   ld c,d  ; fam
@@ -9498,7 +9438,7 @@ paren_create_file_:
   ld ix,dos_open
   call dos
 
-  pop bc  ; restore Forth IP
+  pop bc  ; restore the Forth IP
   ; (sp) = fid + 256*fam
   _jump_nc paren_create_file_.error
   ; no error
@@ -9515,7 +9455,9 @@ paren_create_file_.error
   ; hl = error code
   jp push_hl
 
-; CREATE-FILE  ( ca u fam -- fid ior )
+; CREATE-FILE  ( ca len fam -- fid ior )
+;
+; ca len = filename
 
   _header _public,'CREATE-FILE'
 create_file_:
@@ -9528,16 +9470,13 @@ create_file_:
 
   dw to_r_,to_fname_,one_plus_,from_r_
   ; ( ca2 fam )
-
-  dw get_file_handle_
-  ;dw two_,true_ ; XXX TMP
-
-  dw branch_if_zero_,create_file_.no_file_handle
+  dw file_id_
+  dw branch_if_zero_,create_file_.no_free_fid
   ;  ( ca2 fam fid )
   dw paren_create_file_
   dw paren_exit_
 
-create_file_.no_file_handle
+create_file_.no_free_fid
   ;  ( ca2 fam )
   dw drop_ ; leave only ca2, as an undefined fid
   dw c_lit_
@@ -9612,6 +9551,7 @@ rename_file_:
 
 ; (READ-FILE)  ( ca len fid +n -- ior )
 ;
+; ca len = filename
 ; +n = RAM bank paged at 0xC000..0xFFFF
 
   _header _public,'(READ-FILE)'
@@ -9652,7 +9592,7 @@ paren_read_file_.no_error:
   push hl
   jp false_
 
-; READ-FILE  ( a u1 fid -- u2 ior )
+; READ-FILE  ( a len1 fid -- len2 ior )
 
   _header _public,'READ-FILE'
 read_file_:
@@ -9680,7 +9620,7 @@ paren_write_file_.bank_a:
   call restore_ip
   _jump back_from_dos
 
-; WRITE-FILE  ( a u fid -- ior )
+; WRITE-FILE  ( ca len fid -- ior )
 
   _header _public,'WRITE-FILE'
 write_file_:
@@ -9698,7 +9638,7 @@ new_line_:
 new_line_.string:
   db cr_char
 
-; WRITE-LINE  ( ca u fileid -- ior )
+; WRITE-LINE  ( ca len fileid -- ior )
 ;     dup >r write-file ?dup if  r> rdrop exit  then
 ;     new-line r> write-file
   _header _public,'WRITE-LINE'
@@ -9730,7 +9670,7 @@ eol_question_:
   jp z,one_
   jp zero_
 
-; READ-LINE  ( a u1 fid -- u2 flag ior )
+; READ-LINE  ( ca len1 fid -- len2 flag ior )
 ;   >r over swap r> read-file
 ;          ?dup if exit then 2dup over + swap
 ;          ?do i dup c@ $1A = if rot - fh
@@ -10339,6 +10279,7 @@ close_.1:
 ; CLOSE-ALL  ( -- )
 ;   close (filedescriptorblockstable) maxopensourcefiles 0 do dup sfp ! close
 ;        cell+ loop drop
+; XXX TODO write generic version for all open files
 
   _header _public,'CLOSE-ALL'
 close_all_:
@@ -10544,6 +10485,8 @@ loaded_:
 ; ?BLOCK   ( -- )
 ; reload block
 ; blk @ ?dup if block drop then
+; XXX OLD?
+; XXX TODO rename
 
   _header _hidden,'?BLOCK'
 question_block_:
