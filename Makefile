@@ -1,11 +1,32 @@
 # Makefile for DZX-Forth
 
 ################################################################
+# Requirements
+
+# Pasmo (by Julián Albo)
+# http://pasmo.speccy.org/
+
+# tap2dsk from the Taptools (by John Elliott):
+# http://www.seasip.info/ZX/unix.html
+
+# bin2code (by MetalBrain):
+# <http://metalbrain.speccy.org/link-eng.htm>.
+
+################################################################
 # Change log
 
 # 2014-12-28: First draft.
 #
-# 2014-12-30: First working version: z80s>tap>dsk, adoc>html.
+# 2014-12-30: First working version: z80s>tap>dsk, adoc>html; 180 and 720 KB
+# disks.
+#
+# 2015-01-05: Requirements.
+#
+# 2015-01-13: 720 KB disk commented out.
+#
+# 2015-01-14: Fixed the symbols filename. Added <bin> dir.
+#
+# 2015-01-20: <tools.fb> is included into the disk image, with <bin2code>.
 
 ################################################################
 # TODO
@@ -24,7 +45,7 @@
 ################################################################
 # Config
 
-VPATH = src:doc
+VPATH = src:doc:bin
 MAKEFLAGS = --no-print-directory
 
 .PHONY: all
@@ -47,64 +68,26 @@ doc:
 # Program
 
 dzx-forth.tap: dzx-forth.z80s
-	pasmo -I src --name "DZXForth.bin" --tapbas src/dzx-forth.z80s dzx-forth.tap
+	pasmo -I src --name "DZXForth" --tapbas \
+		src/dzx-forth.z80s bin/dzx-forth.tap \
+		src/dzx-forth.symbols.z80s
 
 .PHONY: tap
 tap:
 	@make dzx-forth.tap
 
-dzx-forth.dsk: dzx-forth.tap
-	tap2dsk -720 -label DZXForth dzx-forth.tap dzx-forth.dsk
+#dzx-forth_720k.dsk: dzx-forth.tap
+#	tap2dsk -720 -label DZXForth bin/dzx-forth.tap bin/dzx-forth_720k.dsk
+
+dzx-forth_180k.dsk: dzx-forth.tap
+	cd src/ ;\
+	bin2code tools.fb tools.fb.tap ;\
+	cd - ;\
+	cat bin/dzx-forth.tap src/tools.fb.tap > bin/dzx-forth.package.tap ;\
+	tap2dsk -180 -label DZXForth bin/dzx-forth.package.tap bin/dzx-forth_180k.dsk
 
 .PHONY: dsk
 dsk:
-	@make dzx-forth.dsk
+	@make dzx-forth_180k.dsk
+#	@make dzx-forth_720k.dsk
 
-################################################################
-# Examples to learn from
-
-# .PHONY: mrproper
-# PLATFORMS := os4 morphos win32 win32-gcc win64-gcc beos haiku osx linux linux-nogl gphwiz aitouchbook aros
-# mrproper:
-#	@for plat in $(PLATFORMS); do $(MAKE) -f $(VPATH)/Makefile clean PLATFORM=$${plat} ; done
-#
-#
-#
-#DOCINC =			\
-#	docsrc/_cassette.1	\
-#	docsrc/_vars.1		\
-#	docsrc/_video.1
-#
-#ROM =	atmos.rom		\
-#	hyperbasic.rom		\
-#	telemon-2.4.rom
-#
-#NAMEVER = xeuphoric-$(VERSION)
-#DISTTMP = ~/tmp/$(NAMEVER)
-#dist:
-#	./configure --prefix /usr/local
-#	rm -rf $(DISTTMP)
-#	mkdir -p $(DISTTMP)
-#	tar cf -			\
-#	  .xeuphoricrc			\
-#	  CHANGES			\
-#	  COPYING			\
-#	  Makefile			\
-#	  README			\
-#	  TODO				\
-#	  VERSION			\
-#	  configure			\
-#	  doc/euphoric-0.99b/HISTORIC	\
-#	  doc/euphoric-0.99b/README	\
-#	  doc/xeuphoric.1		\
-#	  docsrc/xeuphoric.1		\
-#	  $(DOCINC)			\
-#	  scripts/process		\
-#	  scripts/txt2c			\
-#	  scripts/warn-perl		\
-#	  test/findlastcomp.test	\
-#	  $(ROM)			\
-#	  | (cd $(DISTTMP) && tar xf -)
-#	n=$(NAMEVER); cd $(DISTTMP)/.. && tar -cf $$n.tar $$n
-#	gzip -f $(DISTTMP)/../$(NAMEVER).tar
-#	#rm -rf $(DISTTMP)

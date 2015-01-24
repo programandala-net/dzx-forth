@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-20150122044"
+  db version.major,"-0",version.minor+"0","-201501240049"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -76,7 +76,7 @@ _version: macro
 ; + 'write-line', 'read-file', 'open-file'
 ; ! 'token' renamed to 'parse-name', after Gforth and Forth 2012
 ; + 'file-id'
-; + 'reposition-file', 'abandon-file'
+; + 'reposition-file', 'abandon-file', 'headed', 'file-size'
 
 ; ------------------------------
 ; XXX TODO
@@ -9179,22 +9179,27 @@ file_position_:
   push bc ; save the Forth IP
   ld b,l ; fid
   ld ix,dos_get_position
+
+dos_ehl:
+
+  ; Call a DOS routine that returns a number in EHL and, as usual, an error
+  ; code in A. Leave EHL on the stack as a double number, and then A.
+
+  ; Input:
+  ;   b    = file number
+  ;   ix   = DOS routine
+  ;   (sp) = Forth IP
+  ; Output stack:
+  ;   ( d ior )
+  ;   Where d is the content of registers ehl
+
   call dos
   pop bc ; restore the Forth IP
-  jr nc,file_position_.error
-
-  ; ehl = file pointer
+  ; ehl = result
   push hl ; low part
   ld d,0
   push de ; high part
-  jp false_ ; no error
-
-file_position_.error
-  ; a = error code
-  push hl ; fake value
-  push hl ; fake value
-  call convert_dos_error_code
-  jp push_hl ; error code
+  jp back_from_dos
 
 ; REPOSITION-FILE  ( ud fid -- ior )
 ;
@@ -9221,9 +9226,12 @@ reposition_file_:
 
   _header _public,'FILE-SIZE'
 file_size_:
-  call do_colon
-; XXX TODO
-  dw paren_exit_
+
+  pop hl
+  push bc ; save the Forth IP
+  ld b,l ; fid
+  ld ix,dos_get_eof
+  jp dos_ehl
 
 ; CLOSE-FILE  ( fid -- ior )
 
@@ -9321,8 +9329,10 @@ bin_: equ  next
 
   _header _public,'HEADED'
 headed_:
-  ; XXX TODO
-  ret
+  pop hl
+  set 7,l
+  push hl
+  jp next
 
 ; HEADED?  ( ca len -- wf )
 ;
@@ -9334,9 +9344,13 @@ headed_question:
   call do_colon
   dw paren_exit_
 
+; OPEN-DISK  ( c fam -- fid ior )
+;
+; XXX TODO -- DOS OPEN DRIVE
+
 ; (OPEN-FILE)  ( ca fam fid -- fid ior )
 ;
-; ca = filename as a counted string
+; ca = filename as a counted string, with a trailing 0xFF
 
   _header _public,'(OPEN-FILE)'
 paren_open_file_:
@@ -9345,35 +9359,50 @@ paren_open_file_:
   pop hl
   ld d,l  ; fam
   pop hl  ; ca
+
   push de ; save the fid (actually, fid + 256*fam)
   push bc ; save the Forth IP
+
   ld b,e  ; fid
   ld c,d  ; fam
+  ; calculate the open action
+  bit 7,c ; headed? (maybe set by 'headed')
+  res 7,c
+  ld a,1  ; open action 1: position after the header
+  jr nz,paren_open_file_.actions ; jump if headed
+  ; open a file with no header
+  inc a   ; open action 2: ignore any header, position at 0
+paren_open_file_.actions:
+  ; a = open action
   ld d,0  ; create action: error, file does not exist
-  ld e,1  ; open action: position after the header ; XXX TODO configurable
+  ld e,a  ; open action
+
+do_dos_open:
+  ; Note: this entry point is used by '(create-file)'
+  ; b = file number (=fid)
+  ; c = access mode (=fam)
+  ; d = create action
+  ; e = open action
+  ; hl = address of filename (no wildcards), with trailing 0xFF
+  ; (sp) = Forth IP
+  ; (sp+2) = fid + 256*fam
   ld ix,dos_open
   call dos
+
   pop bc  ; restore the Forth IP
-  ; (sp) = fid + 256*fam
-  _jump_nc paren_open_file_.error
+  _jump_nc do_dos_open.error
   ; no error
-  ; (sp) = fid + 256*fam
   pop hl      ; l = fid
   ld h,0
   push hl     ; fid
   jp false_   ; no error
 
-paren_open_file_.error
-  ; (sp) = fid + 256*fam
+do_dos_open.error
+  ; (sp) = fid + 256*fam (used as undefined fid)
   ; a = error code
   call convert_dos_error_code
   ; hl = error code
   jp push_hl
-
-; OPEN-DISK  ( c fam -- fid ior )
-;
-; XXX TODO -- DOS OPEN DRIVE
-
 
 ; OPEN-FILE  ( ca len fam -- fid ior )
 ;
@@ -9386,12 +9415,14 @@ open_file_:
   dw to_r_,to_fname_,one_plus_,from_r_
   ; ( ca2 fam )
   dw file_id_
-  dw branch_if_zero_,open_file_.no_free_fid
+  dw branch_if_zero_,no_free_fid
   ;  ( ca2 fam fid )
   dw paren_open_file_
   dw paren_exit_
-open_file_.no_free_fid
-  ;  ( ca2 fam )
+
+no_free_fid:
+  ; Error
+  ; ( ca2 fam )
   dw drop_ ; leave only ca2, as an undefined fid
   dw c_lit_
   db 4 ; XXX TODO -- adapt this error code
@@ -9404,56 +9435,56 @@ open_file_.no_free_fid
 
 ; (CREATE-FILE)  ( ca fam fid -- fid ior )
 ;
-; ca = filename as a counted string
+; ca = filename as a counted string, with a trailing 0xFF
 
   _header _public,'(CREATE-FILE)'
 paren_create_file_:
 
-  ; XXX INFORMER
-  ; call do_colon
-  ; dw drop_,drop_
-  ; dw paren_exit_
-
-  ; XXX INFORMER
-  ; jp next
+  ; ****************************
+  ;
+  ; XXX FIXME
+  ;
+  ; When 'headed' is used, 'create-file'
+  ; fails with DOS error 23 (file not
+  ; found), no matter the fam, e.g.:
+  ;
+  ;   s" headed" w/o headed create-file
+  ;
+  ; It works fine without 'headed', or when
+  ; the file already exists.
+  ;
+  ; But 'open-file' works fine with and
+  ; without 'header', and its code is
+  ; identical except the actions.
+  ;
+  ; Tried with ZX Spectrum +3e too, no
+  ; difference.
+  ;
+  ; ****************************
 
   pop de  ; e=fid
   pop hl
   ld d,l  ; fam
   pop hl  ; ca
 
-  ; XXX INFORMER
-  ; ld a,l
-  ; ld (sys_seed),a
-  ; ld a,h
-  ; ld (sys_seed+1),a
-
   push de ; save the fid (actually, fid + 256*fam)
   push bc ; save the Forth IP
 
   ld b,e  ; fid
   ld c,d  ; fam
-  ld d,2  ; create action: new file without header
+  ; calculate the create action
+  bit 7,c ; headed? (maybe set by 'headed')
+  res 7,c
+  ld a,1  ; create action 1: new file with header; position after the header
+  jr nz,paren_open_file_.actions ; jump if headed
+  ; create a file with no header
+  inc a   ; create action 2: new file without a header, position at 0
+paren_create_file_.actions
+  ; a = create action
+  ld d,a  ; create action
   ld e,4  ; open action: erase and create
-  ld ix,dos_open
-  call dos
 
-  pop bc  ; restore the Forth IP
-  ; (sp) = fid + 256*fam
-  _jump_nc paren_create_file_.error
-  ; no error
-  ; (sp) = fid + 256*fam
-  pop hl      ; l = fid
-  ld h,0
-  push hl     ; fid
-  jp false_   ; no error
-
-paren_create_file_.error
-  ; (sp) = fid + 256*fam
-  ; a = error code
-  call convert_dos_error_code
-  ; hl = error code
-  jp push_hl
+  jp do_dos_open
 
 ; CREATE-FILE  ( ca len fam -- fid ior )
 ;
@@ -9463,29 +9494,12 @@ paren_create_file_.error
 create_file_:
 
   call do_colon
-
-  ; XXX INFORMER
-  ; dw drop_,to_fname_,one_plus_
-  ; dw paren_exit_
-
   dw to_r_,to_fname_,one_plus_,from_r_
   ; ( ca2 fam )
   dw file_id_
-  dw branch_if_zero_,create_file_.no_free_fid
+  dw branch_if_zero_,no_free_fid
   ;  ( ca2 fam fid )
   dw paren_create_file_
-  dw paren_exit_
-
-create_file_.no_free_fid
-  ;  ( ca2 fam )
-  dw drop_ ; leave only ca2, as an undefined fid
-  dw c_lit_
-  db 4 ; XXX TODO -- adapt this error code
-  dw to_ior_
-  if  debug?
-    dw paren_dot_quote_
-    dcs 'create_file error'
-  endif
   dw paren_exit_
 
 ; >FCB  ( a u -- fcb usr )
@@ -9829,6 +9843,9 @@ flush_file_:
 
 if block_files?
 
+; XXX TODO -- simplify: use the generic files layer, and just
+; keep the fid of the current block file.
+
 block_buffer:
   ds block_size
 
@@ -9890,6 +9907,8 @@ fdb_.3:
 
 ; file descriptor fields
 ;
+; XXX TODO -- document this
+;
 ;  FD  cell    status 0=closed
 ;  FID  cell    file handle
 ;  BLKS  cell    file size (blocks)
@@ -9897,6 +9916,8 @@ fdb_.3:
 ;  FNB  'filenamesize' bytes  file name
 
 ; FD  ( -- a )
+;
+; XXX TODO -- document this
 
   _header _hidden,'FD'
 fd_:
@@ -9905,11 +9926,13 @@ fd_:
   dw paren_exit_
 
 ; FID  ( -- a )
+;
+; XXX TODO -- document this
 
   _header _hidden,'FID'
 fid_:
   ld e,cell    ; file handle field
-fid_.1:
+fid_.e:
   ld d,0
   push de
   call do_colon
@@ -9917,25 +9940,31 @@ fid_.1:
   dw paren_exit_
 
 ; BLKS  ( -- a )
+;
+; XXX TODO -- document this
 
   _header _hidden,'BLKS'
 blks_:
   ld e,cell*2    ; file size field
-  jp fid_.1
+  jp fid_.e
 
 ; SCR#  ( -- a )
+;
+; XXX TODO -- document this
 
   _header _hidden,'SCR#'
 scr_number_:
   ld e,cell*3    ; current SCR_# field
-  jp fid_.1
+  jp fid_.e
 
 ; FNB  ( -- a )
+;
+; XXX TODO -- document this
 
   _header _hidden,'FNB'
 fnb_:
   ld e,cell*4    ; file name field
-  jp fid_.1
+  jp fid_.e
 
 ; BUF  ( -- a )
 ; file buffer address
@@ -9967,7 +9996,7 @@ file_question_:
   dw zero_not_equals_ ; 0<>
   dw paren_exit_
 
-; CURRENT-BLOCK-FILE  ( -- ca u )
+; CURRENT-BLOCK-FILE  ( -- ca len )
 ;   fnb count
 
   _header _public,'CURRENT-BLOCK-FILE'
@@ -10116,6 +10145,8 @@ buffer_:
 ;   over - if dup
 ;   buffer drop 0 blk-rw else drop then buf
 
+; XXX FIXME skip the +3DOS header
+
   _header _public,'BLOCK'
 block_:
   call do_colon
@@ -10257,11 +10288,13 @@ fbloc_:
   dw paren_exit_
 
 ; CLOSE  ( -- )
+;
+; close current block-file
+;
+; Note: errors are NOT reported with this function
+;
 ;  file? if flush fid @ close-file drop
 ;        fd off then empty-buffers
-;
-; close current file
-; NOTE: errors are NOT reported with this function
 
   _header _public,'CLOSE'
 close_:
@@ -10351,17 +10384,23 @@ dot_lastfile_:
   ; dw paren_exit_
 
 ; INIT-SCR  ( fileid ior -- )
-;   if drop exit then fdb sfp ! fd on
-;          dup fid ! file-size drop b/buf
-;          um/mod nip blks ! lastfile fnb
-;          place current-block-file upper empty-buffers
+;
+; init screenfile
+;
+;   if drop exit then
+;   fdb sfp ! fd on
+;   dup fid ! file-size drop b/buf
+;   um/mod nip blks ! lastfile fnb
+;   place current-block-file upper empty-buffers
 
   _header _hidden,'INIT-SCR'
 init_scr_:
-  call do_colon    ; init screenfile
+  call do_colon
+  
   dw branch_if_0_,init_scr_.no_error
   dw drop_
   dw paren_exit_
+
 init_scr_.no_error:
   dw fdb_,sfp_,store_
   dw fd_,on_
@@ -10370,8 +10409,11 @@ init_scr_.no_error:
   dw bytes_per_buffer_,umslm_,nip_  ; overflow stores $FFFF
   dw blks_,store_
   dw lastfile_,fnb_,place_
-  dw current_block_file_
-;  dw upper  ; XXX OLD -- why DX-Forth does this without an option?
+
+; XXX OLD -- why DX-Forth does this without an option?
+;  dw current_block_file_
+;  dw upper
+
   dw empty_buffers_
   dw paren_exit_
 
@@ -10381,6 +10423,9 @@ init_scr_.no_error:
 ;
 ; XXX NEW -- formerly 'OPEN'
 ; XXX TODO
+
+; XXX FIXME it works without modification, but leaves three numbers on the
+; stack.
 
   _header _public,'OPEN-BLOCK-FILE'
 open_block_file_:
