@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501240049"
+  db version.major,"-0",version.minor+"0","-201501250027"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -77,21 +77,36 @@ _version: macro
 ; ! 'token' renamed to 'parse-name', after Gforth and Forth 2012
 ; + 'file-id'
 ; + 'reposition-file', 'abandon-file', 'headed', 'file-size'
+; + 'read-byte', 'write-byte'
+; - 'filetype?'
+; + 'filetype'
+; ! 'zbuf' renamed to 'filename-buffers'
+; ! 'lastfile' renamed to 'last-filename'
+; - '.lastfile'
+; ! '>fname'renamed to '>filename-buffer'
 
 ; ------------------------------
 ; XXX TODO
 
-; 2015-01-21: erases 'fid-table' in 'cold'.
+; 2015-01-24: 'forth-wordlist'
+;
+; 2015-01-24: redirect emit to a file using a word like Gforth's 'outfile-id'
+; to hold the fid of the current file, or a value that represents the console
+; (could be the xt of the printing routine).
+;
+; 2015-01-21: erase 'fid-table' in 'cold'.
 ;
 ; 2015-01-16: finish '(create-file)'. fix the strange issue with its fam.
 ;
 ; 2015-01-14: change the format of headers created by 'defer'?
 ;
-; 2015-01-12: implement 'allocate' in the ram disk?
+; 2015-01-12: implement 'allocate' in the ram disk? [better use the tool to use
+; the dictionary]
 ;
 ; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
 ;
-; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should it be?
+; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should
+; it be?
 ;
 ; Rename the 'header' word to '(header)' and the 'hdr' macro to 'header'
 ;
@@ -151,7 +166,7 @@ yes:    equ not no
 debug?:                            equ no ; debugging messages?
 case_insensitive_names?:           equ yes
 control_flow_stack_extensions?:    equ yes
-warning_options:                  equ no ; XXX TODO does this causes trouble?
+warning_options:                   equ no ; XXX TODO does this causes trouble?
 
 ; XXX FIXME when yes, some things don't work fine:
 size_optimization?:                equ no ; if yes, the code will be smaller but slower
@@ -164,63 +179,20 @@ defer_uses_body?:                  equ yes
 
 floored_division?:                 equ no  ; integer division method
 
-floating_point?:           equ yes
-; XXX Note: aprox. 2336 bytes used
-
-if floating_point?
-  floating_point_engineering_output?:  equ yes
-  floating_point_stack?:                equ no ; XXX TODO -- not fully implemented in DX-Forth
-endif
+; ..............................
 
 block_files?:                     equ yes
-; XXX Note: aprox. 1743 bytes used
+; XXX Note: >1743 bytes used
 
-classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
-tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
+if block_files?
+  max_open_source_files:  equ 6  ; (min = 2) ; XXX OLD
+  block_size:                   equ 1024
+endif
 
-fast_emit?:                        equ yes ; if yes, some words jump directly into '(emit_)', don't call 'emit'
+; ..............................
 
-; ------------------------------
-; Config
-
-max_open_source_files:  equ 6  ; (min = 2)
-max_file_id:            equ 15 ; 0..15 are the possible file numbers in +3DOS
-max_file_ids:           equ max_file_id+1
-top_prunes:             defl 0 ; XXX OLD ?
-
-; ------------------------------
-; Memory
-
-cell: equ 2 ; cell size (bytes)
-float: equ 4 ; floating point number size (bytes)
-
-; ------------------------------
-; Buffer sizes
-
-; XXX TODO Convert stack sizes to user variables? The point is
-; a task could need just a little stack.
-
-filename_size:                equ 16+1 ; ("uud:nnnnnnnn.eee"+0xFF)
-file_descriptor_size:         equ filename_size+(4*cell)  ; XXX OLD
-block_size:                   equ 1024
-file_handle_size:             equ 6+36  ; (keep even) ; XXX OLD?
-parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
-pictured_numeric_buffer_size: equ 68
-stack_size:                   equ 256
-return_stack_size:            equ 256
-tib_size:                     equ 80    ; Terminal Input Buffer
-user_data_size:               equ 128
-word_buffer_size:             equ 31+5
-
-; ------------------------------
-; DOS ; XXX OLD
-
-;;dosfcb: equ 0x005C   ; default file control block
-;;dosbuf: equ 0x0080   ; default DTA and command-line buffer
-recsiz: equ 128   ; CP/M record size ; XXX OLD
-
-; ------------------------------
-; Floating point
+floating_point?:           equ yes
+; XXX Note: aprox. 2336 bytes used
 
 f_init_patch:     defl noop_
 f_identify_patch: defl noop_
@@ -229,6 +201,11 @@ f_stack_items:    defl 0
 f_stack_size:     defl 0 ; bytes
 
   if floating_point?
+
+    floating_point_engineering_output?:  equ yes
+    floating_point_stack?:                equ no ; XXX TODO -- not fully implemented in DX-Forth
+    
+    float:  equ 4 ; floating point number size (bytes) ; XXX TODO move to 'float'?
 
     max_significant_digits: equ 7
 
@@ -241,9 +218,54 @@ f_stack_size:     defl 0 ; bytes
       f_stack_size:  defl (f_stack_items+5)*float ; allow extra for fp display etc
     endif
 
-    top_prunes: defl paren_minus_fp_.1
+    top_prunes: defl paren_minus_fp_.1 ; XXX OLD
 
-  endif
+endif
+
+; ..............................
+
+classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
+tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
+
+fast_emit?:                        equ yes ; if yes, some words jump directly into '(emit_)', don't call 'emit'
+
+; XXX TMP
+restore_user?           equ no ; define the word 'restore-user'? (it needs 28 bytes)
+
+pictured_numeric_buffer_size: equ 68
+stack_size:                   equ 256
+return_stack_size:            equ 256
+tib_size:                     equ 80    ; Terminal Input Buffer
+
+; ------------------------------
+; System
+
+max_file_id:            equ 15 ; 0..15 are the possible file numbers in +3DOS
+max_file_ids:           equ max_file_id+1
+top_prunes:             defl 0 ; XXX OLD ?
+
+; ------------------------------
+; Memory
+
+cell:   equ 2 ; cell size (bytes)
+
+; ------------------------------
+; Buffer sizes
+
+; XXX TODO Convert stack sizes to user variables? The point is
+; a task could need just a little stack.
+
+filename_size:                equ 16 ; "uud:nnnnnnnn.eee"
+filename_buffer_size:         equ filename_size+1 ; for trailing 0xFF
+;file_handle_size:             equ 6+36  ; (keep even) ; XXX OLD
+parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
+user_data_size:               equ 128
+word_buffer_size:             equ 31+5
+
+; ------------------------------
+; DOS ; XXX OLD
+
+;recsiz: equ 128   ; CP/M record size ; XXX OLD
 
 ; ------------------------------
 ; ZX Spectrum
@@ -252,7 +274,7 @@ f_stack_size:     defl 0 ; bytes
   include "zx_spectrum_rom_routines.z80s"
   include "zx_spectrum_char_codes.z80s"
   include "zx_spectrum_colors.z80s"
-  include "zx_spectrum_+3dos.z80s"
+  include "zx_spectrum_plus3dos.z80s"
 
 bank1_port: equ 0x07FFD ; "horizontal" and RAM switch port
 bank2_port: equ 0x01FFD ; "vertical" switch port
@@ -541,38 +563,8 @@ _border_halt: macro color
   jr $
   endm
 
-; ------------------------------
-; Files
-
-; Macro to generate fdb table
-; XXX OLD -- done at the place
-; buildfiledescriptorblockstable: macro
-;     local @a
-; @a  defl  filedescriptorblocks
-;     rept maxopensourcefiles
-;           dw  @a
-;       @a  defl  @a+filedescriptorsize
-;     endm
-;    endm
-
 ; }}} **********************************************************
 ; Data zones {{{
-
-file_id_table: ; XXX NEW
-  ds max_file_ids
-
-file_descriptor_blocks:
-  ds file_descriptor_size*max_open_source_files
-
-file_descriptor_blocks_table:
-  proc
-    local @a
-    @a defl file_descriptor_blocks
-    rept max_open_source_files
-      dw @a
-      @a defl @a+file_descriptor_size
-    endm
-  endp
 
 tib_address:
   ds tib_size ; terminal input buffer
@@ -588,7 +580,7 @@ return_stack_end:
   ds return_stack_size
 return_stack_0:
 
-  if floating_point_stack?
+  if floating_point? and floating_point_stack?
     ds float_stack_size
     float_stack_0:
   endif
@@ -605,14 +597,6 @@ hm: equ $   ; system definitions and header memory ; XXX OLD ?
 dummy_nfa: ; XXX OLD ?
   db 0   ; dummy nfa - don't remove! ; XXX NEW -- changed its position in DX-Forth 4.09
 
-; Identification and version
-
-;;  dw 0x4683   ; id  ('DXF' in radix 36) 0111
-;;dxver:
-;;  db rel   ; release     0113
-;;  db rev   ; revision      0114
-
-;
 ; XXX OLD
 ;;  ds cell    ; reserved
 user_data_pointer:
@@ -683,10 +667,11 @@ bios_parameter_block: ; XXX OLD
 ; Scratch buffer - shared by several functions:
 ; +EXT  DELETE-FILE  RENAME-FILE
 
-; Buffer for temporary filename/fcb ; XXX OLD
-zb_size:  equ filename_size+1+36
-zb.1:   ds zb_size
-zb.2:   ds zb_size
+; Buffer for temporary filename/fcb
+; ; XXX OLD -- modified and moved and to 'filename-buffers'
+; zb_size:  equ filename_buffer_size+1+36 ; XXX OLD
+; zb.1:   ds zb_size
+; zb.2:   ds zb_size
 
 tmp_stack: equ $-cell ; temp stack for startup ; XXX OLD
 
@@ -739,9 +724,13 @@ compare_de_hl_signed:
 ; ------------------------------
 ; BC is affected
 
-; move block upwards  HL = source, DE = destination, BC = count
-
 move_block_upwards:
+
+  ; Move block upwards
+  ; hl = source
+  ; de = destination
+  ; bc = count
+
   add hl,bc
   ex de,hl
   add hl,bc
@@ -757,15 +746,23 @@ move_block_upwards.1:
   dec bc
   jp move_block_upwards.1
 
-; move block up/down  HL = source, DE = destination, BC = count
-
 move_block:
+
+  ; Move block up/down
+  ; hl = source
+  ; de = destination
+  ; bc = count
+
   call compare_de_hl_unsigned
   jp c,move_block_upwards
 
-; move block downwards  HL = source, DE = destination, BC = count
-
 move_block_downwards:
+
+  ; Move block downwards
+  ; hl = source
+  ; de = destination
+  ; bc = count
+
   ld a,c
   or b
   ret z
@@ -776,15 +773,20 @@ move_block_downwards:
   dec bc
   jp move_block_downwards
 
-; move block downwards  HL = source, DE = destination, A = count
+; XXX OLD -- not used
+; amovd:
 
-amovd:
-  push bc
-  ld c,a
-  ld b,0
-  call move_block_downwards
-  pop bc
-  ret
+;   ; Move block downwards
+;   ; hl = source
+;   ; de = destination
+;   ; a  = count
+
+;   push bc
+;   ld c,a
+;   ld b,0
+;   call move_block_downwards
+;   pop bc
+;   ret
 
 ; }}} **********************************************************
 ; Virtual machine {{{
@@ -832,7 +834,7 @@ do_user_variable:
   _header _public,'NOOP'
 noop_: equ $
 
-; NEXT  -  Forth Address Interpreter
+; NEXT - The Forth Address Interpreter
 
 next:
   ld a,(bc)   ; 7T
@@ -854,7 +856,6 @@ unnest_: equ r_drop_
   _header _public,'(EXIT)'
 paren_exit_: ; XXX TODO rename 'paren_exit'
   ld bc,next
-;;exit.1: ; XXX OLD -- not used
   push bc
   ld hl,(return_stack_pointer)  ; pop IP from return stack
   ld c,(hl)
@@ -3276,7 +3277,7 @@ compare_strings_case_insensitive:
   dec de
   jp compare_strings_case_insensitive
 
-; XXX OLD -- substituted by 'patchcomparestrings'
+; XXX OLD -- substituted by 'patch_compare_strings'
 ;;comparestrings:
 ;;  ; Input:
 ;;  ;   HL = a1
@@ -3286,14 +3287,14 @@ compare_strings_case_insensitive:
 ;;  ;   Z = match?
 ;;  push hl
 ;;  push de
-;;  ld hl,(userdatapointer)
-;;  ld de,casesensitivesearchuservariable
+;;  ld hl,(user_data_pointer)
+;;  ld de,case_sensitive_search_user_variable
 ;;  add hl,de
 ;;  ld a,(hl) ; XXX TODO -- check the whole cell?
 ;;  or a
 ;;  pop de
 ;;  pop hl
-;;  jp nz,comparestringscaseinsensitive
+;;  jp nz,compare_strings_case_insensitive
 
 compare_strings_case_sensitive:
   ; Used by 'compare' and 'search'.
@@ -3429,6 +3430,9 @@ string_1_addr equ $+1
 ; Note: uses temp 1-3.
 ;
 ;   2swap swap 2over + 2 pick cmove +
+;
+; XXX TODO rename and change the order of parameters,
+; or keep this word and do a wrapper with the parameters swapped.
 
   _header _public,'+STRING'
 plus_string:
@@ -3491,6 +3495,7 @@ upper_.1:
 
 ; XXX NEW -- after Gforth
 ; TOUPPER  ( c1 -- c2 )
+; XXX TODO Configure for 8-bit charsets
 
   _header _public,'TOUPPER'
 
@@ -3527,6 +3532,7 @@ lower_.1:
 
 ; XXX NEW -- after TOUPPER
 ; TOLOWER  ( c1 -- c2 )
+; XXX TODO Configure for 8-bit charsets
 
   _header _public,'TOLOWER' ; make char lowercase
 
@@ -3675,7 +3681,9 @@ paren_leave_:
   ld b,(hl)
   jp unloop_
 
-; (?DO)  ( n1 n2 -- ) 2dup = if 2drop r> @ >r exit then (do.hl)
+; (?DO)  ( n1 n2 -- )
+;
+;   2dup = if 2drop r> @ >r exit then (do)
 
   _header _hidden,'(?DO)'
 paren_question_do_:
@@ -3692,7 +3700,7 @@ paren_question_do_:
   _header _hidden,'(DO)'
 paren_do_:
   call do_colon
-paren_do_.1: ; '(?do_)' jumps here
+paren_do_.1: ; '(?do)' jumps here
   dw over_,minus_
   dw from_r_,cell_plus_
   dw minus_rot_
@@ -4396,6 +4404,28 @@ hex_dot_:
 ; }}} **********************************************************
 ; DOS {{{
 
+back_from_dos:
+  ; cy = no error?
+  ; a  = error code
+  jp c,false_   ; no error
+
+back_from_dos.error:
+  ; a = error code
+  call convert_dos_error_code
+  ; hl = error code
+  jp push_hl
+
+convert_dos_error_code:
+  ; XXX TODO see '>ior' and combine both
+  ; Input:   a  = original DOS error code (0..36)
+  ; Outptut: hl = DOS error code converted to Forth range (1000..1036)
+  ld h,0
+  ld l,a
+convert_dos_error_code.hl:
+  ld de,1000
+  add hl,de
+  ret
+
 get_current_drive:
   ld a,0xFF
 
@@ -4513,16 +4543,6 @@ dos_error_.a:
   call convert_dos_error_code
   push hl
   jp throw_
-
-convert_dos_error_code:
-  ; XXX TODO see '>ior' and combine both
-  ; Input:   a  = original DOS error code (0..36)
-  ; Outptut: hl = DOS error code converted to Forth range (1000..1036)
-  ld h,0
-  ld l,a
-  ld de,1000
-  add hl,de
-  ret
 
 ; FDOS  ( DE u -- HL A )
 
@@ -5913,16 +5933,14 @@ tick_next_:
 tick_next_.variable:
   dw next
 
-; MAX-FCB  ( -- u )
+; MAX-FILE-ID  ( -- u )
 ; XXX NEW
 ;   max number of file handle
-; XXX TODO rename
 
-  _header _public,'MAX-FCB'
-max_fcb_:
-  call do_value
-max_fcb_.value:
-  dw max_file_id
+  _header _public,'MAX-FILE-ID'
+max_file_id_:
+  call do_byte_constant
+  db max_file_id
 
 ; #FCB  ( -- u )
 ; number of file handles
@@ -5941,8 +5959,9 @@ max_fcb_.value:
 
   _header _public,'FILE-ID-TABLE'
 file_id_table_:
-  ld hl,file_id_table
-  jp push_hl
+  call do_create
+file_id_table: ; XXX NEW
+  ds max_file_ids
 
 ; SYS-VEC  ( -- a )
 ;   system vector table
@@ -6154,14 +6173,19 @@ set_current_:
   ld hl,current.variable
   jp store_.into_hl_pointer
 
-; ZBUF  ( -- a )
+; FILENAME-BUFFERS ( -- a )
 ; filename buffer pointers
 
-  _header _hidden,'ZBUF'
-zbuf_:
+  _header _hidden,'FILENAME-BUFFERS'
+filename_buffers_:
   call do_create
-  dw zb.1 ; next buffer
-  dw zb.2 ; last buffer
+filename_buffers_.next:
+  dw filename_buffer.next
+filename_buffers_.last:
+  dw filename_buffer.last
+
+filename_buffer.next: ds filename_buffer_size
+filename_buffer.last: ds filename_buffer_size
 
 ; }}} **********************************************************
 ; User variables {{{
@@ -6974,25 +6998,40 @@ parse_:
   jp paren_parse_
 
 ; (PARSE)  ( c f -- ca u )
-;         2>r source >in @ /string r> if tuck
-;         r@ skip over - >in +! then 2dup r>
-;         scan nip tuck - dup rot 0<> - >in +!
+;
+;         2>r source >in @ /string r>
+;         if  tuck r@ skip over - >in +!  then
+;         2dup r> scan nip tuck - dup rot 0<> - >in +!
+; 
+; XXX -- what f means?:
+; f = true, when called from 'word'
+; f = false, when called from 'parse'
+; XXX -- It seems the difference is where the string
+; will be stored; this distinction will not be needed
+; with a circular string buffer.
 
-  _header 0,'(PARSE)'
+  _header _hidden,'(PARSE)'
 paren_parse_:
   call do_colon
+
   dw two_to_r_
-  dw source_
-  dw in_,fetch_,slash_string_
-  dw from_r_
-  dw question_branch_,paren_parse_.1
-  dw tuck_
-  dw r_fetch_,skip_
-  dw rot_,over_,minus_
-  dw in_,plus_store_
+  dw source_        ; ( ca len )
+  dw in_,fetch_     ; ( ca len in )
+  dw slash_string_  ; ( ca2 len2 )
+  dw from_r_        ; ( ca2 len2 f )
+  dw branch_if_0_,paren_parse_.1
+  ; f<>0 (thus, '(parse)' was called by 'word')
+  dw tuck_            ; ( len2 ca2 len2 )
+  dw r_fetch_         ; ( len2 ca2 len2 c )
+  dw skip_            ; ( len2 ca2' len2' )
+  dw rot_,over_       ; ( ca2' len2' len2 len2' )
+  dw minus_           ; ( ca2' len2' diff )
+  dw in_,plus_store_  ; ( ca2' len2' )
+
 paren_parse_.1:
-  dw two_dup_
-  dw from_r_
+  dw two_dup_         ; ( ca2' len2' ca2' len2' )
+  dw from_r_          ; ( ca2' len2' ca2' len2' c )
+  ; XXX TODO keep on noting the stack
   dw scan_,nip_
   dw tuck_
   dw minus_,dup_
@@ -7002,11 +7041,14 @@ paren_parse_.1:
   dw paren_exit_
 
 ; +PSB  ( a1 n1 n2 -- n3 )
-;   >r (parsedstringbuffersize) r@ - umin r> 2dup + >r
-;   (parsedstringbuffer) + swap cmove r>
+;
+;   >r (parsed_string_buffer_size) r@ - umin r> 2dup + >r
+;   (parsed_string_buffer) + swap cmove r>
+;
+; XXX -- needed only by 'parse$'
 
   _header _hidden,'+PSB'
-ppsb_:
+plus_psb_:
   call do_colon
   dw to_r_
   dw lit_,parsed_string_buffer_size
@@ -7031,9 +7073,10 @@ ppsb_:
 ;         while
 ;             1 dup >in +! r> +psb
 ;         repeat then
-;         2drop (parsedstringbuffer) r>
+;         2drop (parsed_string_buffer) r>
 
-; XXX TODO -- rewrite in Z80; create a circular buffer
+; XXX TODO -- rewrite in Z80 
+; XXX TODO rename to 'parse-string'?
 
   _header _public,'PARSE$'
 parse_dollar_:
@@ -7043,7 +7086,7 @@ parse_dollar_.1:
   dw to_r_
   dw dup_,parse_
   dw two_dup_
-  dw from_r_,ppsb_
+  dw from_r_,plus_psb_
   dw to_r_
   dw one_plus_,plus_
   dw dup_
@@ -7055,7 +7098,7 @@ parse_dollar_.1:
   dw question_branch_,parse_dollar_.2
   dw one_,dup_
   dw in_,plus_store_
-  dw from_r_,ppsb_
+  dw from_r_,plus_psb_
   dw branch_,parse_dollar_.1
 parse_dollar_.2:
   dw two_drop_
@@ -8110,7 +8153,7 @@ cold_boot:
 ;;  jp z,cldd.3     ; need Forth system
 ;;
 ;;  ld hl,noop
-;;  ld (cold.1),hl
+;;  ld (cold_.1),hl
 ;;  ld hl,(ulimit)
 ;;  ld a,l
 ;;  or  h
@@ -8167,7 +8210,8 @@ do_f_identify_patch:
   dw f_identify_patch,cr_
   dw unused_,u_dot_
   dw paren_dot_quote_
-  _dcs "bytes free",cr_char,"Type 'bye' to exit"
+  ; _dcs "bytes free",cr_char,"Type 'bye' to exit"
+  _dcs "bytes free"
 
   dw paren_exit_
 
@@ -8254,79 +8298,39 @@ do_f_init_patch:
 ;;  dw bootquestion
 ;;  dw dup,boot,store     ; restore BOOT
 ;;  dw questiondup
-;;  dw questionbranch,cold.3
+;;  dw questionbranch,cold_.3
 ;;  dw execute      ; run application
 ;;  dw zero,return  ; exit to DOS
 
 cold_.3:
 
-;;cold.4:
+;;cold_.4:
 ;;  dw interpret      ; interpret
-;;cold.5:
+;;cold_.5:
   dw normal_
 ;;  dw cr,page
 ;;  dw parendotquote
-;;  db cold.8-$-1
+;;  db cold_.8-$-1
 
-;;cold.6:
+;;cold_.6:
   dw page_,boot_message_
 
-;;cold.7:
-;;cold.8:
+;;cold_.7:
+;;cold_.8:
 ;;  dw parendotquote
 ;;  db dofidentifypatch-$-1
 ;;  db crchar,lfchar
 
-; XXX OLD -- moved to '(boot-message)'
-;do_f_identify_patch:
-;  dw f_identify_patch
-;  dw cr_
-
-;;  dw filequestion
-;;  dw questionbranch,cold.10
-;;  dw cr
-;;  dw parendotquote
+;;  dw file_question
+;;  dw question_branch_,cold_.10
+;;  dw cr_
+;;  dw paren_dot_quote
 ;;  dcs 'Using '
-;;  dw currentblockfile,type
+;;  dw current_block_file_,type_
 ;;  dw cr
-;;cold.10:
-
-; XXX TMP for debugging
-;  dw dots
-;  dw bye
-
-; vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-; XXX TMP for debugging
-;  dw lit,101,dot,bye
-;  dw s0,fetch,lit,50000,store,bye
-;  dw spfetch,lit,50000,store,bye
-
-;  dw depth,lit,50000,store,bye
-
-;  dw lit,101
-;  dw lit,102
-;  dw lit,103
-;  dw lit,104
-;  dw lit,105
-;  dw dots
-
-;  dw lit,104,dot
-;  dw lit,105,dot
-
-;  dw key,drop ; XXX INFORMER
-;  dw bye
-if 0 ; XXX INFORMER
-  dw lit_,34257
-  dw lit_,34259
-  dw u_greater_
-  dw dot_
-  dw bye_
-endif
-; ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+;;cold_.10:
 
   dw quit_      ; jump to interpreter
-;  dw bye ; XXX TMP
 
 ; LITERAL  ( n -- ) char? if postpone clit c, exit then
 ;       postpone lit , ; immediate
@@ -8778,6 +8782,7 @@ bracket_char_:
 
 ; PAUSE  ( -- )
 ; multitasking support
+; XXX TODO move
 
   _header _public,'PAUSE'
 pause_:
@@ -8811,6 +8816,7 @@ yn2:
   dw paren_exit_
 
 ; DZX-FORTH  ( -- minor major )
+; XXX TODO move
 
   _header _public,'DZX-FORTH'
 dzx_forth_:
@@ -8895,30 +8901,44 @@ minus_path_.1:
   dw two_drop_
   dw paren_exit_
 
-; FILETYPE?  ( ca1 len1 -- len2 )
-; length of the filetype extension, including the dot
-;
-; XXX OLD?  -- probably useless
+; XXX OLD
+; ; FILETYPE?  ( ca1 len1 -- len2 )
+; ; length of the filetype extension, including the dot
+; ;
+; ; XXX TODO -- return the string
 
-  _header _hidden,'FILETYPE?'
-filetype_question_:
+;   _header _hidden,'FILETYPE?'
+; filetype_question_:
+;   call do_colon
+;   dw minus_path_ ; XXX why needed?
+;   dw c_lit_
+;   db '.'
+;   dw scan_,nip_
+;   dw paren_exit_
+
+; FILETYPE  ( ca1 len1 -- ca2 len2 )
+; filetype extension, including the dot
+
+  _header _hidden,'FILETYPE'
+filetype_:
   call do_colon
-  dw minus_path_ ; XXX why?
+  dw minus_path_ ; XXX why needed?
   dw c_lit_
   db '.'
-  dw scan_,nip_
+  dw scan_
   dw paren_exit_
 
 ; +EXT  ( ca1 len1 ca2 len2 -- ca3 len3 )
 ;
 ;        2over filetype? if 2drop exit then
-;        3 min s" ." 2rot -trailing (filenamesize-5) min
-;        zbuf @ 1+ 0 +string +string +string
+;        3 min s" ." 2rot -trailing (filenamesize-4) min
+;        filename-buffers @ 1+ 0 +string +string +string
+; uses filename buffer
 
-  _header _public,'+EXT'  ; uses filename buffer
+  _header _public,'+EXT'
 plus_ext_:
   call do_colon
-  dw two_over_,filetype_question_
+  dw two_over_,filetype_,nip_
   dw question_branch_,plus_ext_.1
   dw two_drop_,paren_exit_
 plus_ext_.1:
@@ -8928,9 +8948,9 @@ plus_ext_.1:
   dw two_rot_
   dw minus_trailing_
   dw c_lit_
-  db filename_size-5 ; XXX why -5?
+  db filename_size-4 ; 4 = the length of a filetype, including the dot
   dw min_
-  dw zbuf_,fetch_    ; unused
+  dw filename_buffers_,fetch_    ; unused
   dw one_plus_
   dw zero_
   dw plus_string
@@ -8944,7 +8964,7 @@ plus_ext_.1:
   _header _public,'-EXT'
 minus_ext_:
   call do_colon
-  dw two_dup_,filetype_question_
+  dw two_dup_,filetype_,nip_
   dw minus_
   dw paren_exit_
 
@@ -8953,15 +8973,17 @@ minus_ext_:
   _header _public,'GET-USER'
 get_user_:
   call get_current_user
-  jp nc,dos_error_.a ; XXX TODO needed? when this could fail?
+  jp nc,dos_error_.a
   jp push_a
 
 ; SET-USER  ( u -- )
 
   _header _public,'SET-USER'
 set_user_:
-  call get_current_user
-  ld (old_user),a  ; save current user
+  if restore_user?
+    call get_current_user
+    ld (old_user),a  ; save current user
+  endif
   pop hl
   ld a,l
 set_user_.a:
@@ -8970,14 +8992,20 @@ set_user_.a:
   jp nc,dos_error_.a
   jp next
 
+if restore_user?
 ; RESTORE-USER  ( -- )
 ; XXX OLD -- useless?
+;   instead of:
+;     3 set-user restore-user
+;   the programmer can do:
+;     get-user  3 set-user  set-user
 
   _header _public,'RESTORE-USER'
 restore_user_:
 old_user: equ $+1
   ld a,0xFF  ; old user (0xFF = ignore)
   jp set_user_.a
+endif
 
 ; GET-DRIVE  ( -- c )
 
@@ -9005,34 +9033,37 @@ set_drive_.a:
   jp nc,dos_error_.a
   jp next
 
-; >FNAME  ( ca u -- ca2 )
+; >FILENAME-BUFFER  ( ca u -- ca2 )
 ;
-;   (filenamesize-1) min zbuf @ packed 0 affix
-;   zbuf 2@ swap zbuf 2!
+;   (filenamesize-1) min filename-buffers @ packed 0 affix
+;   filename-buffers 2@ swap filename-buffers 2!
 
 ; Convert the string ca u to a 0xFF-terminated counted string
 ; ca2 in the filename buffer.  A maximum of two filenames can
 ; exist in the buffer at one time.  ca2 returns the counted
-; string, whereas ca2 + 1 returns the zero-terminated string.
+; string, whereas ca2 + 1 returns the 0xFF-terminated string.
 
 ; Note: The returned string resides in a transient region which may
 ; be overwritten by subsequent operations.
 
-  _header _public,'>FNAME'
-to_fname_:
+; XXX TODO return ca2+1? this is what +3DOS needs
+
+
+  _header _public,'>FILENAME-BUFFER'
+to_filename_buffer_:
 
   call do_colon
   dw c_lit_
-  db filename_size-1
+  db filename_size
   dw min_
-  dw zbuf_,fetch_
+  dw filename_buffers_,fetch_
   dw packed_
   dw c_lit_
   db 0xFF
   dw affix_  ; trailing 0xFF
-  dw zbuf_,two_fetch_
+  dw filename_buffers_,two_fetch_
   dw swap_
-  dw zbuf_,two_store_
+  dw filename_buffers_,two_store_
   dw paren_exit_
 
 ; FH  ( -- a )
@@ -9149,7 +9180,7 @@ to_ior_.end:
   _header _public,'FILE-ID'
 file_id_:
   call do_colon
-  dw max_fcb_
+  dw max_file_id_
 file_id_.begin:
   dw dup_
   dw file_id_table_,plus_,dup_,c_fetch_
@@ -9246,18 +9277,11 @@ close_file_:
   pop bc  ; restore the Forth IP
   pop de  ; restore the fid
   _jump_nc back_from_dos.error
-  ; No error; mark the file id as free
+  ; no error; mark the file id as free
   ld hl,file_id_table
   add hl,de
   ld (hl),0
-
-back_from_dos:
-  jp c,false_   ; no error
-back_from_dos.error:
-  ; a = error code
-  call convert_dos_error_code
-  ; hl = error code
-  jp push_hl
+  jp false_
 
 ; (DELETE-FILE)  ( ca -- ior )
 ; ca = address of filename, with a trailing 0xFF
@@ -9267,14 +9291,14 @@ paren_delete_file_:
   pop hl
   ld ix,dos_delete
   call do_dos
-  jr back_from_dos
+  jp back_from_dos
 
 ; DELETE-FILE  ( ca u -- ior )
 
   _header _public,'DELETE-FILE'
 delete_file_:
   call do_colon
-  dw to_fname_,one_plus_
+  dw to_filename_buffer_,one_plus_
   dw paren_delete_file_
   dw paren_exit_
 
@@ -9412,7 +9436,7 @@ do_dos_open.error
 open_file_:
 
   call do_colon
-  dw to_r_,to_fname_,one_plus_,from_r_
+  dw to_r_,to_filename_buffer_,one_plus_,from_r_
   ; ( ca2 fam )
   dw file_id_
   dw branch_if_zero_,no_free_fid
@@ -9494,7 +9518,7 @@ paren_create_file_.actions
 create_file_:
 
   call do_colon
-  dw to_r_,to_fname_,one_plus_,from_r_
+  dw to_r_,to_filename_buffer_,one_plus_,from_r_
   ; ( ca2 fam )
   dw file_id_
   dw branch_if_zero_,no_free_fid
@@ -9509,7 +9533,7 @@ create_file_:
   ; _header _public,'>FCB'
 ; tfcb_:
   ; call do_colon
-  ; dw two_dup_,to_fname_
+  ; dw two_dup_,to_filename_buffer_
   ; dw c_lit_
   ; db 18
   ; dw plus_
@@ -9518,49 +9542,30 @@ create_file_:
   ; dw set_fcb_
   ; dw paren_exit_
 
+; (RENAME-FILE)  ( ca1 ca2 -- ior )
+;
+; ca1 = current filename, as a 0xFF-terminated string
+; ca2 = new filename, as a 0xFF-terminated string
+
+  _header _public,'(RENAME-FILE)'
+paren_rename_file_:
+  pop de
+  pop hl
+  ld ix,dos_rename
+  call do_dos
+  jp back_from_dos
+
 ; RENAME-FILE  ( ca1 len1 ca2 len2 -- ior )
-;          2swap >fcb set-user >r >fcb drop r@ c@
-;          over c! dup 15 bdos 255 = if r@ 16 +
-;          16 cmove r> 23 bdos 255 = 2 ?ior else
-;          16 bdos r> 2drop 5 ior then restore-user
+;
+; ca1 len1 = current name
+; ca2 len2 = new name
 
   _header _public,'RENAME-FILE'
 rename_file_:
   call do_colon
-; XXX TODO
-; XXX OLD
-;;  dw twoswap
-;;  dw tfcb,setuser,tor
-;;  dw tfcb,drop
-;;  dw rfetch,cfetch
-;;  dw over,cstore
-;;  dw dup
-;;  dw clit
-;;  db 15
-;;  dw bdos
-;;  dw clit
-;;  db 255
-;;  dw equals
-;;  dw questionbranch,renamefile.1
-;;  dw rfetch
-;;  dw clit
-;;  db 16
-;;  dw plus
-;;  dw clit
-;;  db 16
-;;  dw cmove,fromr
-;;  dw clit
-;;  db 23
-;;  dw branch,closefile.2
-;;renamefile.1:
-;;  dw clit
-;;  db 16
-;;  dw bdos
-;;  dw fromr,twodrop
-;;  dw clit
-;;  db 5
-;;  dw ior
-;;  dw restoreuser
+  dw to_filename_buffer_,one_plus_,to_r_
+  dw to_filename_buffer_,one_plus_,from_r_
+  dw paren_rename_file_
   dw paren_exit_
 
 ; (READ-FILE)  ( ca len fid +n -- ior )
@@ -9597,8 +9602,7 @@ paren_read_file_.bank_a:
   cp 21 ; is it "bad parameter"? XXX TODO label
   jr z, paren_read_file_.no_error
   push hl
-  call convert_dos_error_code
-  jp push_a
+  jp back_from_dos.error
 
 paren_read_file_.no_error:
   ; no error
@@ -9670,28 +9674,67 @@ write_line_.end_of_line:
   dw write_file_
   dw paren_exit_
 
-; EOL?  ( a -- 2|1|0 )
-;   c@ $0D of 2 exit then $0A of 1 exit
-;          then drop 0
+; EOL?  ( c -- 2|1|0 )
+; XXX NEW --- modified to accept a char, not an address
+; XXX TODO --- return the char (cr or lf) or zero
 
   _header _hidden,'EOL?'
 eol_question_:
   pop hl
-  ld a,(hl)
+  ld a,l
   cp cr_char
   jp z,two_
   cp lf_char
   jp z,one_
   jp zero_
 
+; READ-BYTE  ( fid -- b ior )
+; XXX NEW
+
+; XXX FIXME -- No EOF error: bytes 229 are read after the end of file (the byte
+; used to format a disk).
+
+  _header _public,'READ-BYTE'
+read_byte_:
+  pop hl
+  push bc ; save the Forth IP
+  ld b,l ; fid
+  ld ix,dos_byte_read
+  call dos
+  ld d,0
+  ld e,c  ; byte
+  pop bc  ; restore the Forth IP
+  push de ; byte
+  jp nc,dos_error_.a
+  jp zero_
+
+; WRITE-BYTE  ( b fid -- ior )
+; XXX NEW
+
+  _header _public,'WRITE-BYTE'
+write_byte_:
+  pop hl
+  pop de
+  push bc ; save the Forth IP
+  ld b,l ; fid
+  ld c,e ; b
+  ld ix,dos_byte_write
+  call dos
+  pop bc  ; restore the Forth IP
+  jp back_from_dos
+
 ; READ-LINE  ( ca len1 fid -- len2 flag ior )
-;   >r over swap r> read-file
-;          ?dup if exit then 2dup over + swap
-;          ?do i dup c@ $1A = if rot - fh
-;          file-size drop rwp! leave then eol?
-;          ?dup if i + >r over + r> swap - dup
-;          0<> rwp@ d+ rwp! i swap - -1 0 unloop
-;          exit then loop nip dup 0<> 0
+;
+;   >r over swap r> read-file ?dup if  exit  then
+;   2dup over + swap ?do
+;     i dup c@ $1A = if
+;       rot - fh file-size drop rwp! leave
+;     then
+;     c@ eol? ?dup if
+;       i + >r over + r> swap - dup
+;       0<> rwp@ d+ rwp! i swap - -1 0 unloop exit
+;     then
+;   loop  nip dup 0<> 0
 
   _header _public,'READ-LINE'
 read_line_:
@@ -9701,42 +9744,42 @@ read_line_:
   pop hl
   jp next
 ; XXX OLD -- DX-Forth 4.00
-;;  call docolon
-;;  dw tor,over,swap,fromr
-;;  dw readfile,questiondup
-;;  dw questionbranch,readline.1
-;;  dw parenexit
-;;readline.1:
-;;  dw twodup,over,plus,swap
-;;  dw parenquestiondo,readline.5
-;;readline.do:
-;;  dw i
-;;  dw dup,cfetch
-;;  dw clit
-;;  db ctlz
-;;  dw equals
-;;  dw questionbranch,readline.3
-;;  dw rot,minus
-;;  dw fh,filesize,drop,rwpst
-;;  dw parenleave,readline.do-cell
-;;readline.3:
-;;  dw eolquestion,questiondup
-;;  dw questionbranch,readline.4
-;;  dw i,plus,tor
-;;  dw over,plus
-;;  dw fromr
-;;  dw swap,minus
-;;  dw dup,zeronotequals  ; handle buffer > 32K
-;;  dw rwpfetch,dplus,rwpst
-;;  dw i,swap,minus
-;;  dw true,zero
-;;  dw unloop,parenexit
-;;readline.4:
-;;  dw parenloop,readline.do
-;;readline.5:
-;;  dw nip
-;;  dw dup,zeronotequals,zero
-;;  dw parenexit
+;;  call do_colon
+;;  dw tor_,over_,swap_,from_r_
+;;  dw readfile_,question_dup_
+;;  dw question_branch_,read_line_.1
+;;  dw paren_exit_
+;;read_line_.1:
+;;  dw two_dup_,over_,plus_,swap_
+;;  dw paren_question_do_,read_line_.5
+;;read_line.do:
+;;  dw i_
+;;  dw dup_,c_fetch_
+;;  dw c_lit_
+;;  db ctlz_
+;;  dw equals_
+;;  dw question_branch_,read_line_.3
+;;  dw rot_,minus_
+;;  dw fh_,file_size_,drop_,rwpst_
+;;  dw paren_leave_,read_line_.do-cell
+;;read_line_.3:
+;;  dw c_fetch_,eol_question_,question_dup_
+;;  dw question_branch_,read_line_.4
+;;  dw i_,plus_,tor_
+;;  dw over_,plus_
+;;  dw from_r_
+;;  dw swap_,minus_
+;;  dw dup_,zero_not_equals_  ; handle buffer > 32K
+;;  dw rwp_fetch_,d_plus_,rwp_store_
+;;  dw i_,swap_,minus_
+;;  dw true_,zero_
+;;  dw unloop_,paren_exit_
+;;read_line_.4:
+;;  dw paren_loop_,read_line.do_
+;;read_line_.5:
+;;  dw nip_
+;;  dw dup_,zero_not_equals_,zero_
+;;  dw paren_exit_
 
 ; PARSE-FILENAME  ( "filename" -- ca u )
 ;   parse-name dup 0= abort" specify filename"
@@ -9752,8 +9795,8 @@ parse_filename_:
 
 ; SAVE-SYSTEM  ( "filename[.COM]" -- )
 ;        0 0 freeze parsefilename s" com" +ext
-;        ?create >r over swap boot 2! (cold.6) (zb1)
-;        dup (zbsize*2) erase (cold.7-cold.6) cmove
+;        ?create >r over swap boot 2! (cold_.6) (zb1)
+;        dup (zbsize*2) erase (cold_.7-cold_.6) cmove
 ;        $100 dp @ over - r@ write-file boot cell+
 ;        off ?dup 0= if (hm) dph @ over - rot 0=
 ;        and r@ write-file then r> close-file or
@@ -9780,14 +9823,14 @@ save_system_:
 ;;  dw to_r_    ; fid
 ;;  dw over_,swap  ; set boot flags
 ;;  dw boot_,two_store_
-;;  dw lit_,cold.6  ; insert compiler logo
+;;  dw lit_,cold_.6  ; insert compiler logo
 ;;  dw lit_,zb1
 ;;  dw dup_
 ;;  dw c_lit_
 ;;  db zbsize*2
 ;;  dw erase_
 ;;  dw c_lit_
-;;  db cold.7-cold.6
+;;  db cold_.7-cold_.6
 ;;  dw cmove_
 ;;  dw lit,0x0100
 ;;  dw dp_,fetch_
@@ -9836,7 +9879,10 @@ turnkey_system_:
   _header _public,'FLUSH-FILE'
 flush_file_:
   ; XXX TODO fid -> disk of fid -> call dos_flush
-  jp next
+
+  ; XXX TMP
+  pop hl
+  jp false_
 
 ; }}} **********************************************************
 ; Block files {{{
@@ -9845,6 +9891,21 @@ if block_files?
 
 ; XXX TODO -- simplify: use the generic files layer, and just
 ; keep the fid of the current block file.
+
+file_descriptor_size: equ filename_buffer_size+(4*cell)  ; XXX OLD
+
+file_descriptor_blocks:
+  ds file_descriptor_size*max_open_source_files
+
+file_descriptor_blocks_table:
+  proc
+    local @a
+    @a defl file_descriptor_blocks
+    rept max_open_source_files
+      dw @a
+      @a defl @a+file_descriptor_size
+    endm
+  endp
 
 block_buffer:
   ds block_size
@@ -10051,6 +10112,8 @@ update_:
 
 ; BLKERR  ( flag -- )
 ;   abort" block r/w error"
+; 
+; XXX TODO remove, use ior instead
 
   _header _hidden,'BLKERR'
 blkerr_:
@@ -10071,7 +10134,7 @@ blk_rw_:
   dw bytes_per_buffer_,umstr_
   dw fid_,fetch_
   dw reposition_file_
-  dw blkerr_
+  dw blkerr_ ; XXX OLD
   dw buf_,bytes_per_buffer_
   dw fid_,fetch_
   dw from_r_
@@ -10080,10 +10143,10 @@ blk_rw_:
   dw branch_,blk_rw_.2
 blk_rw_.1:
   dw read_file_
-  dw blkerr_
+  dw blkerr_ ; XXX OLD
   dw bytes_per_buffer_,less_
 blk_rw_.2:
-  dw blkerr_
+  dw blkerr_ ; XXX OLD
   dw paren_exit_
 
 ; ?BLK  ( +n -- +n )
@@ -10214,11 +10277,12 @@ load_:
   jp thru_
 
 ; FNBUF  ( -- a )
+; current file handle
 
   _header _hidden,'FNBUF'
 fnbuf_:
-  call do_create    ; current file handle
-  ds filename_size
+  call do_create
+  ds filename_buffer_size
 
 ; (FBK)  ( +n -- )
 ;   #screens 2dup u< if drop dup current-block-file -ext
@@ -10333,26 +10397,26 @@ close_all_.end:
   dw drop_
   dw paren_exit_
 
-; LASTFILE  ( -- ca u )
-;   zbuf cell+ @ count
+; LAST-FILENAME  ( -- ca u )
+; last filename used by 'open-file' etc
+; XXX TODO add to glossary
 
-  _header _hidden,'LASTFILE'
-lastfile_:
-  call do_colon    ; last named file used by open_-file etc
-  dw zbuf_,cell_plus_
-  dw fetch_,count_
+  _header _public,'LAST-FILENAME'
+last_filename_:
+  call do_colon
+  dw filename_buffers_.last,fetch_,count_
   dw paren_exit_
 
 ; .LASTFILE  ( -- )
 ;   beep cr lastfile type space
-
-  _header _hidden,'.LASTFILE'
-dot_lastfile_:
-  call do_colon
-  dw beep_,cr_
-  dw lastfile_,type_
-  dw space_
-  dw paren_exit_
+; XXX OLD -- removed, useless
+  ; _header _hidden,'.LASTFILE'
+; dot_last_filename_:
+  ; call do_colon
+  ; dw beep_,cr_
+  ; dw last_filename_,type_
+  ; dw space_
+  ; dw paren_exit_
 
 
 ; ?CREATE  ( ca u -- fileid )
@@ -10371,14 +10435,14 @@ dot_lastfile_:
 ; question_create_.1:
   ; dw drop_
   ; dw question_branch_,question_create_.2
-  ; dw dot_lastfile_
+  ; dw dot_last_filename_
   ; dw paren_dot_quote_
   ; _dcs 'exists - delete it? '
   ; dw yn_,zero_equals_ ; XXX TODO make this configurable
   ; dw question_branch_,question_create_.2
   ; dw abort_
 ; question_create_.2:
-  ; dw lastfile_,read_write_,create_file_
+  ; dw last_filename_,read_write_,create_file_
   ; dw paren_abort_quote_
   ; _dcs "can't create file"
   ; dw paren_exit_
@@ -10408,7 +10472,7 @@ init_scr_.no_error:
   dw file_size_,drop_
   dw bytes_per_buffer_,umslm_,nip_  ; overflow stores $FFFF
   dw blks_,store_
-  dw lastfile_,fnb_,place_
+  dw last_filename_,fnb_,place_
 
 ; XXX OLD -- why DX-Forth does this without an option?
 ;  dw current_block_file_
@@ -10422,7 +10486,7 @@ init_scr_.no_error:
 ;         open-file tuck init-scr
 ;
 ; XXX NEW -- formerly 'OPEN'
-; XXX TODO
+; XXX TODO -- leave the fid?
 
 ; XXX FIXME it works without modification, but leaves three numbers on the
 ; stack.
@@ -10487,7 +10551,7 @@ load_file_:
   ; dw parse_filename_
   ; dw read_write_,open_block_file_,question_dup_
   ; dw question_branch_,using_.4
-  ; dw dot_lastfile_
+  ; dw dot_last_filename_
   ; dw lit_,-507,equals_
   ; dw question_branch_,using_.1
   ; dw paren_dot_quote_
@@ -10503,7 +10567,7 @@ load_file_:
   ; dw question_branch_,using_.3
   ; dw abort_
 ; using_.3:
-  ; dw lastfile_,question_create_
+  ; dw last_filename_,question_create_
   ; dw zero_,init_scr_
 ; using_.4:
   ; dw zero_,zero_,scr_,two_store_
