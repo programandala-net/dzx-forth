@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501250148"
+  db version.major,"-0",version.minor+"0","-201501250223"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -85,6 +85,7 @@ _version: macro
 ; - '.lastfile'
 ; ! '>fname'renamed to '>filename-buffer'
 ; + 'rename-file'
+; ! faster '+string'
 
 ; ------------------------------
 ; XXX TODO
@@ -143,21 +144,17 @@ start: equ 25000 ; start of DZX-Forth in memory
 ; A "_" suffix means the label is the code address of a Forth word (its actual
 ; code address, the xt, not the cfa).  The label itself is the name of the
 ; word, after its latest standard (Forth 2012, Forth 94, Forth 83...).  Other
-; labels in the same word share that name but add its own suffix, separated by
-; a dot.
+; labels in the same word add its own suffix, separated by a dot.
 
 ; Other labels have no affix.
 
 ; ------------------------------
 
-no:     equ 0
-yes:    equ not no
+true:   equ -1
+false:  equ 0
 
-; Modification level
-; XXX OLD
-;;rel:  equ 4 ; release #
-;;rev:  equ 00  ; revision #
-;;beta: equ no  ; beta release
+yes:    equ true
+no:     equ false
 
 ; ------------------------------
 ; Conditional assembly
@@ -280,7 +277,7 @@ word_buffer_size:             equ 31+5
 bank1_port: equ 0x07FFD ; "horizontal" and RAM switch port
 bank2_port: equ 0x01FFD ; "vertical" switch port
 
-lf_char:                    equ 0x0A ; line feed ; XXX OLD
+lf_char:                    equ 0x0A ; line feed ; XXX OLD?
 ff_char:                    equ 0x0C ; form feed (printer only)
 cursor_left_word_char:      equ 0x18 ; XXX TODO -- implement
 cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
@@ -543,6 +540,15 @@ _jump_z: macro _address
     jp z,_address
   endif
   endm
+  
+_push_hl_jp_next: macro
+  if size_optimization?
+    jp push_hl
+  else
+    push hl
+    jp next
+  endif
+  endm
 
 ; ------------------------------
 ; Debug
@@ -598,8 +604,6 @@ hm: equ $   ; system definitions and header memory ; XXX OLD ?
 dummy_nfa: ; XXX OLD ?
   db 0   ; dummy nfa - don't remove! ; XXX NEW -- changed its position in DX-Forth 4.09
 
-; XXX OLD
-;;  ds cell    ; reserved
 user_data_pointer:
   dw user_data
 return_stack_pointer:
@@ -607,7 +611,7 @@ return_stack_pointer:
 
 ; cpu speed (TURBO PASCAL compatible)
 ; XXX OLD -- not needed, unless the OS is not used
-; XXX TODO convert
+; XXX TODO convert into a variable, or calculate depending o the host machine
 speed:
   dw 4   ; 1..8191 MHz
 
@@ -815,12 +819,7 @@ do_user_variable:
   ld d,(hl)
   ld hl,(user_data_pointer)
   add hl,de
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; NOOP  ( -- )
 
@@ -913,12 +912,7 @@ lit_:
   ld a,(bc)
   ld h,a
   inc bc
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; 2LIT  ( -- d )
 
@@ -947,12 +941,7 @@ two_lit_:
 sp_fetch_:
   ld hl,0
   add hl,sp
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; SP!  ( a -- )
 
@@ -967,12 +956,7 @@ sp_store_:
   _header _public,'RP@'
 rp_fetch_:
   ld hl,(return_stack_pointer)
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; RP!  ( a -- )
 
@@ -1100,12 +1084,7 @@ question_dup_:
   _jump_z question_dup_.end
   push hl
 question_dup_.end:
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; SWAP  ( x1 x2 -- x2 x1 )
 
@@ -1113,12 +1092,7 @@ question_dup_.end:
 swap_:
   pop hl
   ex (sp),hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; OVER  ( x1 x2 -- x1 x2 x1 )
 
@@ -1220,12 +1194,7 @@ nip_:
   pop hl
   inc sp
   inc sp
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; TUCK  ( x1 x2 -- x2 x1 x2 )
 
@@ -1312,12 +1281,7 @@ two_nip_:
   inc  sp
 push_de_hl: ; XXX this is DX-Forth's dpush
   push de
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; DEPTH  ( -- u )
 ;   sp@ s0 @ swap - 2/
@@ -1368,7 +1332,7 @@ dot_s_.end:
   dw drop_
   dw paren_exit_
 
-; BOUNDS  ( ca u -- ca1 ca )
+; BOUNDS  ( ca len -- ca1 ca )
 
   _header _public,'BOUNDS'
 bounds_:
@@ -1376,7 +1340,7 @@ bounds_:
   dw over_,plus_,swap_
   dw paren_exit_
 
-; DUMP  ( ca u -- )
+; DUMP  ( ca len -- )
 
   ; XXX TMP -- for debugging
   _header _public,'DUMP'
@@ -1449,12 +1413,7 @@ c_fetch_:
   pop hl
   ld l,(hl)
   ld h,0
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; C!  ( c ca -- )
 
@@ -1511,14 +1470,14 @@ move_:
   pop bc
   jp next
 
-; ERASE  ( a u -- )
+; ERASE  ( a len -- )
 
   _header _public,'ERASE'
 erase_:
   ld e,0
   jp fill_.1
 
-; FILL  ( ca u c -- )
+; FILL  ( ca len c -- )
 
   _header _public,'FILL'
 fill_:
@@ -1548,7 +1507,7 @@ fill_.3:
 on_:
   pop hl
 on_.hl:
-  ld de,-1
+  ld de,true
   jp store_.de_into_hl_pointer
 
 ; OFF  ( a -- )
@@ -1558,23 +1517,9 @@ on_.hl:
 off_:
   pop hl
 off_.hl:
-  ld de,0
+  ld de,false
   jp store_.de_into_hl_pointer
 
-; XXX OLD -- DX-Forth 4.00
-;;; TOGGLE  ( ca x -- )
-;;
-;;  header public,'TOGGLE'
-;;toggle:
-;;  pop de
-;;  pop hl
-;;toggle.1:
-;;  ld a,(hl)
-;;  xor e
-;;  ld (hl),a
-;;  jp next
-
-; XXX NEW -- DX-Forth 4.09
 ; CTOGGLE  ( x ca -- )
 
   _header _public,'CTOGGLE'
@@ -1637,12 +1582,7 @@ byte_swap_:
   pop de
   ld h,e
   ld l,d
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; AND  ( x1 x2 -- x3 )
 
@@ -1656,12 +1596,7 @@ and_:
   ld a,d
   and h
   ld h,a
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; OR  ( x1 x2 -- x3 )
 
@@ -1675,12 +1610,7 @@ or_:
   ld a,d
   or h
   ld h,a
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; XOR  ( x1 x2 -- x3 )
 
@@ -1694,12 +1624,7 @@ xor_:
   ld a,d
   xor h
   ld h,a
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 abs_hl:
   ld a,h
@@ -1756,12 +1681,7 @@ negate_hlde:
 invert_:
   pop hl
   call negate_hl.1
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; S>D  ( n -- d )
 
@@ -1787,12 +1707,7 @@ d_to_s_: equ drop_
 negate_:
   pop hl
   call negate_hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; ABS  ( n -- +n )
 
@@ -1800,12 +1715,7 @@ negate_:
 abs_:
   pop hl
   call abs_hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; DNEGATE  ( d1 -- d2 )
 
@@ -1833,12 +1743,7 @@ plus_:
 plus_de:
   pop hl
   add hl,de
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; -  ( x1 x2 -- x3 )
@@ -1848,12 +1753,7 @@ minus_:
   pop de
   pop hl
   call hl_minus_de_to_hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; D+  ( xd1 xd2 -- xd3 )
@@ -1905,12 +1805,7 @@ m_plus_:
 one_plus_:
   pop hl
   inc hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; 2+  ( x1 -- x2 )
@@ -1920,12 +1815,7 @@ two_plus_:
   pop hl
   inc hl
   inc hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; 1-  ( x1 -- x2 )
@@ -1934,12 +1824,7 @@ two_plus_:
 one_minus_:
   pop hl
   dec hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; 2-  ( x1 -- x2 )
@@ -1949,12 +1834,7 @@ two_minus_:
   pop hl
   dec hl
   dec hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; ------------------------------
@@ -2302,12 +2182,7 @@ m_star_slash_.end:
 two_star_:
   pop hl
   add hl,hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; 2/  ( n1 -- n2 )
@@ -2316,12 +2191,7 @@ two_star_:
 two_slash_:
   pop hl
   call sra_hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; U2/  ( x1 -- x2 )
@@ -2332,12 +2202,7 @@ u_two_slash_:
   or a
   ld a,h
   call sra_hl.1
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; D2*  ( xd1 -- xd2 )
@@ -2550,12 +2415,7 @@ max_.2:
   jp c,max_.3
   ex de,hl
 max_.3:
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; MIN  ( n1 n2 -- n1 | n2 )
@@ -3065,12 +2925,7 @@ packed_:
   pop de
   ld (hl),e
   pop bc
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; PLACE  ( ca1 len1 ca2 -- )
 ;   packed drop
@@ -3193,12 +3048,7 @@ slash_string_:
   ex (sp),hl ; (sp)=u2 hl=ca1
   add hl,de ; hl=ca2
   ex (sp),hl ; (sp)=ca2 hl=u2
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; XXX OLD
 ;;; CAPS  ( -- )
@@ -3440,12 +3290,12 @@ string_1_addr equ $+1
 ; responsibility to ensure sufficient room is available at ca2
 ; to hold both strings.
 ;
-; Note: uses temp 1-3.
-;
 ;   2swap swap 2over + 2 pick cmove +
 ;
 ; XXX TODO rename and change the order of parameters,
 ; or keep this word and do a wrapper with the parameters swapped.
+;
+; XXX TODO suggest this improved version to the author of DX-Forth.
 
   _header _public,'+STRING'
 plus_string_:
@@ -3472,20 +3322,12 @@ plus_string_.ip: equ $+1
   ld bc,0
 
   ; Return the string
-  if size_optimization
-      ld hl,plus_string_.length
-      jp two_fetch_.hl
-    plus_string_.length: ds cell
-    plus_string_.address: ds cell
-  else
-    plus_string_.address: equ $+1
-      ld hl,0
-      push hl
-    plus_string_.length: equ $+1
-      ld hl,0
-      push hl
-      jp next
-  endif
+plus_string_.address: equ $+1
+  ld hl,0
+  push hl
+plus_string_.length: equ $+1
+  ld hl,0
+  _push_hl_jp_next
 
 ; S.R  ( ca len n -- )
 ;
@@ -3493,19 +3335,18 @@ plus_string_.ip: equ $+1
 ;
 ;   over - spaces type
 ;
-; XXX TODO -- rename to 'type.r' or 'type>'?
+; XXX TODO -- rename to 'type.r' or 'type>', 'type-right'?
 
   _header _public,'S.R'
 s_dot_r_:
   call do_colon
-  dw over_,minus_
-  dw spaces_
-  dw type_
+  dw over_,minus_,spaces_,type_
   dw paren_exit_
 
-; UPPER  ( ca u -- )
+; UPPER  ( ca len -- )
+; make string uppercase
 
-  _header _public,'UPPER' ; make string uppercase
+  _header _public,'UPPER'
 upper_:
   pop de
   pop hl
@@ -3982,12 +3823,7 @@ i_.2:
   ld h,(hl)
   ld l,a
   add hl,de
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 if 0 ; XXX commented out in DX-Forth
@@ -5842,25 +5678,15 @@ synonym_.end:
 
   _header _public,'TRUE'
 true_:
-  ld hl,-1
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  ld hl,true
+  _push_hl_jp_next
 
 ; FALSE  ( -- false )
 
   _header _public,'FALSE'
 false_:
-  ld hl,0
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  ld hl,false
+  _push_hl_jp_next
 
 ; -1  ( -- -1 )
 ;   aka true -1
@@ -6173,24 +5999,14 @@ current.variable:
   _header _hidden,'GET-CONTEXT'
 get_context_:
   ld hl,(context_.variable)
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; GET-CURRENT  ( -- wid )
 
   _header _public,'GET-CURRENT'
 get_current_:
   ld hl,(current.variable)
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 
 ; SET-CURRENT  ( wid -- )
@@ -9195,12 +9011,7 @@ to_ior_:
   _jump_z to_ior_.end
   ld h,0xFE
 to_ior_.end:
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; FILE-ID  ( -- fid true | false )
 
@@ -10885,12 +10696,7 @@ float_plus:
   pop hl
   ld de,float
   add hl,de
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; FLOATS  ( n1 -- n2 )
 ;   FLOAT *
@@ -10900,12 +10706,7 @@ floats_:
   pop hl
   add hl,hl
   add hl,hl
-  if size_optimization?
-    jp push_hl
-  else
-    push hl
-    jp next
-  endif
+  _push_hl_jp_next
 
 ; FALIGN  ( -- )
 ;   aka noop falign immediate
@@ -12459,6 +12260,7 @@ exsn_:
   ds 2*cell
 
 ; REPRESENT  ( r ca n -- exp sign flag )
+;
 ;        2dup max-precision max [char] 0 fill
 ;        max-precision min 2>r fdup f0< 0 exsn 2!
 ;        fabs fdup f0= 0= if begin fdup 1.0e f<
@@ -12549,6 +12351,8 @@ set_precision_:
   dw max_precision_,min_
   dw paren_to_,precision_
   dw paren_exit_
+
+; FDP  ( -- a )
 
   _header _public,'FDP'
 fdp_:
