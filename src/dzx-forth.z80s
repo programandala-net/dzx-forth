@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501250141"
+  db version.major,"-0",version.minor+"0","-201501250148"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -3448,36 +3448,40 @@ string_1_addr equ $+1
 ; or keep this word and do a wrapper with the parameters swapped.
 
   _header _public,'+STRING'
-plus_string:
+plus_string_:
 
+  ; Save the Forth IP
   ld l,c
   ld h,b
-  ld (t3),hl    ; save the Forth IP
+  ld (plus_string_.ip),hl
 
+  ; Concatenate the strings
   pop de
   pop hl
-  ld (t2),hl    ; a2
+  ld (plus_string_.address),hl ; save ca2
   add hl,de
   ex de,hl
   pop bc
   add hl,bc
-  ld (t1),hl    ; u3
+  ld (plus_string_.length),hl ; save len3
   pop hl
   call move_block_downwards
 
-t3: equ $+1
-  ld bc,0 ; restore the Forth IP
+  ; Restore the Forth IP
+plus_string_.ip: equ $+1
+  ld bc,0
 
+  ; Return the string
   if size_optimization
-      ld hl,t1
+      ld hl,plus_string_.length
       jp two_fetch_.hl
-    t1: ds cell
-    t2: ds cell
+    plus_string_.length: ds cell
+    plus_string_.address: ds cell
   else
-    t2: equ $+1
+    plus_string_.address: equ $+1
       ld hl,0
       push hl
-    t1: equ $+1
+    plus_string_.length: equ $+1
       ld hl,0
       push hl
       jp next
@@ -8976,9 +8980,9 @@ plus_ext_.1:
   dw filename_buffers_,fetch_    ; unused
   dw one_plus_
   dw zero_
-  dw plus_string
-  dw plus_string
-  dw plus_string
+  dw plus_string_
+  dw plus_string_
+  dw plus_string_
   dw paren_exit_
 
 ; -EXT  ( ca1 len1 -- ca2 len2 )
