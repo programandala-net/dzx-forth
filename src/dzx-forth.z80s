@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501250027"
+  db version.major,"-0",version.minor+"0","-201501250141"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -84,6 +84,7 @@ _version: macro
 ; ! 'lastfile' renamed to 'last-filename'
 ; - '.lastfile'
 ; ! '>fname'renamed to '>filename-buffer'
+; + 'rename-file'
 
 ; ------------------------------
 ; XXX TODO
@@ -639,30 +640,22 @@ init_user_variables.end:  ; end of data
 
 system_stack_pointer:
   ds cell
-esm:
-  ds cell    ; end of memory pointer
+;esm:
+;  ds cell    ; end of memory pointer
 ; XXX OLD
 ;;initbootxt:
 ;;  dw noop
-default_drive:
-  ds 1
-default_user:
-  ds 1
+;default_drive: ; XXX TODO convert to user variable?
+;  db 'A'
+;default_user: ; XXX TODO convert to user variable?
+;  db 0
 ; XXX OLD
 ;;scaps:   ; XXX converted to user variable
-;;  ds 1   ; COMPARE SEARCH case flag
-bios_parameter_block: ; XXX OLD
-  ds 5
+;;  ds 1   ; 'compare' and 'search' case flag
 ; XXX OLD
 ;;ulimit:
 ;;  ds cell    ; LIMIT for turnkey ; XXX NEW -- from DX-Forth 4.09
 ;;  ds 2   ; spare
-
-; Arrow key codes (default = Wordstar style) ; XXX OLD
-;;  db 'E'-0x40   ; up arrow      014F
-;;  db 'X'-0x40   ; down arrow      0150
-;;  db 'D'-0x40   ; right arrow     0151
-;;  db 'S'-0x40   ; left arrow      0152
 
 ; Scratch buffer - shared by several functions:
 ; +EXT  DELETE-FILE  RENAME-FILE
@@ -3001,7 +2994,7 @@ decimal_question_:
 ; }}} **********************************************************
 ; Strings {{{
 
-; CMOVE  ( ca1 ca2 u -- )
+; CMOVE  ( ca1 ca2 len -- )
 
   _header _public,'CMOVE'
 cmove_:
@@ -3015,7 +3008,7 @@ cmove_.1:
   pop bc
   jp next
 
-; CMOVE>  ( ca1 ca2 u -- )
+; CMOVE>  ( ca1 ca2 len -- )
 
   _header _public,'CMOVE>'
 cmovu_:
@@ -3029,7 +3022,7 @@ cmovu_.1:
   pop bc
   jp next
 
-; BLANK  ( ca u -- )
+; BLANK  ( ca len -- )
 ;   bl fill
 
   _header _public,'BLANK'
@@ -3037,7 +3030,7 @@ blank_:
   ld e,' '
   jp fill_.1
 
-; COUNT  ( ca1 -- ca2 u )
+; COUNT  ( ca1 -- ca2 len )
 ;   dup 1+ swap c@
 
   _header _public,'COUNT'
@@ -3048,13 +3041,13 @@ count_:
   push de
   jp push_a
 
-; PACKED  ( ca1 u ca2 -- ca2 )
+; PACKED  ( ca1 len1 ca2 -- ca2 )
 ;            2dup 2>r 1+ swap move 2r> tuck c!
 
-; Store the string ca1 u as a counted string at ca2 leaving
+; Store the string ca1 len1 as a counted string at ca2 leaving
 ; the destination address on the stack.  The source and destination
 ; strings are permitted to overlap.  An ambiguous condition exists
-; if u is greater than 255 or the buffer at ca2 is less than u+1
+; if len is greater than 255 or the buffer at ca2 is less than len+1
 ; characters.
 
   _header _public,'PACKED'
@@ -3079,8 +3072,7 @@ packed_:
     jp next
   endif
 
-
-; PLACE  ( ca1 u ca2 -- )
+; PLACE  ( ca1 len1 ca2 -- )
 ;   packed drop
 
   _header _public,'PLACE'
@@ -3090,24 +3082,28 @@ place_:
   dw paren_exit_
 
 ; XXX OLD -- DX-Forth 4.00
-;;; PLACE  ( ca1 u ca2 -- )  2dup 2>r 1+ swap move 2r> c!
+;;; PLACE  ( ca1 u ca2 -- )
+;;  2dup 2>r 1+ swap move 2r> c!
 ;;
 ;;  header 1,'PLACE'
 ;;place:
 ;;  call docolon
-;;  dw twodup
-;;  dw twotor
-;;  dw oneplus,swap
-;;  dw move
-;;  dw twofromr
-;;  dw cstore
-;;  dw parenexit
+;;  dw two_dup_
+;;  dw two_to_r_
+;;  dw one_plus_,swap_
+;;  dw move_
+;;  dw two_from_r_
+;;  dw c_store_
+;;  dw paren_exit_
 
 ; AFFIX  ( ca c -- ca )
+; append char to counted string
+; count unchanged
+;
 ;   over count + c!
+;
+; XXX TODO rename? 'affix-char' 'trailing-char'
 
-  ; append char to counted string
-  ; count unchanged
   _header _hidden,'AFFIX'
 affix_:
   call do_colon
@@ -3124,7 +3120,7 @@ scan_:
   ld l,c
   ld h,b
   pop bc
-  ex (sp),hl
+  ex (sp),hl ; XXX TODO use this trick in file words
 scan_.1:
   ld a,c
   or b
@@ -3164,7 +3160,7 @@ skip_.1:
   dec bc
   jp skip_.1
 
-; -TRAILING  ( ca u1 -- ca u2 )
+; -TRAILING  ( ca len1 -- ca len2 )
 
   _header _public,'-TRAILING'
 minus_trailing_:
@@ -3173,7 +3169,9 @@ minus_trailing_:
   push hl
   add hl,de
   ex de,hl
-minus_trailing_.1:
+minus_trailing_.begin:
+  ; de = address
+  ; hl = count
   dec de
   ld a,l
   or h
@@ -3182,7 +3180,7 @@ minus_trailing_.1:
   cp ' '
   jp nz,push_hl
   dec hl
-  jp minus_trailing_.1
+  jp minus_trailing_.begin
 
 ; /STRING  ( ca1 len1 n -- ca2 len2 )
 ;   rot over + -rot -
@@ -3201,7 +3199,6 @@ slash_string_:
     push hl
     jp next
   endif
-
 
 ; XXX OLD
 ;;; CAPS  ( -- )
@@ -3232,6 +3229,22 @@ patch_compare_strings:
 
   ; Input:
   ;   DE = address to patch with the routine address
+
+  ; ++++++++++++++++++++++++++++++++++++++++++++
+  ;
+  ; XXX TODO
+  ;
+  ; It's not a good idea to execute this routine everytime 'compare' and
+  ; 'search' are called.
+  ;
+  ; Solution 1: Use two patching words instead. PROBLEM: .
+  ;
+  ; Solution 2: write 'insensitive-search' and 'insensitive-compare' (or
+  ; 'search-insensitive' and 'compare-insensitive') to patch the normal words,
+  ; call them and restore them. PROBLEM: that would not affect words that use
+  ; compare, like 'str=', 'str<', etc.
+  ;
+  ; ++++++++++++++++++++++++++++++++++++++++++++
 
   push bc
   ld hl,(user_data_pointer)
@@ -3339,7 +3352,7 @@ compare_.2:
   ex (sp),hl
   push af
 compare_.compare_strings: equ $+1
-  call 0 ; modifed
+  call 0 ; patched
   _jump_z compare_.4
   pop bc
 compare_.3:
@@ -3394,7 +3407,7 @@ string_2_len equ $+1
   ld hl,0  ; length of the second string
   ex de,hl
 search_.compare_strings: equ $+1
-  call 0 ; modified
+  call 0 ; patched
   pop hl
   pop bc
   pop de
@@ -3423,7 +3436,7 @@ string_1_addr equ $+1
 ; +STRING  ( ca1 len1 ca2 len2 -- ca2 len3 )
 ;
 ; Append the string ca1 len1 to the end of string ca2 len2
-; returning the resulting string ca2 u3.  It is the programmer's
+; returning the resulting string ca2 len3.  It is the programmer's
 ; responsibility to ensure sufficient room is available at ca2
 ; to hold both strings.
 ;
@@ -3436,9 +3449,11 @@ string_1_addr equ $+1
 
   _header _public,'+STRING'
 plus_string:
+
   ld l,c
   ld h,b
-  ld (t3),hl    ; bsave
+  ld (t3),hl    ; save the Forth IP
+
   pop de
   pop hl
   ld (t2),hl    ; a2
@@ -3449,16 +3464,24 @@ plus_string:
   ld (t1),hl    ; u3
   pop hl
   call move_block_downwards
-  ld hl,(t3)    ; bsave
-  ld c,l
-  ld b,h
-  ld hl,t1
-  jp two_fetch_.hl
 
-; XXX TMP
-t1: ds cell
-t2: ds cell
-t3: ds cell
+t3: equ $+1
+  ld bc,0 ; restore the Forth IP
+
+  if size_optimization
+      ld hl,t1
+      jp two_fetch_.hl
+    t1: ds cell
+    t2: ds cell
+  else
+    t2: equ $+1
+      ld hl,0
+      push hl
+    t1: equ $+1
+      ld hl,0
+      push hl
+      jp next
+  endif
 
 ; S.R  ( ca len n -- )
 ;
@@ -7153,7 +7176,7 @@ bl_word_:
   push hl     ; bl
   jp word_     ; word
 
-; PARSE-NAME  ( "name" -- ca u )
+; PARSE-NAME  ( "name" -- ca len )
 
   _header _public,'PARSE-NAME'
 parse_name_:
@@ -7622,7 +7645,7 @@ interpret_.end:
 ;  dw branch,$ ; XXX TMP
   dw paren_exit_
 
-; (EVALUATE)  ( ca u blk -- )
+; (EVALUATE)  ( ca len blk -- )
 ;
 ; does not restore block contents
 ;
@@ -7659,7 +7682,7 @@ paren_evaluate_:
   endif
   dw paren_exit_
 
-; EVALUATE  ( ca u -- ) 0 (evaluate) ?block
+; EVALUATE  ( ca len -- ) 0 (evaluate) ?block
 
   _header _public,'EVALUATE'
 evaluate_:
@@ -8649,7 +8672,7 @@ marker_:
 ; }}} **********************************************************
 ; Strings {{{
 
-; S,  ( ca u -- )
+; S,  ( ca len -- )
 ;   255 min 0max here over 1+ allot place
 
   _header _hidden,'S,'
@@ -8676,7 +8699,7 @@ comma_quote_:
   dw s_comma_
   dw paren_exit_
 
-; (S")  ( -- ca u )
+; (S")  ( -- ca len )
 ;   r> count 2dup + >r
 
   _header _hidden,'(S")'
@@ -8692,7 +8715,7 @@ paren_s_quot_:
   ld b,h
   jp next
 
-; SLITERAL  ( ca u -- )
+; SLITERAL  ( ca len -- )
 ;   postpone (s") s, ; immediate
 
   _header _public,'SLITERAL',_immediate
@@ -8702,7 +8725,7 @@ s_literal_:
   dw s_comma_
   dw paren_exit_
 
-; S"  ( -- ca u )
+; S"  ( -- ca len )
 ;
 ;   [char] " parse$ state? if postpone sliteral
 ;   then ; immediate
@@ -9033,12 +9056,12 @@ set_drive_.a:
   jp nc,dos_error_.a
   jp next
 
-; >FILENAME-BUFFER  ( ca u -- ca2 )
+; >FILENAME-BUFFER  ( ca len -- ca2 )
 ;
 ;   (filenamesize-1) min filename-buffers @ packed 0 affix
 ;   filename-buffers 2@ swap filename-buffers 2!
 
-; Convert the string ca u to a 0xFF-terminated counted string
+; Convert the string ca len to a 0xFF-terminated counted string
 ; ca2 in the filename buffer.  A maximum of two filenames can
 ; exist in the buffer at one time.  ca2 returns the counted
 ; string, whereas ca2 + 1 returns the 0xFF-terminated string.
@@ -9293,7 +9316,7 @@ paren_delete_file_:
   call do_dos
   jp back_from_dos
 
-; DELETE-FILE  ( ca u -- ior )
+; DELETE-FILE  ( ca len -- ior )
 
   _header _public,'DELETE-FILE'
 delete_file_:
@@ -9781,7 +9804,7 @@ read_line_:
 ;;  dw dup_,zero_not_equals_,zero_
 ;;  dw paren_exit_
 
-; PARSE-FILENAME  ( "filename" -- ca u )
+; PARSE-FILENAME  ( "filename" -- ca len )
 ;   parse-name dup 0= abort" specify filename"
 
   _header _public,'PARSE-FILENAME'
@@ -10397,7 +10420,7 @@ close_all_.end:
   dw drop_
   dw paren_exit_
 
-; LAST-FILENAME  ( -- ca u )
+; LAST-FILENAME  ( -- ca len )
 ; last filename used by 'open-file' etc
 ; XXX TODO add to glossary
 
@@ -10419,7 +10442,7 @@ last_filename_:
   ; dw paren_exit_
 
 
-; ?CREATE  ( ca u -- fileid )
+; ?CREATE  ( ca len -- fileid )
 ;        r/o open-file 0= tuck if close-file then
 ;        drop if .lastfile ." exists - delete it? "
 ;        y/n 0= if abort then then lastfile r/w
@@ -10481,7 +10504,7 @@ init_scr_.no_error:
   dw empty_buffers_
   dw paren_exit_
 
-; OPEN-BLOCK-FILE  ( ca u fam -- ior )
+; OPEN-BLOCK-FILE  ( ca len fam -- ior )
 ;         fdb drop >r s" scr" +ext r>
 ;         open-file tuck init-scr
 ;
@@ -10505,7 +10528,7 @@ open_block_file_:
   dw init_scr_
   dw paren_exit_
 
-; (OPEN)  ( ca u -- )
+; (OPEN)  ( ca len -- )
 ;   r/w open abort" can't open file"
 ;
 ; XXX TODO -- it's a too generic name, change it
@@ -10574,7 +10597,7 @@ load_file_:
   ; dw paren_exit_
 
 
-; LOADED  ( +n1 +n2 ca u -- )
+; LOADED  ( +n1 +n2 ca len -- )
 ;   sfp @ >r (open) (thru) close r>
 ;          sfp ! ?block
 
@@ -12403,7 +12426,7 @@ fin.18:
   ccf
   ret
 
-; >FLOAT  ( ca u -- r true | false )
+; >FLOAT  ( ca len -- r true | false )
 
   _header _public,'>FLOAT'
 to_float_:
@@ -12576,7 +12599,7 @@ paren_f2_:
   dw efn_,star_
   dw paren_exit_
 
-; (F3)  ( r places -- ca u )
+; (F3)  ( r places -- ca len )
 ;                               dup to pl# 0< if precision else (f1) ef# 0>
 ;                               if 1- (f2) drop 1+ then pl# + max-precision
 ;                               min then fbuf swap represent drop to sn# to
@@ -12657,7 +12680,7 @@ paren_f5_:
   dw plus_store_
   dw paren_exit_
 
-; (F6)  ( ca u -- )
+; (F6)  ( ca len -- )
 ;   (f5) shold
 
   _header _hidden,'(F6)'  ; insert string
@@ -12689,7 +12712,7 @@ paren_f8_:
   dw number_sign_greater_
   dw paren_exit_
 
-; (F9)  ( ca u1 -- ca u2 )
+; (F9)  ( ca len1 -- ca len2 )
 ;        pl# 0< if begin dup while 1- 2dup
 ;        + c@ [char] 0 - until 1+ then then
 
@@ -12726,12 +12749,14 @@ paren_fa_.1:
 paren_fa_.end:
   dw paren_exit_
 
-; (FB)  ( ca u n -- )
+; (FB)  ( ca len n -- )
+; insert fraction n places right of dec. pt
+;
 ;   fdp cell+ off >r (f9) r@ + (fa) over -
 ;        (f7) (fa) min r@ - (f6) r> (fa) min (f7)
 ;        fdp 2@ or if [char] . hold then
 
-  _header _hidden,'(FB)'  ; insert fraction n places right of dec. pt
+  _header _hidden,'(FB)'
 paren_fb_:
   call do_colon
   dw fdp_,two_plus_
@@ -12756,10 +12781,11 @@ paren_fb_:
 paren_fb_.end:
   dw paren_exit_
 
-; (FC)  ( ca u n -- )
+; (FC)  ( ca len n -- )
+; split into int/frac and insert
 ;        >r 2dup r@ min 2swap r> /string 0 (fb) (f6)
 
-  _header _hidden,'(FC)'  ; split into int/frac and insert
+  _header _hidden,'(FC)'
 paren_fc_:
   call do_colon
   dw to_r_
@@ -12771,10 +12797,11 @@ paren_fc_:
   dw paren_f6_
   dw paren_exit_
 
-; (FD)  ( r n factor -- ca u )
+; (FD)  ( r n factor -- ca len )
+; exponent form
 ;        to ef# (f3) ex# 1- (f2) (f4) 1+ (fc) (f8)
 
-  _header _hidden,'(FD)'  ; exponent form
+  _header _hidden,'(FD)'
 paren_fd_:
   call do_colon
   dw paren_to_,efn_
@@ -12786,7 +12813,7 @@ paren_fd_:
   dw paren_f8_
   dw paren_exit_
 
-; (FS.)  ( r n -- ca u )
+; (FS.)  ( r n -- ca len )
 ;   1 (fd)
 
   _header _public,'(FS.)'
@@ -12818,7 +12845,7 @@ fs_dot_:
 
 if  floating_point_engineering_output?
 
-; (FE.)  ( r -- ca u )
+; (FE.)  ( r -- ca len )
 ;   3 (fd)
 
   _header _public,'(FE.)'
@@ -12850,7 +12877,7 @@ fe_dot_:
 
 endif ; floating_point_engineering_output?
 
-; (F.)  ( r n -- ca u )
+; (F.)  ( r n -- ca len )
 ;        0 to ef# (f3) ex# dup max-precision > if
 ;        fbuf 0 0 (fb) max-precision - (f7) (f6)
 ;        else dup 0> if (fc) else abs (fb) 1 (f7)
@@ -12905,7 +12932,7 @@ f_dot_:
   dw space_
   dw paren_exit_
 
-; (G.)  ( r n -- ca u )
+; (G.)  ( r n -- ca len )
 ;   >r (f1) -3 7 within  r> swap if (f.) else
 ;        (fs.) then
 
@@ -13311,7 +13338,7 @@ f_identify_:
 f_identify_.end:
   dw paren_exit_
 
-; FNUMBER  ( ca u -- [r] flag )
+; FNUMBER  ( ca len -- [r] flag )
 ;        2dup s" E" caps search -rot 2drop decimal?
 ;        and if >float else 2drop 0 then dup >r
 ;        state? and if postpone fliteral then r>
