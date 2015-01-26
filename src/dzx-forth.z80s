@@ -4,7 +4,7 @@
   version.minor: equ 2
   ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501260230"
+  db version.major,"-0",version.minor+"0","-201501261243"
   endm
 
 ; A direct-threaded Forth for ZX Spectrum
@@ -90,6 +90,14 @@ _version: macro
 ; ------------------------------
 ; XXX TODO
 
+; 2015-01-26: FIX problem with division!
+;
+; 2015-01-26: check if 'last-filename' works fine, or the addresses of
+; 'filename-buffers' change.
+;
+; 2015-01-26: improve 'file-id-table' to hold also if every opened file is
+; headed.  use one bit for "open", other bit for "headed".
+;
 ; 2015-01-24: 'forth-wordlist'
 ;
 ; 2015-01-24: redirect emit to a file using a word like Gforth's 'outfile-id'
@@ -560,8 +568,13 @@ _show_depth: macro
   endm
 
 _border_halt: macro color
+
+  ; Debug check point
+
+  ; Change the border to the given color (red by default) and halt.
+
   local border_color
-  border_color: defl 2 ; red
+  border_color: defl red_color
   if not nul color
     border_color: defl color
   endif
@@ -571,6 +584,12 @@ _border_halt: macro color
   endm
 
 _debug: macro message,flag
+
+  ; Debug check point for colon definitions
+  ; 
+  ; If the given flag is not zero or the 'debug?' label is not zero, then show
+  ; the given message, show the content of the stack and wait for a key.
+
   local show
   show: defl false
   if not nul flag
@@ -584,6 +603,25 @@ _debug: macro message,flag
     _dcs "Press any key"
     dw key_,drop_,cr_
   endif
+
+  endm
+
+_debug_variable: macro message,address
+
+  ; Debug check point for colon definitions, depending on a variable
+  ;
+  ; 
+  ; If the content of the given address is not zero, then show the given
+  ; message, show the content of the stack and wait for a key.
+
+  local _debug_variable.the_end
+
+  dw lit_,address,fetch_
+;_debug_variable.end: defl _debug_variable.the_end
+  dw branch_if_0_,_debug_variable.the_end
+  _debug message,true
+_debug_variable.the_end: equ $
+
   endm
 
 ; }}} **********************************************************
@@ -5823,6 +5861,7 @@ max_file_id_:
 ; FILE-ID-TABLE  ( -- a )
 ; XXX NEW
 ; XXX TODO rename?
+; XXX TODO -- use also to remember which files are headed, one bit
 
   _header _public,'FILE-ID-TABLE'
 file_id_table_:
@@ -6349,47 +6388,9 @@ minus_alias_:
     jp false_
   endif
 
-; XXX OLD -- DX-Forth 4.00
-;;; >name  ( xt -- nfa | 0 )
-;;;       voc-link begin @ dup while tuck 2-
-;;;       wordlist>name begin ?dup while -alias if 2dup
-;;;       name> = if -rot 2drop exit then then
-;;;       n>name repeat swap repeat nip
-;;
-;;  header x,'>NAME',,1
-;;toname:
-;;  call docolon
-;;  dw voclink
-;;toname.1:
-;;  dw fetch
-;;  dw dup
-;;  dw questionbranch,toname.5
-;;  dw tuck
-;;  dw twominus
-;;  dw wordlisttoname
-;;toname.2:
-;;  dw questiondup
-;;  dw questionbranch,toname.4
-;;  dw minusalias    ; skip if alias
-;;  dw questionbranch,toname.3
-;;  dw twodup,namef
-;;  dw equals
-;;  dw questionbranch,toname.3
-;;  dw minusrot,twodrop
-;;  dw parenexit
-;;toname.3:
-;;  dw ntnam
-;;  dw branch,toname.2
-;;toname.4:
-;;  dw swap
-;;  dw branch,toname.1
-;;toname.5:
-;;  dw nip
-;;  dw parenexit    ; not found
-
-; XXX NEW -- DX-Forth 4.09
 ; >NAME  ( xt -- nfa | 0 )
-;        voc-link begin @ dup while tuck cell- wordlist>name
+;        voc-link begin @ dup while tuck cell-
+;        wordlist>name
 ;        begin ?dup while -alias if 2dup name> = if
 ;        -rot 2drop exit then then n>name repeat swap
 ;        repeat nip
@@ -6425,21 +6426,9 @@ to_name_.5:
   dw nip_
   dw paren_exit_    ; not found
 
-; XXX OLD -- DX-Forth 4.00
-;;; (NAME)  ( nfa -- ca u ) count 31 and
-;;
-;;  header 1,'(NAME)',,1
-;;parenname:
-;;  call docolon
-;;  dw count
-;;  dw clit
-;;  db 31
-;;  dw and
-;;  dw parenexit
-
-; XXX NEW -- DX-Forth 4.09
 ; (NAME)  ( nfa -- ca u )
 ;   count 31 and
+; XXX TODO rename after Gforth and Forth-2012
 
   _header _public,'(NAME)'
 paren_name_:
@@ -7076,21 +7065,27 @@ dot_paren_:
   dw paren_exit_
 
 ; \  ( "ccc" -- )
-;   source nip blk @ if c/l >in @ over / 1+ *
-;       min then >in ! ; immediate
+;
+;   source nip blk @
+;   if  c/l >in @ over / 1+ * min  then
+;   >in ! ; immediate
 
   _header _public,'\',_immediate
 back_slash_:
   call do_colon
-  dw source_,nip_
-  dw blk_,fetch_
-  dw question_branch_,back_slash_.1
+  dw source_,nip_  ; ( u1 )
+  dw blk_,fetch_   ; ( u1 u2 )
+  dw branch_if_0_,back_slash_.end
+  ; the source is a block
+;  _debug_variable '\ before calculation',debug_interpret
   dw chars_per_line_
   dw in_,fetch_
   dw over_,slash_
   dw one_plus_,star_
   dw min_
-back_slash_.1:
+;  _debug_variable '\ after calculation',debug_interpret
+back_slash_.end:
+  ; ( u )
   dw in_,store_
   dw paren_exit_
 
@@ -7218,43 +7213,55 @@ unused_:
   dw lit_,0xFFFF,here_,minus_
   dw paren_exit_
 
+; DEBUG-INTERPRET  ( -- a )
+; XXX TMP for debugging
+
+  _header _hidden,'DEBUG-INTERPRET'
+debug_interpret_:
+  call do_variable
+debug_interpret:
+  dw false
+
 ; INTERPRET  ( -- )
 
   _header _public,'INTERPRET'
 interpret_:
   call do_colon
 interpret_.begin:
-  _debug "start of interpret",0
+  _debug_variable "start of interpret",debug_interpret
   dw bl_word_
-  _debug 'interpret after bl_word',0
+  _debug_variable 'interpret after bl_word',debug_interpret
   dw dup_,c_fetch_
   dw branch_if_0_,interpret_.end  ; while not end of input stream
-  _debug 'interpret before find',0
+  _debug_variable 'interpret before find',debug_interpret
   dw find_
-  _debug 'interpret after find',0
+  _debug_variable 'interpret after find',debug_interpret
   dw question_dup_
   dw branch_if_0_,interpret_.not_found
 
   ; found
   ; ( xt 1 | xt -1 )
-  _debug 'interpret -- found',1
+  _debug_variable 'interpret -- found',debug_interpret
   dw compiling_question_,equals_ ; compiling an immediate word?
   dw branch_if_false_,interpret_.execute
 
   ; compiling and not immediate
-  _debug 'interpret -- compiling and not immediate',1
+  ; ( xt )
+  _debug_variable 'interpret -- compiling and not immediate',debug_interpret
   dw compile_comma_
   dw branch_,interpret_.repeat
 
 interpret_.execute:
   ; executing or immediate
-  _debug 'interpret.execute',1
+  ; ( xt )
+  _debug_variable 'interpret before execute',debug_interpret
   dw execute_
+  _debug_variable 'interpret after execute',debug_interpret
   dw branch_,interpret_.repeat
 
 interpret_.not_found:
   ; ( ca )
-  _debug 'interpret.not_found',1
+  _debug_variable 'interpret.not_found',debug_interpret
   dw base_,fetch_,to_r_ ; save the current base
   dw count_,over_,c_fetch_ ; get the string and its first char
   ; ( ca len c )
@@ -7269,7 +7276,7 @@ interpret_.not_found:
   db '$'
   dw paren_of_,interpret_.check_binary
   ; it's "$" -- hex number
-  _debug 'interpret: hex prefix found',0
+  _debug_variable 'interpret: hex prefix found',debug_interpret
   dw hex_,one_
   dw branch_,interpret_.remove_the_prefix
 
@@ -7279,7 +7286,7 @@ interpret_.check_binary:
   db '%'
   dw paren_of_,interpret_.check_decimal
   ; it's "%" -- binary number
-  _debug 'interpret: binary prefix found',0
+  _debug_variable 'interpret: binary prefix found',debug_interpret
   dw binary_,one_
   dw branch_,interpret_.remove_the_prefix
 
@@ -7289,7 +7296,7 @@ interpret_.check_decimal:
   db '#'
   dw paren_of_,interpret_.check_char
   ; it's "#" -- decimal number
-  _debug 'interpret: decimal prefix found',0
+  _debug_variable 'interpret: decimal prefix found',debug_interpret
   dw decimal_,one_
   dw branch_,interpret_.remove_the_prefix
 
@@ -7300,47 +7307,47 @@ interpret_.check_char:
   ; this check is done at the end, because it's easier not
   ; to use '(of)' with it.
   ; ( ca len c )
-  _debug 'interpret.check_char',0
+  _debug_variable 'interpret.check_char',debug_interpret
   dw c_lit_
   db "'"
   dw equals_ ; is the first char a single quote?
   dw branch_if_false_,interpret_.number_question ; no
   ; the first char is a single quote
-  _debug 'interpret.check_char first quote',0
+  _debug_variable 'interpret.check_char first quote',debug_interpret
   dw dup_,three_,equals_ ; len is 3?
   dw branch_if_false_,interpret_.number_question ; no
   ; len is 3
-  _debug 'interpret.check_char len 3',0
+  _debug_variable 'interpret.check_char len 3',debug_interpret
   dw two_dup_,plus_,one_minus_,c_fetch_
   dw c_lit_
   db "'"
   dw equals_ ; is the last char a single quote?
   dw branch_if_false_,interpret_.number_question ; no
   ; the last char is a single quote
-  _debug 'interpret.check_char last quote',0
+  _debug_variable 'interpret.check_char last quote',debug_interpret
   dw drop_,one_plus_,c_fetch_
   dw branch_,interpret_.single_number
 
 interpret_.remove_the_prefix:
   ; ( ca len n )
-  _debug 'interpret.remove_the_prefix',0
+  _debug_variable 'interpret.remove_the_prefix',debug_interpret
   dw slash_string_
 
 interpret_.number_question:
   ; The number prefix, if any, has been removed.
   ; Is the string a number in the current base?
   ; ( ca len )
-  _debug 'interpret.number_question',0
+  _debug_variable 'interpret.number_question',debug_interpret
   dw two_dup_
 ; interpret_.number_question_patch: ; XXX OLD -- not used
   ; ( ca len ca len )
   dw number_question_
   ; ( ca len d true | ca len false )
-  _debug 'after number_question',0
+  _debug_variable 'after number_question',debug_interpret
 
   dw branch_if_false_,interpret_.f_number
 
-  _debug 'it is a number!',1
+  _debug_variable 'it is a number!',debug_interpret
   dw two_nip_
   dw dpl_,fetch_,zero_less_ ; single number?
   dw branch_if_false_,interpret_.double_number
@@ -7374,26 +7381,30 @@ interpret_.f_number:
     dw false_
   endif
   ; ( flag )
-  _debug 'after interpret_.f_number',0
+  _debug_variable 'after interpret_.f_number',debug_interpret
 
 interpret_.question_defined:
   ; ( flag -- )
   ; abort if flag<>0
-  _debug 'before question_defined',0
+  _debug_variable 'before question_defined',debug_interpret
   dw question_defined_
-  _debug 'after question_defined',0
+  _debug_variable 'after question_defined',debug_interpret
 
 interpret_.number_done:
   dw from_r_,base_,store_
 
 interpret_.repeat:
-  _debug 'interpret.repeat'
+  ; XXX FIXME stack depth is -1 here after executing a word!
+  _debug_variable 'interpret.repeat',debug_interpret
   dw question_stack_
   dw branch_,interpret_.begin
 
 interpret_.end:
-  _debug 'interpret.end ',0
+  _debug_variable 'interpret.end',debug_interpret
   dw drop_
+
+  dw lit_,debug_interpret,off_ ; XXX TMP for debugging
+
   dw paren_exit_
 
 ; (EVALUATE)  ( ca len blk -- )
@@ -7424,6 +7435,7 @@ paren_evaluate_:
   dw tick_source_,two_store_
   dw in_,off_
   _debug "(evaluate) before interpret",1
+  dw lit_,debug_interpret,on_ ; XXX TMP for debugging
   dw interpret_
   _debug "(evaluate) after interpret",1
   dw two_from_r_,tick_source_,two_store_
@@ -10020,20 +10032,20 @@ next_block_:
   _header _hidden,'(THRU)'
 paren_thru_:
   call do_colon
-  _debug "start of (thru)",1
+  _debug "start of (thru)",0
   dw one_plus_,swap_
   dw paren_question_do_,paren_thru_.end
 paren_thru_.do:
-  _debug "start of loop of (thru)",1
+  _debug "start of loop of (thru)",0
   dw i_,block_
-  _debug "(thru) after block",1
+  _debug "(thru) after block",0
   dw bytes_per_buffer_
-  _debug "(thru) after b/buf",1
+  _debug "(thru) after b/buf",0
   dw i_,paren_evaluate_
-  _debug "(thru) after (evaluate)",1
+  _debug "(thru) after (evaluate)",0
   dw paren_loop_,paren_thru_.do
 paren_thru_.end:
-  _debug "end of (thru)",1
+  _debug "end of (thru)",0
   dw paren_exit_
 
 ; THRU  ( +n1 +n2 -- )
@@ -10042,7 +10054,7 @@ paren_thru_.end:
   _header _public,'THRU'
 thru_:
   call do_colon
-  _debug "start of thru",1
+  _debug "start of thru",0
   dw paren_thru_
   _debug "thru before ?block",1
   dw question_block_
