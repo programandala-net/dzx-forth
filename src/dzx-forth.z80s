@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501280243'  ; release
+  db                            '201501281948'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -92,7 +92,12 @@ _version: macro
 ; ------------------------------
 ; XXX TODO
 
-; Simplify the 'dzx-forth' word: use only the version string, and make 'dzx-forth' return it
+; 2015-01-28: 'block-included' from Gforth; 'reposition-block-file'
+;
+; 2015-01-28: a variable with the first loadable block (0/1)
+;
+; Simplify the 'dzx-forth' word: use only the version string, and make
+; 'dzx-forth' return it
 ;
 ; 2015-01-26: FIX problem with division!
 ;
@@ -114,17 +119,16 @@ _version: macro
 ;
 ; 2015-01-14: change the format of headers created by 'defer'?
 ;
-; 2015-01-12: implement 'allocate' in the ram disk? [better use the tool to use
-; the dictionary]
+; 2015-01-12: implement 'allocate' in the ram disk? [better use the tool that
+; uses the dictionary]
 ;
 ; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
 ;
 ; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should
 ; it be?
 ;
-; Rename the 'header' word to '(header)' and the 'hdr' macro to 'header'
-;
 ; Check problems with backspace (char 8), depending on the ZX Spectrum ROM.
+; Already solved?
 ;
 ; See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM routines.
 
@@ -162,18 +166,70 @@ start: equ 25000 ; start of DZX-Forth in memory
 
 ; ------------------------------
 
+; }}} **********************************************************
+; System configuration {{{
+
+; ------------------------------
+; Generic
+
 true:   equ -1
 false:  equ 0
-
 yes:    equ true
 no:     equ false
 
 ; ------------------------------
-; Conditional assembly
+; System
 
-; XXX TODO organize
+cell:   equ 2 ; cell size (bytes)
+
+top_prunes:             defl 0 ; XXX OLD ?
+
+; XXX TODO Convert stack sizes to user variables? The point is
+; a task could need just a little stack.
+
+parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
+user_data_size:               equ 128
+word_buffer_size:             equ 31+5
+
+; ------------------------------
+; ZX Spectrum
+
+  include "zx_spectrum_system_variables.z80s"
+  include "zx_spectrum_rom_routines.z80s"
+  include "zx_spectrum_char_codes.z80s"
+  include "zx_spectrum_colors.z80s"
+
+bank1_port: equ 0x07FFD ; "horizontal" and RAM switch port
+bank2_port: equ 0x01FFD ; "vertical" switch port
+
+lf_char:                    equ 0x0A ; line feed ; XXX OLD?
+ff_char:                    equ 0x0C ; form feed (printer only)
+cursor_left_word_char:      equ 0x18 ; XXX TODO -- implement
+cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
+
+; ------------------------------
+; +3DOS
+
+  include "zx_spectrum_plus3dos.z80s"
+
+max_file_id:            equ 15 ; 0..15 are the possible file numbers in +3DOS
+max_file_ids:           equ max_file_id+1
+
+filename_size:          equ 16 ; "uud:nnnnnnnn.eee"
+filename_buffer_size:   equ filename_size+1 ; for trailing 0xFF
+;file_handle_size:       equ 6+36  ; (keep even) ; XXX OLD
+
+
+; }}} **********************************************************
+; User configuration {{{
+
+; The values in this section may be changed by the user in order to assemble a
+; specific version of DZX-Forth, with or without certain features.
+
+; XXX TODO organize and documentate
 
 debug?:                            equ no ; debugging messages?
+
 case_insensitive_names?:           equ yes
 control_flow_stack_extensions?:    equ yes
 warning_options:                   equ no ; XXX TODO does this causes trouble?
@@ -234,6 +290,7 @@ endif
 
 ; ..............................
 
+
 classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
 tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
 
@@ -246,53 +303,6 @@ pictured_numeric_buffer_size: equ 68
 stack_size:                   equ 256
 return_stack_size:            equ 256
 tib_size:                     equ 80    ; Terminal Input Buffer
-
-; ------------------------------
-; System
-
-max_file_id:            equ 15 ; 0..15 are the possible file numbers in +3DOS
-max_file_ids:           equ max_file_id+1
-top_prunes:             defl 0 ; XXX OLD ?
-
-; ------------------------------
-; Memory
-
-cell:   equ 2 ; cell size (bytes)
-
-; ------------------------------
-; Buffer sizes
-
-; XXX TODO Convert stack sizes to user variables? The point is
-; a task could need just a little stack.
-
-filename_size:                equ 16 ; "uud:nnnnnnnn.eee"
-filename_buffer_size:         equ filename_size+1 ; for trailing 0xFF
-;file_handle_size:             equ 6+36  ; (keep even) ; XXX OLD
-parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
-user_data_size:               equ 128
-word_buffer_size:             equ 31+5
-
-; ------------------------------
-; DOS ; XXX OLD
-
-;recsiz: equ 128   ; CP/M record size ; XXX OLD
-
-; ------------------------------
-; ZX Spectrum
-
-  include "zx_spectrum_system_variables.z80s"
-  include "zx_spectrum_rom_routines.z80s"
-  include "zx_spectrum_char_codes.z80s"
-  include "zx_spectrum_colors.z80s"
-  include "zx_spectrum_plus3dos.z80s"
-
-bank1_port: equ 0x07FFD ; "horizontal" and RAM switch port
-bank2_port: equ 0x01FFD ; "vertical" switch port
-
-lf_char:                    equ 0x0A ; line feed ; XXX OLD?
-ff_char:                    equ 0x0C ; form feed (printer only)
-cursor_left_word_char:      equ 0x18 ; XXX TODO -- implement
-cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 
 ; }}} **********************************************************
 ; Description {{{
@@ -317,6 +327,9 @@ cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 ; aa      = cell-aligned address
 ; ca      = character-aligned address
 ; fa      = float-aligned address
+; false   = boolean flag (0)
+; f       = flag (false is 0; true is any other value)
+; wf      = well-formed flag (false is 0; true is -1)
 ; c       = 8-bit character
 ; u       = 16-bit unsigned number
 ; len     = 16-bit unsigned number, length of memory zone or string
@@ -326,11 +339,12 @@ cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 ; d       = 32-bit signed double number
 ; ud      = 32-bit unsigned double number
 ; xd      = 32-bit signed or unsigned number
-; xt      = execution token (same as cfa)
-; cfa     = address of code field (same as xt)
+; xt      = execution token (same as cfa) ; XXX FIXME
+; cfa     = address of code field (same as xt) ; XXX FIXME
 ; lfa     = address of link field
 ; nfa     = address of name field
 ; pfa     = address of parameter field (body)
+; true    = boolean flag (-1)
 ; orig    = address of a control structure origin
 ; fam     = file access method
 
