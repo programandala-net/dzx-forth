@@ -1,13 +1,15 @@
 ; DZX-Forth {{{
 
-  version.major: equ "A" ; alpha branch
-  version.minor: equ 2
-  ; XXX TODO use only the string, and make 'dzx-forth' return it
 _version: macro
-  db version.major,"-0",version.minor+"0","-201501261243"
+  version.major:                equ 'A'         ; = alpha state
+  db version.major
+  version.minor:                equ 2           ; branch
+  db '-0',version.minor+'0','-'
+  db                            '201501280123'  ; release
   endm
 
-; A direct-threaded Forth for ZX Spectrum
+; A direct-threaded almost-standard Forth for ZX Spectrum,
+; with support for +3DOS and IDEDOS
 ;
 ; (Project under development)
 ;
@@ -90,6 +92,8 @@ _version: macro
 ; ------------------------------
 ; XXX TODO
 
+; Simplify the 'dzx-forth' word: use only the version string, and make 'dzx-forth' return it
+;
 ; 2015-01-26: FIX problem with division!
 ;
 ; 2015-01-26: check if 'last-filename' works fine, or the addresses of
@@ -183,7 +187,7 @@ size_optimization?:                equ no ; if yes, the code will be smaller but
 ; XXX TODO -- the 'no' option is not fully implemented yet
 defer_uses_body?:                  equ yes
 
-floored_division?:                 equ no  ; integer division method
+floored_division?:                 equ yes  ; integer division method
 
 ; ..............................
 
@@ -2099,14 +2103,15 @@ msm.1:
 msm.2:
   pop bc
   if size_optimization?
-    jp push_de
+    jp push_de_hl
   else
     push de
+    push hl
     jp next
   endif
 
 ; SM/REM  ( d n1 -- n2 n3 )
-
+; XXX checked against DX-Forth 4.09
   _header _public,'SM/REM'
 s_m_slash_rem_:
   ld l,c
@@ -2120,6 +2125,7 @@ s_m_slash_rem_.1:
   jp msm.2
 
 ; FM/MOD  ( d n1 -- n2 n3 )
+; XXX checked against DX-Forth 4.09
 
   _header _public,'FM/MOD'
 fm_slash_mod_:
@@ -2156,17 +2162,19 @@ endif
 
 ; /MOD  ( n1 n2 -- n3 n4 )
 ;   >r s>d r> m/mod
-
 ; XXX NEW -- DX-Forth 4.09 -- instead of 'M/MOD'
+; XXX checked against DX-Forth 4.09
   _header _public,'/MOD'
 slash_mod_:
   call do_colon
   dw to_r_,s_to_d_
-  dw from_r_,m_slash_mod_
+;  dw from_r_,m_slash_mod_ ; XXX not in 4.09
+  dw from_r_,s_m_slash_rem_ ; XXX yes
   dw paren_exit_
 
 ; /  ( n1 n2 -- n3 )
 ;   /mod nip
+; XXX checked against DX-Forth 4.09
 
   _header _public,'/'
 slash_:
@@ -2185,6 +2193,7 @@ modd_:
 
 ; */MOD  ( n1 n2 n3 -- n4 n5 )
 ;   >r m* r> sm/rem
+; XXX checked against DX-Forth 4.09
 
   _header _public,'*/MOD'
 star_slash_mod_:
@@ -2258,6 +2267,7 @@ u_two_slash_:
 
 
 ; D2*  ( xd1 -- xd2 )
+; XXX TODO check if this works
 
   _header _public,'D2*'
 d_two_star_:
@@ -2270,10 +2280,11 @@ d_two_star_:
   ld a,d
   rla
   ld d,a
-  ex de,hl
   if size_optimization?
-    jp push_de
+    ex de,hl
+    jp push_de_hl
   else
+    push hl
     push de
     jp next
   endif
@@ -2292,9 +2303,10 @@ d_two_slash_:
   rra
   ld e,a
   if size_optimization?
-    jp push_de
+    jp push_de_hl
   else
     push de
+    push hl
     jp next
   endif
 
@@ -2343,6 +2355,10 @@ zero_equals_hl:
     jp z,true_
     jp false_
   endif
+
+  ; XXX TMP still used in the Forth sources
+  _header _public,'NOT',,zero_equals_
+not_: equ zero_equals_
 
 ; 0<>  ( x -- flag )
 
@@ -3110,6 +3126,9 @@ slash_string_:
 ;;caps:
 ;;  ld a,1
 ;;  jp dcaps.1
+  ; XXX TMP still used in the Forth sources:
+;  _header _public,'CAPS',_immediate,noop_
+;caps_: equ noop_
 ;;
 ;;; -CAPS  ( -- )
 ;;;   disable caps COMPARE/SEARCH
@@ -3120,6 +3139,9 @@ slash_string_:
 ;;dcaps.1:
 ;;  ld (scaps),a
 ;;  jp next
+  ; XXX TMP still used in the Forth sources?:
+;  _header _public,'-CAPS',_immediate,noop_
+;minus_caps_: equ noop_
 
 patch_compare_strings:
 
@@ -5812,6 +5834,7 @@ chars_per_line_.value:
 
 ; LIMIT  ( -- a )
 ; ; XXX OLD -- still used by 'forget'
+; XXX TODO move to <src/dxforth.fs>
 
   _header _public,'LIMIT'
 limit_:
@@ -5945,6 +5968,7 @@ boot_xt:
 ; compile system or application
 ; application word - used by HERE, UNUSED
 ; XXX OLD -- but still used by other words that will be rewritten
+; XXX TODO move to <src/dxforth.fs>
   _header _public,'SYS'
 sys_:
   call do_create
@@ -5953,7 +5977,7 @@ sys_.variable:
 
 ; LAST  ( -- a )
 ; occupies 2 cells
-; XXX TODO separate:
+; XXX TODO separate and rename
 ; In Gforth: LATESTXT and LATEST
 
   _header _hidden,'LAST'
@@ -6244,12 +6268,14 @@ check_question_:
   ld hl,checking_.variable
   jp sys_question_.1
 
-; APPLICATION  ( -- ) sys off
+; APPLICATION  ( -- )
+; sys off
+; XXX OLD
 
-  _header _public,'APPLICATION'
-application_:
-  ld hl,sys_.variable
-  jp off_.hl
+  ; _header _public,'APPLICATION'
+; application_:
+  ; ld hl,sys_.variable
+  ; jp off_.hl
 
 ; XXX OLD
 ;;; h  ( -- a )    sys@ if dph else dp then
@@ -6313,12 +6339,12 @@ to_body_:
 ;
 ; XXX -- this word was commented out in DX-Forth, why?
   _header _hidden,'BODY>'
-fbody_:
+from_body_:
   ld de,-3
   jp plus_de
 
 ; XXX NEW -- DX-Forth 4.09
-; N>COUNT  ( nfa -- ha len )
+; N>COUNT  ( nfa -- ca len )
 ;   aka (name) n>count
 
   _header _hidden,'N>COUNT',,paren_name_
@@ -6343,7 +6369,7 @@ ncnt_: equ  paren_name_
 ;   n>count +
 
   _header _public,'N>LINK'
-nlnk_:
+n_to_link_:
   call do_colon
   dw ncnt_,plus_
   dw paren_exit_
@@ -6351,17 +6377,17 @@ nlnk_:
 ; N>NAME  ( nfa1 -- nfa2 | 0 )
 
   _header _public,'N>NAME'
-ntnam_:
+n_to_name_:
   call do_colon
-  dw nlnk_,fetch_  ; n>link @
+  dw n_to_link_,fetch_  ; n>link @
   dw paren_exit_
 
 ; NAME>  ( nfa -- xt )
 
   _header _public,'NAME>'
-namef_:
+name_from_:
   call do_colon
-  dw nlnk_,cell_plus_,fetch_ ; n>link cell+ @
+  dw n_to_link_,cell_plus_,fetch_ ; n>link cell+ @
   dw paren_exit_
 
 ; WORDLIST>NAME  ( wid -- nfa | 0 )
@@ -6369,6 +6395,11 @@ namef_:
 
   _header _public,'WORDLIST>NAME',,fetch_
 wordlist_to_name_: equ fetch_
+
+; XXX TMP still used in the Forth sources
+  _header _public,'W>NAME',,fetch_
+w_to_name_: equ fetch_
+  
 
 ; -ALIAS  ( nfa -- nfa flag )
 ; false if alias
@@ -6411,13 +6442,13 @@ to_name_.2:
   dw question_branch_,to_name_.4
   dw minus_alias_    ; skip if alias
   dw question_branch_,to_name_.3
-  dw two_dup_,namef_
+  dw two_dup_,name_from_
   dw equals_
   dw question_branch_,to_name_.3
   dw minus_rot_,two_drop_
   dw paren_exit_
 to_name_.3:
-  dw ntnam_
+  dw n_to_name_
   dw branch_,to_name_.2
 to_name_.4:
   dw swap_
@@ -6426,7 +6457,7 @@ to_name_.5:
   dw nip_
   dw paren_exit_    ; not found
 
-; (NAME)  ( nfa -- ca u )
+; (NAME)  ( nfa -- ca len )
 ;   count 31 and
 ; XXX TODO rename after Gforth and Forth-2012
 
@@ -6457,6 +6488,11 @@ dotid_.1:
   _dcs '[noname]'
   dw paren_exit_
 
+; XXX TMP -- it's still used in the Forth sources
+; XXX OLD -- moved to <src/dxforth.fs>
+;_header _public,'SYSTEM',_immediate,noop_
+;  system_: equ noop_
+
 ; .NAME  ( xt -- )
 ;   >name .id
 
@@ -6470,7 +6506,7 @@ dot_name_:
 ;   cell+ cell+ @ .id
 ; XXX Renamed to '.VOC' in DX-Forth 4.09
   _header _public,'.WID'
-dotwid_:
+dot_wid_:
   call do_colon
   dw cell_plus_,cell_plus_
   dw fetch_,dotid_
@@ -7007,6 +7043,10 @@ parse_name_:
   dw bl_word_,count_ ; bl_-word count
   dw paren_exit_
 
+; XXX TMP -- it's still used in the Forth source files
+;  _header _public,'TOKEN',,parse_name_
+;token_: equ parse_name_
+
 ; DEFINED  ( -- ca 0 | xt -1 | xt 1 )
 
   _header _hidden,'DEFINED'
@@ -7403,7 +7443,7 @@ interpret_.end:
   _debug_variable 'interpret.end',debug_interpret
   dw drop_
 
-  dw lit_,debug_interpret,off_ ; XXX TMP for debugging
+;  dw lit_,debug_interpret,off_ ; XXX TMP for debugging
 
   dw paren_exit_
 
@@ -7420,7 +7460,7 @@ interpret_.end:
   _header _hidden,'(EVALUATE)'
 paren_evaluate_:
   call do_colon
-  _debug "start of (evaluate)",1
+  _debug "start of (evaluate)",0
   if block_files?
     dw blk_,fetch_
     dw in_,fetch_
@@ -7429,15 +7469,15 @@ paren_evaluate_:
     dw in_,fetch_
     dw to_r_
   endif
-  _debug "(evaluate) before source",1
+  _debug "(evaluate) before source",0
   dw source_,two_to_r_
   dw blk_,store_
   dw tick_source_,two_store_
   dw in_,off_
-  _debug "(evaluate) before interpret",1
-  dw lit_,debug_interpret,on_ ; XXX TMP for debugging
+  _debug "(evaluate) before interpret",0
+;  dw lit_,debug_interpret,on_ ; XXX TMP for debugging
   dw interpret_
-  _debug "(evaluate) after interpret",1
+  _debug "(evaluate) after interpret",0
   dw two_from_r_,tick_source_,two_store_
   if block_files?
     dw two_from_r_
@@ -8279,7 +8319,7 @@ lfind_.1:
   dw question_branch_,lfind_.end
   dw fetch_,dup_
   dw question_branch_,lfind_.end
-  dw nlnk_
+  dw n_to_link_
   dw branch_,lfind_.1
 lfind_.end:
   dw nip_
@@ -8299,7 +8339,7 @@ behead_:
   dw question_branch_,behead_.1
   dw swap_
 behead_.1:
-  dw ntnam_
+  dw n_to_name_
   dw get_context_
   dw rot_,lfind_
   dw store_
@@ -8372,11 +8412,11 @@ paren_forget_.3:
   dw question_branch_,paren_forget_.5
   dw minus_alias_    ; not an alias
   dw question_branch_,paren_forget_.4
-  dw dup_,namef_  ; get its xt
+  dw dup_,name_from_  ; get its xt
   dw dp_,fetch_
   dw u_min_,dp_,store_  ; trim dict
 paren_forget_.4:
-  dw ntnam_
+  dw n_to_name_
   dw branch_,paren_forget_.3
 paren_forget_.5:
   dw swap_,store_
@@ -10029,23 +10069,25 @@ next_block_:
 ; (THRU)  ( +n1 +n2 -- )
 ;   1+ swap ?do i block b/buf i (evaluate) loop
 
+debug_thru: equ false ; XXX TMP for debugging
+
   _header _hidden,'(THRU)'
 paren_thru_:
   call do_colon
-  _debug "start of (thru)",0
+  _debug "start of (thru)",debug_thru
   dw one_plus_,swap_
   dw paren_question_do_,paren_thru_.end
 paren_thru_.do:
-  _debug "start of loop of (thru)",0
+  _debug "start of loop of (thru)",debug_thru
   dw i_,block_
-  _debug "(thru) after block",0
+  _debug "(thru) after block",debug_thru
   dw bytes_per_buffer_
-  _debug "(thru) after b/buf",0
+  _debug "(thru) after b/buf",debug_thru
   dw i_,paren_evaluate_
-  _debug "(thru) after (evaluate)",0
+  _debug "(thru) after (evaluate)",debug_thru
   dw paren_loop_,paren_thru_.do
 paren_thru_.end:
-  _debug "end of (thru)",0
+  _debug "end of (thru)",debug_thru
   dw paren_exit_
 
 ; THRU  ( +n1 +n2 -- )
@@ -10054,11 +10096,11 @@ paren_thru_.end:
   _header _public,'THRU'
 thru_:
   call do_colon
-  _debug "start of thru",0
+  _debug "start of thru",debug_thru
   dw paren_thru_
-  _debug "thru before ?block",1
+  _debug "thru before ?block",debug_thru
   dw question_block_
-  _debug "end of thru",1
+  _debug "end of thru",debug_thru
   dw paren_exit_
 
 ; LOAD  ( +n -- )
