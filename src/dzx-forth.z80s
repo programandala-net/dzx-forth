@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501280123'  ; release
+  db                            '201501280243'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -137,7 +137,7 @@ start: equ 25000 ; start of DZX-Forth in memory
   org start
 
   jp cold_boot
-;  jp warmboot  ; XXX TODO
+;  jp warm_boot  ; XXX TODO
 
 ; }}} **********************************************************
 ; Labels {{{
@@ -6073,6 +6073,8 @@ current.variable:
 
 ; GET-CONTEXT  ( -- wid )
 
+  ; XXX TODO -- why needed and hidden?
+  ; 'context @' can be used instead
   _header _hidden,'GET-CONTEXT'
 get_context_:
   ld hl,(context_.variable)
@@ -6397,8 +6399,9 @@ name_from_:
 wordlist_to_name_: equ fetch_
 
 ; XXX TMP still used in the Forth sources
-  _header _public,'W>NAME',,fetch_
-w_to_name_: equ fetch_
+; XXX OLD moved to <src/dxforth.fs>
+;  _header _public,'W>NAME',,fetch_
+;w_to_name_: equ fetch_
   
 
 ; -ALIAS  ( nfa -- nfa flag )
@@ -8673,6 +8676,7 @@ dzx_forth_:
 ; ; Convert logical drive number (0=default, 1=A, 2=B, etc) to absolute
 ; ; drive number (0=A, 1=B, 2=C, etc).
 ; ; XXX OLD?
+; XXX TODO rewrite? -- meanwhile, a fake in <src/dxforth.fs>
 
 ;   _header _public,'>DRIVE'
 ; to_drive_:
@@ -8696,6 +8700,7 @@ dzx_forth_:
 ; ; be overwritten by subsequent operations.
 ; ;
 ; ; XXX OLD?
+; XXX TODO rewrite? -- meanwhile, a fake in <src/dxforth.fs>
 
 ;   _header _public,'PATH'  ; uses numeric buffer
 ; path_:
@@ -9746,7 +9751,7 @@ block_number_mask:  equ 0x7FFF
 sfp_:
   call do_create
   dw file_descriptor_blocks_table       ; current
-  dw file_descriptor_blocks_table+cell  ; swap_-file
+  dw file_descriptor_blocks_table+cell  ; swap file
 
 ; SWAP-FILE  ( -- )
 ;   scr @ scr# ! sfp 2@ swap sfp 2!
@@ -9768,7 +9773,7 @@ swap_file_:
 ; FDB  ( -- a )
 ;   (filedescriptorblockstable) (maxopensourcefiles) 0 do dup @ @ 0= if unloop exit
 ;        then cell+ loop abort" too many files"
-
+; XXX TODO 
   _header _public,'FDB'
   ; get a free slot
 fdb_:
@@ -10487,6 +10492,8 @@ question_block_.end:
   ; dw paren_loop_,paren_.do
 ; index_.end:
   ; dw paren_next_
+
+
 
 
 endif ; end of block file words
