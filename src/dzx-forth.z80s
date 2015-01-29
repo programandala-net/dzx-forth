@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501281948'  ; release
+  db                            '201501292201'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -44,7 +44,7 @@ _version: macro
 ; * 'return'
 ; * 'key', 'key?'
 ; * 'type'
-; + 'bootmessage'
+; + 'boot-message'
 ; * 'quit', 'accept', 'interpret'
 ; + 'alias'
 ; + "%" number prefix
@@ -88,18 +88,22 @@ _version: macro
 ; ! '>fname'renamed to '>filename-buffer'
 ; + 'rename-file'
 ; ! faster '+string'
+; + 'control>bl'
 
 ; ------------------------------
 ; XXX TODO
 
+; 2015-01-29: idea: make every 'dw here_' optional, depending on
+; 'size_optimization', with the alternative 'dw dp_,fetch_'
+;
+; 2015-01-29: improve the "undefined word" message to show the word name.
+;
 ; 2015-01-28: 'block-included' from Gforth; 'reposition-block-file'
 ;
 ; 2015-01-28: a variable with the first loadable block (0/1)
 ;
 ; Simplify the 'dzx-forth' word: use only the version string, and make
 ; 'dzx-forth' return it
-;
-; 2015-01-26: FIX problem with division!
 ;
 ; 2015-01-26: check if 'last-filename' works fine, or the addresses of
 ; 'filename-buffers' change.
@@ -189,7 +193,8 @@ top_prunes:             defl 0 ; XXX OLD ?
 
 parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
 user_data_size:               equ 128
-word_buffer_size:             equ 31+5
+max_word_length:              equ 31
+word_buffer_size:             equ max_word_length+5
 
 ; ------------------------------
 ; ZX Spectrum
@@ -290,6 +295,9 @@ endif
 
 ; ..............................
 
+circular_string_buffer?:      equ yes
+circular_string_buffer_size:  equ 512
+
 
 classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
 tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
@@ -299,10 +307,10 @@ fast_emit?:                        equ yes ; if yes, some words jump directly in
 ; XXX TMP
 restore_user?           equ no ; define the word 'restore-user'? (it needs 28 bytes)
 
-pictured_numeric_buffer_size: equ 68
-stack_size:                   equ 256
-return_stack_size:            equ 256
-tib_size:                     equ 80    ; Terminal Input Buffer
+pictured_numeric_output_buffer_size:  equ 34 ; XXX it was 68 in DX-Forth, why? -- min: 2 x cell_bits + 2 = 34
+stack_size:                           equ 256
+return_stack_size:                    equ 256
+tib_size:                             equ 80    ; Terminal Input Buffer
 
 ; }}} **********************************************************
 ; Description {{{
@@ -349,83 +357,61 @@ tib_size:                     equ 80    ; Terminal Input Buffer
 ; fam     = file access method
 
 ; ------------------------------
-; Non Forth-83 Standard word definitions:
-;
-; FIG Fig-FORTH model
-; ANS ANS FORTH Standard (document dpANS-6, June 1993)
-
-; ------------------------------
-; Memory allocation ; XXX OLD
-
-; The memory above LIMIT is used only by the interpreter.  This space
-; is not wasted for turnkey applications as LIMIT, user variables and
-; stacks are relocated to EM giving applications more free ram (as
-; indicated by UNUSED).
-
-; EM  |-------------  end of memory
-; |
-; HM  |-------------
-; |   parsed string buffer
-; |-------------
-; |   terminal input buffer
-; TIB |-------------
-; |   file descriptor blocks
-; FDB |-------------
-; |   block buffer
-; LIMIT |-------------
-; |   handle r/w buffer
-; HBUF  |-------------
-; |   file handles
-; |-------------
-; |   user variables
-; R0  |-------------
-; |   return stack
-; S0  |-------------
-; |   data stack
-; PAD |-------------
-; |   word and number conversion area
-; DP  |-------------
-; |   application dictionary
-; 0x0100 |-------------
-
-; ------------------------------
 ; Header structure
 
-; nfa db length+flags     ; length = 1..31
+; nfa db length+flags     ; length = 1..max_word_length
 ;     ds length           ; name
 ; lfa dw previousnfa
 ; cfa dw codeaddress
 ; pfa ds ...              ; data or code
 
 ; ------------------------------
-; Memory map ; XXX TODO
+; Memory map
 
-; ----- end of memory
-; UDG definitions
-; ---- UDG system variable
-; ... free space
+; XXX TODO -- unfinished
+
+; <----- 0xFFFF, top of memory
+; UDG definitions ; XXX OLD
+; <---- UDG system variable ; XXX OLD
+; ... free dictionary space
 ; PAD buffer
-; ---- PAD
-; ---- DP
-; ... used space
-; WORD buffer
-; parsed string buffer
-; ---- R0
-; Return stack (grows toward low memory)
-; ---- S0
-; Stack (grows toward low memory)
-; User data
-; TIB
-; file descriptor
-; block buffer
+; <---- PAD
+; picture numeric output buffer
+; <---- DP
+; ... used dictionary space
+;
+; circular string buffer XXX TODO
+;
+; parsed string buffer XXX OLD
+; WORD buffer XXX OLD
+;
+; <---- F0 (bottom of floating point stack)
+; ...  floating point stack (grows toward low memory)
+; <---- FP@
+; ...
+; <---- R0 (bottom of return stack)
+; ...  return stack (grows toward low memory)
+; <---- RP@
+; ...
+; <---- S0 (bottom of data stack)
+; ... data stack (grows toward low memory)
+; <---- SP@
+; ...
+; User data area
+; <---- UDP (User Data Pointer)
+; Terminal Input Buffer
+; <---- TIB
 ; boot jumps
-; ---- DZX-Forth's org
-; ---- BASIC's RAMTOP
+; <---- DZX-Forth origin
+; <---- BASIC's RAMTOP
 ; ...
 ; BASIC program and variables
 ; system variables
-; screen memory
+; <----- 0x5B00
+; screen
+; <----- 0x4000
 ; ROM
+; <----- 0x0000, bottom of memory
 
 ; }}} **********************************************************
 ; Macros {{{
@@ -664,12 +650,24 @@ return_stack_0:
     float_stack_0:
   endif
 
-parsed_string_buffer:
-  if classic_Forth_behaviours?
-    ds parsed_string_buffer_size
-  else
-    ds parsed_string_buffer_size+word_buffer_size ; buffer of S" and WORD
+  if circular_string_buffer?
+
+    circular_string_buffer:
+      ds circular_string_buffer_size
+
+;  else
   endif
+
+    parsed_string_buffer:
+      if classic_Forth_behaviours?
+        ; buffer of 's"'
+        ds parsed_string_buffer_size
+      else
+        ; buffer of 's"' and 'word'
+        ds parsed_string_buffer_size+word_buffer_size
+      endif
+
+;  endif
 
 hm: equ $   ; system definitions and header memory ; XXX OLD ?
 
@@ -1422,7 +1420,7 @@ dump_.do:
   dw i_,dup_,u_dot_,c_fetch_,dup_,u_dot_
   ; dw dup_
   ; dw c_lit_
-  ; db 31
+  ; db sp_char-1
   ; dw greater_
   ; dw branch_if_false_
   dw emit_,cr_
@@ -1641,6 +1639,58 @@ align_: equ next
 
   _header _public,'ALIGNED',_immediate,noop_
 aligned_: equ next
+
+
+; }}} **********************************************************
+; Circular string buffer {{{
+
+if circular_string_buffer?
+
+  csb_unused:  equ circular_string_buffer
+  csb0:        equ circular_string_buffer+cell
+
+; ?CSB  ( len -- )
+; Make sure there's room for the given characters.
+  _header _hidden,'?CSB'
+question_csb_:
+  call do_colon
+  dw dup_,lit_,csb_unused,fetch_,greater_
+  dw branch_if_false_,question_csb_.enough
+  ; not enough space; reset the pointer
+  dw lit_,circular_string_buffer_size
+  dw lit_,csb_unused,store_
+question_csb_.enough:
+  dw negate_,lit_,csb_unused,plus_store_
+  dw paren_exit_
+
+; STRING-ALLOCATE  ( len -- ca )
+  _header _hidden,'STRING-ALLOCATE'
+string_allocate_:
+  call do_colon
+  dw question_csb_
+  dw lit_,csb0
+  dw lit_,csb_unused,fetch_
+  dw plus_
+  dw paren_exit_
+
+; SAVE-STRING  ( ca1 len1 -- ca2 len1 )
+  _header _hidden,'SAVE-STRING'
+save_string_:
+  call do_colon
+  dw dup_,string_allocate_,swap_
+  dw two_dup_,two_to_r_,move_,two_from_r_
+  dw paren_next
+
+; SAVE-COUNTED-STRING  ( ca1 len1 -- ca2 len1 )
+  _header _hidden,'SAVE-STRING'
+save_counted_string_:
+  call do_colon
+  dw count_
+  dw dup_,one_plus_,string_allocate_
+  dw dup,to_r_,place_,from_r_
+  dw paren_exit_
+
+endif
 
 ; }}} **********************************************************
 ; Arithmetic and logical {{{
@@ -2802,7 +2852,7 @@ number_question_.end:
 
 ; <#  ( -- )
 ;   pad hld !
-
+; XXX FIXME do not use PAD, but the circular string buffer
   _header _public,'<#'
 less_number_sign_:
   call do_colon
@@ -2812,7 +2862,7 @@ less_number_sign_:
 
 ; #>  ( d -- ca u )
 ;   2drop hld @ pad over -
-
+; XXX FIXME do not use PAD, but the circular string buffer
   _header _public,'#>'
 number_sign_greater_:
   call do_colon
@@ -2832,7 +2882,7 @@ phld_:
   call do_colon
   dw negate_,hld_,plus_store_
   dw hld_,fetch_,dup_
-  dw dp_,fetch_,u_less_
+  dw here_,u_less_
   dw paren_abort_quote_
   _dcs 'HOLD buffer overflow'
   dw paren_exit_
@@ -5124,7 +5174,7 @@ search_wordlist_:
   call do_colon
   dw to_r_,wpack_,from_r_
   dw wordlist_find_,dup_
-  dw question_branch_,search_wordlist_.end
+  dw branch_if_0_,search_wordlist_.end
   dw nip_
 search_wordlist_.end:
   dw paren_exit_
@@ -5943,8 +5993,8 @@ file_id_table: ; XXX NEW
   ; dw return_stack_size   ; 22 return stack (bytes)
 ; nus:
   ; dw user_data_size    ; 24 user area (bytes)
- npno: ; XXX OLD -- still used, convert to a constant
-   dw pictured_numeric_buffer_size   ; 26 HOLD buffer size (bytes)
+; npno: ; XXX OLD 
+;   dw pictured_numeric_output_buffer_size   ; 26 HOLD buffer size (bytes)
 ;nmscon: ; XXX OLD
 ;  dw -2386   ; 28 MS timing constant
 ;ntmode: ; XXX OLD
@@ -6475,7 +6525,6 @@ to_name_.5:
   dw paren_exit_    ; not found
 
 ; (NAME)  ( nfa -- ca len )
-;   count 31 and
 ; XXX TODO rename after Gforth and Forth-2012
 
   _header _public,'(NAME)'
@@ -6483,7 +6532,7 @@ paren_name_:
   pop de
   ld a,(de)
   inc  de
-  and 0x1F
+  and max_word_length ; mask (0x1F)
   ld l,a
   ld h,0
   jp push_de_hl
@@ -6620,14 +6669,14 @@ question_stack_:
   dw paren_exit_
 
 ; ?DEFINED  ( flag -- )
-;   0= abort" is undefined"
 
   _header _hidden,'?DEFINED'
 question_defined_:
   call do_colon
   dw zero_equals_
   dw paren_abort_quote_
-  _dcs 'undefined word'
+  _dcs 'undefined word: '
+  dw pwa_,count_,type_
   dw paren_exit_
 
 ; [ ( -- )
@@ -6868,14 +6917,12 @@ number_tib_:
 endif
 
 ; PAD  ( -- a )
-;   dp @ (npno) @ +
 
   _header _public,'PAD'
 pad_:
   call do_colon
-  dw dp_,fetch_
-  dw lit_,npno
-  dw fetch_
+  dw here_
+  dw lit_,pictured_numeric_output_buffer_size
   dw plus_
   dw paren_exit_
 
@@ -7005,27 +7052,29 @@ parse_dollar_.2:
   dw from_r_
   dw paren_exit_
 
-; PWA  ( -- adr )
+; PWA  ( -- ca )
 ; parsed word address
 
-  _header _hidden,'PWA'
+  _header _public,'PWA'
 pwa_:
   call do_value
   ds cell
 
-; WPACK  ( ca1 +n -- ca2 )
+; WPACK  ( ca1 len1 -- ca2 )
+;
+; Pack string in the 'word' buffer
+;
 ;   255 min (hm-5) over - dup to pwa packed
 ;   bl affix
 
   _header _hidden,'WPACK'
-  ; pack string in WORD's buffer
 wpack_:
   call do_colon
   dw c_lit_
   db 255          ; 255
   dw min_          ; min
   if  classic_Forth_behaviours?
-    dw dp_,fetch_     ; dp @
+    dw here_
   else
     dw lit_,hm-5     ; (hm) 5 -
     dw over_,minus_   ; over -
@@ -7069,7 +7118,7 @@ parse_name_:
   _header _hidden,'DEFINED'
 defined_:
   call do_colon
-  dw bl_word_,find_ ; bl_-word find
+  dw bl_word_,find_
   dw paren_exit_
 
 ; '  ( -- a )
@@ -7464,14 +7513,57 @@ interpret_.end:
 
   dw paren_exit_
 
+; (CONTROL>BL)  ( ca len -- ca len )
+; 
+; Change all end-of-word control chars (CR, LF, TAB)
+; to spaces in the given text.
+
+  _header _public,'(CONTROL>BL)'
+paren_control_to_bl_:
+  ; XXX TODO -- other method faster than pop-push:
+  pop de
+  pop hl
+  push hl
+  push de
+paren_control_to_bl_.begin:
+  ; hl = pointer to current char
+  ; de = remaining chars
+  ld a,d
+  or e
+  jp z,next
+  dec de
+  ld a,(hl)
+  cp cr_char
+  jp z, paren_control_to_bl_.space
+paren_control_to_bl_.check_tab:
+  cp 9 ; standard TAB char (not ZX Spectrum TAB char)
+  jp z, paren_control_to_bl_.space
+paren_control_to_bl_.check_lf:
+  cp lf_char
+  jp nz, paren_control_to_bl_.repeat
+paren_control_to_bl_.space:
+  ld (hl),sp_char
+paren_control_to_bl_.repeat:
+  inc hl
+  jp paren_control_to_bl_.begin
+
+; CONTROL>BL  ( ca len -- ca len )
+; 
+; Convert end-of-word control chars (CR, LF, TAB) to spaces.
+
+  _header _public,'CONTROL>BL'
+control_to_bl_:
+  call fetch_execute_
+  dw paren_control_to_bl_
+
 ; (EVALUATE)  ( ca len blk -- )
 ;
 ; does not restore block contents
 ;
 ;         blk @ >in @ 2>r
-;         source 2>r blk !
-;         'source 2! >in off interpret 2r>
-;         'source 2!
+;         source 2>r
+;         blk !  'source 2!  >in off  interpret
+;         2r> 'source 2!
 ;         2r> >in ! blk !
 
   _header _hidden,'(EVALUATE)'
@@ -7489,6 +7581,7 @@ paren_evaluate_:
   _debug "(evaluate) before source",0
   dw source_,two_to_r_
   dw blk_,store_
+  dw control_to_bl_
   dw tick_source_,two_store_
   dw in_,off_
   _debug "(evaluate) before interpret",0
@@ -7769,7 +7862,7 @@ paren_abort_:
 ;         then
 ;       then
 ;       ." Error: "
-;       [char] " dup emit pwa count 31 min type emit
+;       [char] " dup emit pwa count max_word_length min type emit
 
   _header _hidden,'.ERROR'
 dot_error_:
@@ -7780,10 +7873,10 @@ dot_error_:
 
   dw blk_,fetch_
   dw question_dup_
-  dw question_branch_,dot_error_.1
+  dw branch_if_0_,dot_error_.1
   dw file_question_
   dw and_    ; screen file open and loading from block?
-  dw question_branch_,dot_error_.1
+  dw branch_if_false_,dot_error_.1
   dw current_block_file_,type_
   dw in_,fetch_
   dw two_minus_    ; adjust pointer
@@ -7811,7 +7904,7 @@ dot_error_.1:
   dw dup_,emit_
   dw pwa_,count_
   dw c_lit_
-  db 31
+  db max_word_length
   dw min_
   dw type_
   dw emit_
@@ -7826,7 +7919,7 @@ dot_error_.1:
 
   ; XXX -- used only by 'throw'; I don't understand it yet
 
-  _header _hidden,'ERROR'
+  _header _public,'ERROR'
 error_:
   call do_colon
   if debug? ; XXX INFORMER
@@ -7843,10 +7936,13 @@ error_.1:
   endif
   dw lit_,-2
   dw paren_of_,error_.3
-  dw boot_,cell_plus_,fetch_
-  dw zero_equals_
-  dw question_branch_,error_.2
-  dw dot_error_    ; skipped by applications
+
+; XXX OLD -- DX-Forth
+;  dw boot_,cell_plus_,fetch_
+;  dw zero_equals_
+;  dw question_branch_,error_.2
+;  dw dot_error_    ; skipped by applications
+
 error_.2:
   if debug? ; XXX INFORMER
     dw paren_dot_quote_
@@ -8430,7 +8526,7 @@ paren_forget_.3:
   dw minus_alias_    ; not an alias
   dw question_branch_,paren_forget_.4
   dw dup_,name_from_  ; get its xt
-  dw dp_,fetch_
+  dw here_
   dw u_min_,dp_,store_  ; trim dict
 paren_forget_.4:
   dw n_to_name_
@@ -8482,7 +8578,7 @@ forget_:
   dw over_,u_less_
   dw question_branch_,forget_.1
   dw drop_
-  dw dp_,fetch_
+  dw here_
 forget_.1:
   dw paren_forget_
   dw paren_exit_
@@ -9678,7 +9774,7 @@ save_system_:
 ;;  db cold_.7-cold_.6
 ;;  dw cmove_
 ;;  dw lit,0x0100
-;;  dw dp_,fetch_
+;;  dw here_
 ;;  dw over_,minus_
 ;;  dw r_fetch_,write_file_  ; save application
 ;;  dw boot_,cell_plus_,off_  ; reset Forth flag
@@ -10505,7 +10601,7 @@ question_block_.end:
 ; index_.loop:
   ; dw paren_loop_,paren_.do
 ; index_.end:
-  ; dw paren_next_
+  ; dw paren_exit_
 
 
 
