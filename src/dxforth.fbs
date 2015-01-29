@@ -1,0 +1,54 @@
+\ DX-Forth compatibility layer for DZX-Forth                   
+                                                               
+\ This file is part of DZX-Forth                               
+                                                               
+\ This file contains a compatibility layer to load             
+\ DX-Forth sources into DZX-Forth.                             
+                                                               
+\ 2015-01-28: First version.                                   
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+cr .( DX-Forth compatibility layer for DZX-Forth) cr           
+' .wid alias .voc                                              
+' >filename-buffer alias >fname                                
+' compiling? alias state?                                      
+' cs0 alias cf0                                                
+' current-block-file alias loadfile                            
+\ ' current-stream-file alias fname                            
+' dos-version alias dosver                                     
+' file-id alias getfh                                          
+' filename-buffers alias zbuf                                  
+' last-filename alias lastfile                                 
+' load-file alias fload                                        
+' noop alias -caps immediate                                   
+' noop alias caps immediate                                    
+\ variable sys                                                 
+-->                                                            
+\ DX-Forth compatibility layer for DZX-Forth                   
+' noop alias system immediate                                  
+' noop alias application immediate                             
+' page alias cls                                               
+' parse-filename alias getfilename                             
+' parse-name alias token                                       
+' save-system alias save                                       
+\ ' set-fcb alias setfcb                                       
+' wordlist-find alias wfind                                    
+' wordlist>name alias w>name                                   
+: filetype?  ( -- len )  filetype nip  ;                       
+' noop alias >drive                                            
+: path drop s" xxx" 0 ;                                        
+' open-block-file alias open                                   
+' here alias sys-vec                                           
+' drop alias remember                                          
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
