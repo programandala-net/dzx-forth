@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501300120'  ; release
+  db                            '201501300216'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -98,20 +98,22 @@ _version: macro
 ; 2015-01-29: idea: make every 'dw here_' optional, depending on
 ; 'size_optimization', with the alternative 'dw dp_,fetch_'
 ;
-; 2015-01-29: improve the "undefined word" message to show the word name.
+; 2015-01-29: fix: improve the "undefined word" message to show the word name.
+; this is required in order to know what fails about 'include'.
 ;
-; 2015-01-28: 'block-included' from Gforth; 'reposition-block-file'
+; 2015-01-28: new: 'block-included' from Gforth; 'reposition-block-file'
 ;
-; 2015-01-28: a variable with the first loadable block (0/1)
+; 2015-01-28: idea: a variable with the first loadable block (0/1)
 ;
-; Simplify the 'dzx-forth' word: use only the version string, and make
+; change: Simplify the 'dzx-forth' word: use only the version string, and make
 ; 'dzx-forth' return it
 ;
 ; 2015-01-26: check if 'last-filename' works fine, or the addresses of
 ; 'filename-buffers' change.
 ;
 ; 2015-01-26: improve 'file-id-table' to hold also if every opened file is
-; headed.  use one bit for "open", other bit for "headed".
+; headed.  use one bit for "open", other bit for "headed". [also if it's a
+; block file; and its filename?]
 ;
 ; 2015-01-24: 'forth-wordlist'
 ;
@@ -264,8 +266,20 @@ endif
 
 ; ..............................
 
-floating_point?:           equ yes
+; user config
+
+floating_point?:           equ no
 ; XXX Note: aprox. 2336 bytes used
+
+if floating_point?
+  floating_point_engineering_output?:  equ yes
+  floating_point_stack?:               equ no ; XXX TODO -- not fully implemented in DX-Forth
+  if floatin_poin_stack?
+    f_stack_items: defl 6
+  endif
+endif
+
+; system
 
 ; f_init_patch:     defl noop_ ; XXX OLD
 ; f_identify_patch: defl noop_ ; XXX OLD
@@ -287,12 +301,15 @@ f_stack_size:     defl 0 ; bytes
 ;    f_number_patch:   defl f_number_ ; XXX OLD
 
     if floating_point_stack?
-      f_stack_items: defl 6
       f_stack_size:  defl (f_stack_items+5)*float ; allow extra for fp display etc
     endif
 
 ;    top_prunes: defl paren_minus_fp_.1 ; XXX OLD
 
+  else
+    ; defaults
+    floating_point_engineering_output?:   equ no
+    floating_point_stack?:                equ no
 endif
 
 ; ..............................
@@ -650,7 +667,7 @@ return_stack_end:
 return_stack_0:
 
   if floating_point? and floating_point_stack?
-    ds float_stack_size
+      ds float_stack_size
     float_stack_0:
   endif
 
@@ -705,12 +722,14 @@ cold_dph:       equ cold_dp ; XXX TMP -- still used by old code
                 dw init_dp  ; 12 = not used ; XXX FIXME still fetched by 'empty'
 cold_voc_link:  dw forth_.2  ; 14 = voc-link
 cold_fs0:                   ; 16 = fs0
-  if floating_point_stack? ; XXX TODO
+
+  if floating_point? and floating_point_stack? ; XXX TODO
                 dw float_stack_0 ; 16 = fs0
   else
                 dw 0             ; 16
   endif
                 ds cell       ; 18 = reserved
+
 
 init_user_variables.end:  ; end of data
 
@@ -6562,7 +6581,7 @@ question_defined_:
   dw zero_equals_
   dw paren_abort_quote_
   _dcs 'undefined word: '
-  dw pwa_,count_,type_
+  dw pwa_,count_,type_ ; XXX FIXME why nothing is printed?
   dw paren_exit_
 
 ; [ ( -- )
@@ -6987,8 +7006,7 @@ wpack_:
     dw lit_,hm-5     ; (hm) 5 -
     dw over_,minus_   ; over -
   endif
-  dw dup_
-  dw paren_to_,pwa_ ; to pwa
+;  dw dup_,paren_to_,pwa_ ; to pwa ; XXX OLD
   dw packed_
   dw bl_,affix_     ; bl affix \ add a trailing blank
   dw paren_exit_
@@ -7003,7 +7021,7 @@ word_:
   dw true_,paren_parse_
   if circular_string_buffer?
     dw save_counted_string_
-    dw dup_,paren_to_,pwa_
+;    dw dup_,paren_to_,pwa_ ; XXX OLD -- it was copied from 'wpack'
   else
     dw wpack_
   endif
@@ -7037,6 +7055,10 @@ parse_name_:
 defined_:
   call do_colon
   dw bl_word_,find_
+  ; XXX INFORMER
+;  _debug 'defined word: ',1
+;  dw lit_,red_color,border_
+;  dw pwa_,count_,type_
   dw paren_exit_
 
 ; '  ( -- a )
@@ -7252,8 +7274,10 @@ debug_interpret:
 interpret_:
   call do_colon
 interpret_.begin:
-  _debug_variable "start of interpret",debug_interpret
+  _debug_variable 'start of interpret',debug_interpret
   dw bl_word_
+  _debug 'about to save the last parsed word',1
+  dw dup_,paren_to_,pwa_ ; XXX NEW but XXX FIXME -- useless
   _debug_variable 'interpret after bl_word',debug_interpret
   dw dup_,c_fetch_
   dw branch_if_0_,interpret_.end  ; while not end of input stream
@@ -7904,7 +7928,7 @@ catch_:
 ;     rp! r> catcher ! r> fsp ! r> swap >r sp! drop r>
 ;   then
    ;
-; XXX FIXME -- it's not in theh glossary
+; XXX FIXME -- it's not in the glossary
 
   _header _public,'THROW'
 throw_:
@@ -8055,9 +8079,10 @@ paren_boot_message_:
   db cr_char
   db copy_char," 2014,2015 Marcos Cruz",cr_char
   db "(programandala.net)",cr_char
-  db "DZX-Forth comes with",cr_char
-  db "ABSOLUTELY NO WARRANTY;",cr_char
-  db "for details see the license",cr_char
+  ; XXX TMP
+;  db "DZX-Forth comes with",cr_char
+;  db "ABSOLUTELY NO WARRANTY;",cr_char
+;  db "for details see the license",cr_char
 paren_boot_message_.end
 
   if floating_point?
