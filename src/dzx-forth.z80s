@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501292201'  ; release
+  db                            '201501300120'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -89,6 +89,8 @@ _version: macro
 ; + 'rename-file'
 ; ! faster '+string'
 ; + 'control>bl'
+; + block files can be opened and loaded.
+; + circular string buffer
 
 ; ------------------------------
 ; XXX TODO
@@ -233,11 +235,11 @@ filename_buffer_size:   equ filename_size+1 ; for trailing 0xFF
 
 ; XXX TODO organize and documentate
 
-debug?:                            equ no ; debugging messages?
+debug?:                           equ no ; debugging messages?
 
-case_insensitive_names?:           equ yes
-control_flow_stack_extensions?:    equ yes
-warning_options:                   equ no ; XXX TODO does this causes trouble?
+case_insensitive_names?:          equ yes
+control_flow_stack_extensions?:   equ yes
+warning_options?:                 equ no ; XXX TODO does this causes trouble?
 
 ; XXX FIXME when yes, some things don't work fine:
 size_optimization?:                equ no ; if yes, the code will be smaller but slower
@@ -295,9 +297,10 @@ endif
 
 ; ..............................
 
-circular_string_buffer?:      equ yes
-circular_string_buffer_size:  equ 512
-
+circular_string_buffer?: equ yes
+if circular_string_buffer?
+  cbs_size: equ 512
+endif
 
 classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
 tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
@@ -620,11 +623,12 @@ _debug_variable: macro message,address
 
   local _debug_variable.the_end
 
-  dw lit_,address,fetch_
-;_debug_variable.end: defl _debug_variable.the_end
-  dw branch_if_0_,_debug_variable.the_end
-  _debug message,true
-_debug_variable.the_end: equ $
+  if debug?
+      dw lit_,address,fetch_
+      dw branch_if_0_,_debug_variable.the_end
+      _debug message,true
+    _debug_variable.the_end: equ $
+  endif
 
   endm
 
@@ -652,8 +656,8 @@ return_stack_0:
 
   if circular_string_buffer?
 
-    circular_string_buffer:
-      ds circular_string_buffer_size
+    csb_unused:  dw cbs_size
+    csb0:        ds cbs_size
 
 ;  else
   endif
@@ -1418,11 +1422,15 @@ dump_:
   dw bounds_,paren_question_do_,dump_.end
 dump_.do:
   dw i_,dup_,u_dot_,c_fetch_,dup_,u_dot_
-  ; dw dup_
-  ; dw c_lit_
-  ; db sp_char-1
-  ; dw greater_
-  ; dw branch_if_false_
+  dw dup_
+  dw c_lit_
+  db sp_char
+  dw less_
+  dw branch_if_false_,dump_.emit
+  dw drop_
+  dw c_lit_
+  db '.'
+dump_.emit
   dw emit_,cr_
   dw paren_loop_,dump_.do
 dump_.end:
@@ -1646,8 +1654,17 @@ aligned_: equ next
 
 if circular_string_buffer?
 
-  csb_unused:  equ circular_string_buffer
-  csb0:        equ circular_string_buffer+cell
+; CSB-UNUSED  ( -- len )
+  _header _public,'CSB-UNUSED'
+csb_unused_:
+  ld hl,(csb_unused)
+  jp push_hl
+
+; CSB0  ( -- a )
+  _header _public,'CSB0'
+csb0_:
+  ld hl,csb0
+  jp push_hl
 
 ; ?CSB  ( len -- )
 ; Make sure there's room for the given characters.
@@ -1657,7 +1674,7 @@ question_csb_:
   dw dup_,lit_,csb_unused,fetch_,greater_
   dw branch_if_false_,question_csb_.enough
   ; not enough space; reset the pointer
-  dw lit_,circular_string_buffer_size
+  dw lit_,cbs_size
   dw lit_,csb_unused,store_
 question_csb_.enough:
   dw negate_,lit_,csb_unused,plus_store_
@@ -1668,26 +1685,24 @@ question_csb_.enough:
 string_allocate_:
   call do_colon
   dw question_csb_
-  dw lit_,csb0
-  dw lit_,csb_unused,fetch_
-  dw plus_
+  dw csb0_,csb_unused_,plus_
   dw paren_exit_
 
 ; SAVE-STRING  ( ca1 len1 -- ca2 len1 )
-  _header _hidden,'SAVE-STRING'
+  _header _public,'SAVE-STRING'
 save_string_:
   call do_colon
   dw dup_,string_allocate_,swap_
-  dw two_dup_,two_to_r_,move_,two_from_r_
-  dw paren_next
+  dw two_dup_,two_to_r_
+  dw move_,two_from_r_
+  dw paren_exit_
 
-; SAVE-COUNTED-STRING  ( ca1 len1 -- ca2 len1 )
-  _header _hidden,'SAVE-STRING'
+; SAVE-COUNTED-STRING  ( ca1 len1 -- ca2 )
+  _header _public,'SAVE-COUNTED-STRING'
 save_counted_string_:
   call do_colon
-  dw count_
   dw dup_,one_plus_,string_allocate_
-  dw dup,to_r_,place_,from_r_
+  dw dup_,to_r_,place_,from_r_
   dw paren_exit_
 
 endif
@@ -5118,8 +5133,10 @@ wordlist_find_.6:
   jp paren_exit_
 
 ; (FIND)  ( ca -- ca 0 | xt -1 | xt 1 )
-; searches CONTEXT CURRENT FORTH
-;       0 3 0 do
+;
+; searches CONTEXT CURRENT FORTH ; XXX ?
+;
+;       0  3 0 do
 ;         over i cells context + @
 ;         wordlist-find ?dup if  nip 2nip leave  then
 ;       loop
@@ -5130,11 +5147,6 @@ paren_find_:
   dw zero_,three_,zero_
   dw paren_do_,paren_find_.end
 paren_find_.do:
-  if 0 ;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'paren_find.do',cr_char
-    dw key_,drop_
-  endif
   dw over_
   dw i_,cells_
   dw context_,plus_,fetch_
@@ -5143,18 +5155,8 @@ paren_find_.do:
   dw nip_,two_nip_
   dw paren_leave_,paren_find_.do-cell
 paren_find_.loop:
-  if 0 ;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'paren_find.loop',cr_char
-    dw key_,drop_
-  endif
   dw paren_loop_,paren_find_.do
 paren_find_.end:
-  if 0 ;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'paren_find.end',cr_char
-    dw key_,drop_
-  endif
   dw paren_exit_
 
 ; FIND  ( ca -- ca 0 | xt -1 | xt 1 )
@@ -5172,7 +5174,13 @@ if 0 ; XXX TODO -- commented out in DX-Forth
   _header _public,'SEARCH-WORDLIST'
 search_wordlist_:
   call do_colon
-  dw to_r_,wpack_,from_r_
+  dw to_r_
+  if circular_string_buffer?
+    dw save_counted_string_
+  else
+    dw wpack_
+  endif
+  dw from_r_
   dw wordlist_find_,dup_
   dw branch_if_0_,search_wordlist_.end
   dw nip_
@@ -5181,7 +5189,7 @@ search_wordlist_.end:
 
 endif
 
-if warning_options
+if warning_options?
 
 ; -?  ( -- ) ; XXX OLD
 ; disable warnings for next definition only
@@ -5266,11 +5274,7 @@ xnfa:
   _header _public,'HEADER'
 header_:
   call do_colon
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'header',cr_char
-  endif
-  if warning_options
+  if warning_options?
     dw warning_question_
   else
     dw warning_,fetch_
@@ -5284,10 +5288,6 @@ header_:
   dw one_,within_ ; not 1..32?
   dw paren_abort_quote_
   _dcs 'invalid name'
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'header after invalid name',cr_char
-  endif
   ; ( ca )
   dw dup_,find_,nip_ ; ( ca f ) found?
   dw from_r_       ; ( ca f f1 ) is 'warning' on?
@@ -5300,10 +5300,6 @@ header_:
   _dcs ' is redefined'
 header_.1:
   ; the name was not found or 'warning' is off
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'header.1',cr_char
-  endif
   dw dup_,count_ ; ( ca ca1 len1 )
   dw tuck_      ; ( ca len1 ca1 len1 )
   dw plus_      ; ( ca len1 ca1+len1 )
@@ -5324,17 +5320,9 @@ header_.1:
   dw question_branch_,header_.2
   dw here_
 header_.2:
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'header.2',cr_char
-  endif
   dw dup_,rot_,store_
   dw over_,last_,two_store_
   dw swap_,cmove_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'header end',cr_char
-  endif
   dw paren_exit_
 
 ; ,CALL ( a -- )  $CD c, ,
@@ -5342,25 +5330,10 @@ header_.2:
   _header _hidden,',CALL'
 comma_call_:
   call do_colon
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'comma_call',cr_char
-    dw key_,drop_
-  endif
   dw c_lit_
   db 0xCD    ; Z80 'call' opcode
   dw c_comma_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'comma_call after c_comma',cr_char
-    dw key_,drop_
-  endif
   dw comma_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'comma_call at the end',cr_char
-    dw key_,drop_
-  endif
   dw paren_exit_
 
 ; BUILD ( xt "name" -- )
@@ -5368,23 +5341,8 @@ comma_call_:
   _header _public,'BUILD'
 build_:
   call do_colon
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'build',cr_char
-    dw key_,drop_
-  endif
   dw zero_,header_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'build after header',cr_char
-    dw key_,drop_
-  endif
   dw comma_call_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'build after comma_call',cr_char
-    dw key_,drop_
-  endif
   dw paren_exit_
 
 ; :  ( "name" -- )
@@ -5395,42 +5353,16 @@ build_:
   _header _public,':'
 colon_:
   call do_colon
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'colon',cr_char
-    _show_depth
-  endif
   dw lit_,do_colon
   dw build_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'colon after build',cr_char
-    _show_depth
-  endif
   dw smudge_
 colon_.1:
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'colon.1',cr_char
-    _show_depth
-  endif
   dw bal_,off_
   dw store_csp_
   if control_flow_stack_extensions?
     dw sp_fetch_,cs0_,store_
   endif
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'colon after control flow',cr_char
-    _show_depth
-  endif
   dw right_bracket_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'at colon exit',cr_char
-    _show_depth
-    dw dup_,dot_,cr_,cr_
-  endif
   dw paren_exit_
 
 ; EXIT  ( -- )
@@ -5473,38 +5405,12 @@ exit_: ; XXX TODO rename 'exit'
   _header _public,';',_immediate
 semicolon_:
   call do_colon
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'semicolon',cr_char
-    _show_depth
-    dw dup_,dot_,cr_
-  endif
   dw exit_
-  if 0;debug? ; XXX INFORMER
-    ;dw lit,2,border_
-    ; XXX FIXME this resets the machine:
-    ;dw paren_dotquote_
-    ;_dcs 'semicolon after compiling (exit)',crchar
-  endif
   dw bal_,fetch_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'semicolon after bal@',cr_char
-  endif
   dw question_bal_
   dw question_csp_
   dw smudge_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'semicolon after smudge',cr_char
-  endif
   dw left_bracket_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'semicolon exit',cr_char
-    _show_depth
-    dw dup_,dot_,cr_
-  endif
   dw paren_exit_
 
 ; :NONAME  ( -- xt )
@@ -5514,7 +5420,7 @@ semicolon_:
   _header _public,':NONAME'
 nonam_:
   call do_colon
-  if warning_options
+  if warning_options?
     dw warning_question_,drop_  ; allow -?
   endif
   dw here_
@@ -5560,11 +5466,6 @@ create_:
 variable_:
   call do_colon
   dw create_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'variable',cr_char
-    dw key_,drop_
-  endif
   dw two_,allot_
   dw paren_exit_
 
@@ -6635,23 +6536,8 @@ question_stack_:
   call do_colon
 ;  dw parenexit ; XXX TMP
   dw sp_fetch_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'SP = '
-    dw dup_,u_dot_,cr_
-  endif
   dw s0_,fetch_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'S0 = '
-    dw dup_,u_dot_,cr_
-  endif
   dw u_greater_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'result = '
-    dw dup_,dot_,cr_
-  endif
   dw paren_abort_quote_
   _dcs 'stack underflow'
   ; XXX TODO
@@ -6926,7 +6812,7 @@ pad_:
   dw plus_
   dw paren_exit_
 
-; SOURCE  ( -- ca u )
+; SOURCE  ( -- ca len )
 ;   'source 2@
 
   _header _public,'SOURCE'
@@ -6934,7 +6820,7 @@ source_:
   ld hl,tick_source_.variable
   jp two_fetch_.hl
 
-; PARSE  ( c -- ca u )
+; PARSE  ( c -- ca len )
 ;   0 (parse)
 
   _header _public,'PARSE'
@@ -6943,13 +6829,24 @@ parse_:
   push hl
   jp paren_parse_
 
-; (PARSE)  ( c f -- ca u )
+if 0 and circular_string_buffer? ; XXX TMP
+
+; XXX TODO
+
+else
+
+; XXX -- original version
+
+; (PARSE)  ( c f -- ca len )
 ;
-;         2>r source >in @ /string r>
-;         if  tuck r@ skip over - >in +!  then
-;         2dup r> scan nip tuck - dup rot 0<> - >in +!
+;         2>r source >in @ /string
+;         r> if
+;           tuck r@ skip over - >in +!
+;         then
+;         2dup r> scan nip tuck - dup rot 0<> -
+;         >in +!
 ; 
-; XXX -- what f means?:
+; XXX TODO -- what f means?:
 ; f = true, when called from 'word'
 ; f = false, when called from 'parse'
 ; XXX -- It seems the difference is where the string
@@ -6961,30 +6858,36 @@ paren_parse_:
   call do_colon
 
   dw two_to_r_
-  dw source_        ; ( ca len )
-  dw in_,fetch_     ; ( ca len in )
-  dw slash_string_  ; ( ca2 len2 )
-  dw from_r_        ; ( ca2 len2 f )
+  dw source_            ; ( ca len )
+  dw in_,fetch_         ; ( ca len in )
+  dw slash_string_      ; ( ca2 len2 )
+
+  ; XXX TODO move this skipping to 'word':
+  dw from_r_            ; ( ca2 len2 f )
   dw branch_if_0_,paren_parse_.1
   ; f<>0 (thus, '(parse)' was called by 'word')
-  dw tuck_            ; ( len2 ca2 len2 )
-  dw r_fetch_         ; ( len2 ca2 len2 c )
-  dw skip_            ; ( len2 ca2' len2' )
-  dw rot_,over_       ; ( ca2' len2' len2 len2' )
-  dw minus_           ; ( ca2' len2' diff )
-  dw in_,plus_store_  ; ( ca2' len2' )
+  dw tuck_              ; ( len2 ca2 len2 )
+  dw r_fetch_           ; ( len2 ca2 len2 c )
+  dw skip_              ; ( len2 ca2' len2' )
+  dw rot_,over_         ; ( ca2' len2' len2 len2' )
+  dw minus_             ; ( ca2' len2' diff )
+  dw in_,plus_store_    ; ( ca2' len2' )
 
 paren_parse_.1:
-  dw two_dup_         ; ( ca2' len2' ca2' len2' )
-  dw from_r_          ; ( ca2' len2' ca2' len2' c )
-  ; XXX TODO keep on noting the stack
-  dw scan_,nip_
-  dw tuck_
-  dw minus_,dup_
-  dw rot_,zero_not_equals_
-  dw minus_
+  dw two_dup_           ; ( ca2' len2' ca2' len2' )
+  dw from_r_            ; ( ca2' len2' ca2' len2' c )
+  dw scan_,nip_         ; ( ca2' len2' len3 )
+  dw tuck_              ; ( ca2' len3 len2' len3 )
+  dw minus_,dup_        ; ( ca2' len3 len2'-len3 len2'-len3 )
+  dw rot_               ; ( ca2' len2'-len3 len2'-len3 len3 )
+  dw zero_not_equals_   ; ( ca2' len2'-len3 len2'-len3 len3<>0? )
+  dw minus_             ; ( ca2' len2'-len3 len4 )
+                        ; when len3=0,  then len4 = len2'
+                        ; when len3<>0, then len4 = len2'-len3+1
   dw in_,plus_store_
   dw paren_exit_
+
+endif
 
 ; +PSB  ( a1 n1 n2 -- n3 )
 ;
@@ -7010,7 +6913,7 @@ plus_psb_:
   dw from_r_
   dw paren_exit_
 
-; PARSE$  ( c "ccc" -- a n )
+; PARSE$  ( c "ccc<c>" -- ca len )
 ;         0 begin
 ;           >r dup parse 2dup r> +psb >r
 ;           1+ + dup source + u<
@@ -7050,6 +6953,9 @@ parse_dollar_.2:
   dw two_drop_
   dw lit_,parsed_string_buffer
   dw from_r_
+  if circular_string_buffer?
+    dw save_string_ ; XXX TMP until the 'parse$' is rewritten to use the buffer
+  endif
   dw paren_exit_
 
 ; PWA  ( -- ca )
@@ -7059,6 +6965,8 @@ parse_dollar_.2:
 pwa_:
   call do_value
   ds cell
+
+if not circular_string_buffer?
 
 ; WPACK  ( ca1 len1 -- ca2 )
 ;
@@ -7085,12 +6993,20 @@ wpack_:
   dw bl_,affix_     ; bl affix \ add a trailing blank
   dw paren_exit_
 
+endif
+
 ; WORD  ( c -- ca )
 
   _header _public,'WORD'
 word_:
   call do_colon
-  dw true_,paren_parse_,wpack_
+  dw true_,paren_parse_
+  if circular_string_buffer?
+    dw save_counted_string_
+    dw dup_,paren_to_,pwa_
+  else
+    dw wpack_
+  endif
   dw paren_exit_
 
 ; BL-WORD  ( -- ca )
@@ -7103,10 +7019,12 @@ bl_word_:
 
 ; PARSE-NAME  ( "name" -- ca len )
 
+  ; XXX TODO write 'word' based on 'parse-name', not the other way
+  ; XXX TODO or make 'word' and 'parse-name' independent and faster
   _header _public,'PARSE-NAME'
 parse_name_:
   call do_colon
-  dw bl_word_,count_ ; bl_-word count
+  dw bl_word_,count_
   dw paren_exit_
 
 ; XXX TMP -- it's still used in the Forth source files
@@ -8034,13 +7952,6 @@ abort_:
   _header _hidden,'(ABORT")'
 paren_abort_quote_:
   call do_colon
-  if 0;debug? ; XXX INFORMER -- because of the problem in '?stack'
-    ; XXX FIXME this debug? code breaks something
-    dw paren_dot_quote_
-    _dcs 'abort" parameter = '
-    dw dot_s_,cr_
-    ; dw dup_,dot,cr_
-  endif
   dw from_r_,count_,rot_
   dw branch_if_false_,paren_abort_quote_.noop
   dw errmsg_,two_store_
@@ -10420,32 +10331,12 @@ init_scr_:
   dw paren_exit_
 
 init_scr_.no_error:
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'init-scr at no_error...'
-    dw cr_,key_,drop_
-  endif
   dw fdb_,sfp_,store_
   dw fd_,on_
   dw dup_,fid_,store_
   dw file_size_,drop_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'init-scr after file-size...' 
-    dw cr_,key_,drop_
-  endif
   dw bytes_per_buffer_,umslm_,nip_  ; overflow stores $FFFF
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'init-scr after umslm...'
-    dw cr_,key_,drop_
-  endif
   dw blks_,store_
-  if 0;debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'init-scr before last-filename...'
-    dw cr_,key_,drop_
-  endif
   dw last_filename_,fnb_,place_
 
 ; XXX OLD -- why DX-Forth does this without an option?
