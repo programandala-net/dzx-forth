@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501300216'  ; release
+  db                            '201501312352'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -29,8 +29,8 @@ _version: macro
 ; You should have received a copy of the GNU General Public License along with
 ; DZX-Forth; if not, see <http://gnu.org/licenses>.
 
-; ------------------------------
-; Version history
+; }}} **********************************************************
+; Version history {{{
 
 ; Note: "+" = new, "-" = removed, "*" = fixed, "!" = changed
 
@@ -92,14 +92,21 @@ _version: macro
 ; + block files can be opened and loaded.
 ; + circular string buffer
 
-; ------------------------------
-; XXX TODO
+; }}} **********************************************************
+; XXX TODO {{{
 
-; 2015-01-29: idea: make every 'dw here_' optional, depending on
-; 'size_optimization', with the alternative 'dw dp_,fetch_'
-;
 ; 2015-01-29: fix: improve the "undefined word" message to show the word name.
 ; this is required in order to know what fails about 'include'.
+;
+; 2015-01-30, 2015-01-16: fix: '(create-file)'. fix the strange issue with its
+; fam: +3DOS can not create r/o or s/r files.  The solution is to change the
+; fam, create the file and then force the original fam.
+;
+; 2015-01-30: Fix: redo the lost renamings in <tools.fb>: 'fname' to
+; 'current-stream-file'; 'loadfile' to 'current-file'. Better names?
+;
+; 2015-01-29: idea: make every 'dw here_' optional, depending on
+; 'size_optimization', with the alternative 'dw dp_,fetch_'
 ;
 ; 2015-01-28: new: 'block-included' from Gforth; 'reposition-block-file'
 ;
@@ -122,8 +129,6 @@ _version: macro
 ; (could be the xt of the printing routine).
 ;
 ; 2015-01-21: erase 'file-id-table' in 'cold'.
-;
-; 2015-01-16: finish '(create-file)'. fix the strange issue with its fam.
 ;
 ; 2015-01-14: change the format of headers created by 'defer'?
 ;
@@ -6036,11 +6041,11 @@ checking_:
 checking_.variable:
   ds cell
 
-; ERRMSG  ( -- a )
+; ABORT-MESSAGE  ( -- a )
 ; message holder for abort"
 
-  _header _hidden,'ERRMSG'
-errmsg_:
+  _header _hidden,'ABORT-MESSAGE'
+abort_message_:
   call do_create
   ds 2*cell
 
@@ -6579,9 +6584,13 @@ question_stack_:
 question_defined_:
   call do_colon
   dw zero_equals_
-  dw paren_abort_quote_
-  _dcs 'undefined word: '
-  dw pwa_,count_,type_ ; XXX FIXME why nothing is printed?
+; XXX OLD:
+;  dw paren_abort_quote_
+;  _dcs 'undefined word: '
+; XXX NEW:
+  dw lit_,-13 ; undefined word
+  dw and_,throw_
+
   dw paren_exit_
 
 ; [ ( -- )
@@ -7276,8 +7285,7 @@ interpret_:
 interpret_.begin:
   _debug_variable 'start of interpret',debug_interpret
   dw bl_word_
-  _debug 'about to save the last parsed word',1
-  dw dup_,paren_to_,pwa_ ; XXX NEW but XXX FIXME -- useless
+  dw dup_,paren_to_,pwa_ ; XXX NEW
   _debug_variable 'interpret after bl_word',debug_interpret
   dw dup_,c_fetch_
   dw branch_if_0_,interpret_.end  ; while not end of input stream
@@ -7755,16 +7763,125 @@ if 0
   db 0xFF      ; error 0: OK
 endif
 
-; XXX OLD
-;;; BOOT?  ( -- xt )
-;;
-;;  ; XXX TODO -- convert this into a variable that holds an xt?
-;;  ; XXX TODO -- combine with 'boot'
-;;  header hidden,'BOOT?'
-;;bootquestion:
-;;  ld hl,(initbootxt)
-;;  push hl
-;;  jp next
+; LITERAL  ( n -- ) char? if postpone clit c, exit then
+;       postpone lit , ; immediate
+
+  _header _public,'LITERAL',_immediate
+literal_:
+  call do_colon
+  dw char_question_ ; 8-bit number?
+  dw branch_if_false_,literal_.cell
+  ; 8-bit number
+  dw compile_,c_lit_
+  dw c_comma_
+  dw paren_exit_
+literal_.cell:
+  ; 16-bit number
+  dw compile_,lit_
+  dw comma_
+  dw paren_exit_
+
+; 2LITERAL  ( d -- )
+;   postpone 2lit , , ; immediate
+
+  _header _public,'2LITERAL',_immediate
+two_literal_:
+  call do_colon
+  dw compile_,two_lit_
+  dw comma_,comma_
+  dw paren_exit_
+
+; [']     ' [compile] literal  ; immediate
+
+  _header _public,"[']",_immediate
+bracket_tick_:
+  call do_colon
+  dw tick_
+  dw literal_
+  dw paren_exit_
+
+; [COMPILE]   ' compile,  ; immediate
+
+  _header _public,'[COMPILE]',_immediate
+bracket_compile_:
+  call do_colon
+  dw tick_
+  dw compile_comma_
+  dw paren_exit_
+
+; RECURSE  ( -- )
+; last cell+ @ compile, ; immediate
+
+  _header _public,'RECURSE',_immediate
+recurse_:
+  ld hl,(last_.xt)
+  push hl
+  jp compile_comma_
+
+; }}} **********************************************************
+; Errors {{{
+
+; ------------------------------
+; THROW code assignments in Forth-94
+;
+;  -1 ; ABORT
+;  -2 ; ABORT"
+;  -3 ; stack overflow
+;  -4 ; stack underflow
+;  -5 ; return stack overflow
+;  -6 ; return stack underflow
+;  -7 ; do-loops nested too deeply during execution
+;  -8 ; dictionary overflow
+;  -9 ; invalid memory address
+; -10 ; division by zero
+; -11 ; result out of range
+; -12 ; argument type mismatch
+; -13 ; undefined word
+; -14 ; interpreting a compile-only word
+; -15 ; invalid FORGET
+; -16 ; attempt to use zero-length string as a name
+; -17 ; pictured numeric output string overflow
+; -18 ; parsed string overflow
+; -19 ; definition name too long
+; -20 ; write to a read-only location
+; -21 ; unsupported operation (e.g., AT-XY on a too-dumb terminal)
+; -22 ; control structure mismatch
+; -23 ; address alignment exception
+; -24 ; invalid numeric argument
+; -25 ; return stack imbalance
+; -26 ; loop parameters unavailable
+; -27 ; invalid recursion
+; -28 ; user interrupt
+; -29 ; compiler nesting
+; -30 ; obsolescent feature
+; -31 ; >BODY used on non-CREATEd definition
+; -32 ; invalid name argument (e.g., TO xx)
+; -33 ; block read exception
+; -34 ; block write exception
+; -35 ; invalid block number
+; -36 ; invalid file position
+; -37 ; file I/O exception
+; -38 ; non-existent file
+; -39 ; unexpected end of file
+; -40 ; invalid BASE for floating point conversion
+; -41 ; loss of precision
+; -42 ; floating-point divide by zero
+; -43 ; floating-point result out of range
+; -44 ; floating-point stack overflow
+; -45 ; floating-point stack underflow
+; -46 ; floating-point invalid argument
+; -47 ; compilation word list deleted
+; -48 ; invalid POSTPONE
+; -49 ; search-order overflow
+; -50 ; search-order underflow
+; -51 ; compilation word list changed
+; -52 ; control-flow stack overflow
+; -53 ; exception stack overflow
+; -54 ; floating-point underflow
+; -55 ; floating-point unidentified fault
+; -56 ; QUIT
+; -57 ; exception in sending or receiving a character
+; -58 ; [IF], [ELSE], or [THEN] exception
 
 ; (ABORT)  ( -- )
 ;   s0 @ sp! fs0 @ fsp ! boot? if 1 return then
@@ -7891,9 +8008,10 @@ error_.2:
     _dcs 'error.2',cr_char
   endif
   dw space_
-  dw errmsg_,two_fetch_
+  dw abort_message_,two_fetch_
   dw type_
   dw paren_abort_
+
 error_.3:
   dw paren_dot_quote_
   _dcs ' exception = '
@@ -7901,11 +8019,9 @@ error_.3:
   dw paren_abort_
   dw paren_exit_
 
-; XXX TMP NEW layout
-; : CATCH  ( xt -- n | 0 )
+; CATCH  ( xt -- n | 0 )
 ;   sp@ >r fsp @ >r catcher @ >r rp@ catcher
-;   ! execute r> catcher ! 2r> 2drop 0
-   ;
+;   ! execute r> catcher ! 2r> 2drop 0  ;
 
   _header _public,'CATCH'
 catch_:
@@ -7921,13 +8037,12 @@ catch_:
   dw zero_
   dw paren_exit_
 
-; XXX TMP NEW layout
-; : THROW  ( n -- )
+; THROW  ( n -- )
 ;   ?dup if
 ;     catcher @ ?dup 0= if  error  then
 ;     rp! r> catcher ! r> fsp ! r> swap >r sp! drop r>
-;   then
-   ;
+;   then  ;
+;
 ; XXX FIXME -- it's not in the glossary
 
   _header _public,'THROW'
@@ -7957,10 +8072,8 @@ throw_.no_error:
 throw_.end:
   dw paren_exit_
 
-; XXX TMP NEW layout
-; : ABORT  ( -- )
-;   -1 throw
-   ;
+; ABORT  ( -- )
+;   -1 throw ;
 
   _header _public,'ABORT'
 abort_:
@@ -7968,26 +8081,22 @@ abort_:
   push hl
   jp throw_
 
-; XXX TMP NEW layout
-; : (ABORT")  ( n -- )
-;   r> count rot if  errmsg 2! -2 throw  then + >r
-   ;
+; (ABORT")  ( n -- )
+;   r> count rot if  errmsg 2! -2 throw  then + >r ;
 
   _header _hidden,'(ABORT")'
 paren_abort_quote_:
   call do_colon
   dw from_r_,count_,rot_
   dw branch_if_false_,paren_abort_quote_.noop
-  dw errmsg_,two_store_
+  dw abort_message_,two_store_
   dw lit_,-2,throw_
 paren_abort_quote_.noop:
   dw plus_,to_r_
   dw paren_exit_
 
-; XXX TMP NEW layout
-; : ABORT"  ( compilation: "ccc<quote>" -- )
-;   postpone (abort") ,"
-   ; immediate
+; ABORT"  ( compilation: "ccc<quote>" -- )
+;   postpone (abort") ," ; immediate
 
   _header _public,'ABORT"',_immediate
 abort_quote_:
@@ -7995,7 +8104,8 @@ abort_quote_:
   dw compile_,paren_abort_quote_,comma_quote_
   dw paren_exit_
 
-; Cold boot
+; }}} **********************************************************
+; Boot {{{
 
 cold_boot:
 
@@ -8062,6 +8172,17 @@ cold_boot:
 ;;  dw movpat      ; later patched to 'cold'
 
   jp cold_ ; XXX TMP
+
+; XXX OLD
+;;; BOOT?  ( -- xt )
+;;
+;;  ; XXX TODO -- convert this into a variable that holds an xt?
+;;  ; XXX TODO -- combine with 'boot'
+;;  header hidden,'BOOT?'
+;;bootquestion:
+;;  ld hl,(initbootxt)
+;;  push hl
+;;  jp next
 
 ; (BOOT-MESSAGE)  ( -- )
 
@@ -8215,61 +8336,6 @@ cold_.3:
 ;;cold_.10:
 
   dw quit_      ; jump to interpreter
-
-; LITERAL  ( n -- ) char? if postpone clit c, exit then
-;       postpone lit , ; immediate
-
-  _header _public,'LITERAL',_immediate
-literal_:
-  call do_colon
-  dw char_question_ ; 8-bit number?
-  dw branch_if_false_,literal_.cell
-  ; 8-bit number
-  dw compile_,c_lit_
-  dw c_comma_
-  dw paren_exit_
-literal_.cell:
-  ; 16-bit number
-  dw compile_,lit_
-  dw comma_
-  dw paren_exit_
-
-; 2LITERAL  ( d -- )
-;   postpone 2lit , , ; immediate
-
-  _header _public,'2LITERAL',_immediate
-two_literal_:
-  call do_colon
-  dw compile_,two_lit_
-  dw comma_,comma_
-  dw paren_exit_
-
-; [']     ' [compile] literal  ; immediate
-
-  _header _public,"[']",_immediate
-bracket_tick_:
-  call do_colon
-  dw tick_
-  dw literal_
-  dw paren_exit_
-
-; [COMPILE]   ' compile,  ; immediate
-
-  _header _public,'[COMPILE]',_immediate
-bracket_compile_:
-  call do_colon
-  dw tick_
-  dw compile_comma_
-  dw paren_exit_
-
-; RECURSE  ( -- )
-; last cell+ @ compile, ; immediate
-
-  _header _public,'RECURSE',_immediate
-recurse_:
-  ld hl,(last_.xt)
-  push hl
-  jp compile_comma_
 
 ; }}} **********************************************************
 ; Dictionary support {{{
