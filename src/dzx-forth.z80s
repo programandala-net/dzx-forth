@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201501312352'  ; release
+  db                            '201502010223'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -735,13 +735,10 @@ cold_fs0:                   ; 16 = fs0
   endif
                 ds cell       ; 18 = reserved
 
-
-init_user_variables.end:  ; end of data
+init_user_variables_size: equ $-init_user_variables
 
 ; ------------------------------
 
-system_stack_pointer:
-  ds cell
 ;esm:
 ;  ds cell    ; end of memory pointer
 ; XXX OLD
@@ -2923,7 +2920,7 @@ phld_:
   dw hld_,fetch_,dup_
   dw here_,u_less_
   dw paren_abort_quote_
-  _dcs 'HOLD buffer overflow'
+  _dcs 'HOLD buffer overflow' ; XXX TODO ; -17 ; pictured numeric output string overflow
   dw paren_exit_
 
 ; HOLD  ( c -- )
@@ -4457,6 +4454,7 @@ back_from_dos.error:
 
 convert_dos_error_code:
   ; XXX TODO see '>ior' and combine both
+  ; XXX TODO use the standard codes
   ; Input:   a  = original DOS error code (0..36)
   ; Outptut: hl = DOS error code converted to Forth range (1000..1036)
   ld h,0
@@ -5307,11 +5305,14 @@ header_:
   dw two_to_r_
   dw bl_word_
   dw dup_,c_fetch_ ; name length
+  dw dup_,zero_equals_
+  dw lit_,-16 ; attempt to use zero-length string as a name
+  dw and_,throw_
   dw c_lit_
-  db 32
-  dw one_,within_ ; not 1..32?
-  dw paren_abort_quote_
-  _dcs 'invalid name'
+  db max_word_length
+  dw greater_
+  dw lit_,-19 ; definition name too long
+  dw and_,throw_
   ; ( ca )
   dw dup_,find_,nip_ ; ( ca f ) found?
   dw from_r_       ; ( ca f f1 ) is 'warning' on?
@@ -5554,16 +5555,19 @@ user_:
   dw paren_exit_
 
 ; ADDR  ( "name" -- a )
+;
+;   ' >body  compiling? if  postpone literal  then  ; immediate
+;
 ; Note: immediate, state-smart
 
   _header _public,'ADDR',_immediate
 addr_:
   call do_colon
-  dw tick_,to_body_           ; ' >body
-  dw compiling_question_         ; state?
-  dw question_branch_,addr_.1 ; if
-  dw literal_                ;   postpone literal
-addr_.1:                     ; then
+  dw tick_,to_body_
+  dw compiling_question_
+  dw question_branch_,addr_.end
+  dw literal_
+addr_.end:
   dw paren_exit_
 
 ; (TO)  ( x -- )
@@ -5605,10 +5609,8 @@ to_.end:
   _header _public,'(DEFER-DEFAULT)'
 paren_defer_default_:
   call do_colon
-  dw one_
-  dw paren_abort_quote_
-  _dcs 'deferred word is uninitialized'
-  dw paren_exit_
+  dw lit_,-13 ; undefined word
+  dw throw_
 
 ; DEFER-DEFAULT  ( -- )  gforth
 
@@ -5881,50 +5883,6 @@ file_id_table_:
 file_id_table: ; XXX NEW
   ds max_file_ids
 
-; SYS-VEC  ( -- a )
-;   system vector table
-
-; XXX -- This word is not used in DX-Forth.
-; It appears only in <misc.fs>, but commented out.
-; XXX TODO -- The useful values could be converted to variables.
-
-  ; _header _public,'SYS-VEC'
-; sysvec_:
-  ; call do_create
-
-; vkeyq:
-  ; dw qterm_   ;  0 KEY?
-; vkey:
-  ; dw conin_   ;  2 KEY
-; vemit:
-  ; dw conout_    ;  4 EMIT
-; vcon:
-  ; dw conout_    ;  6 CONSOLE out
-; vlst:
-  ; dw lstout_    ;  8 PRINTER out
-; ainit:
-  ; dw do_f_init_patch   ; 10 FINIT patch
-; aident:
-  ; dw do_f_identify_patch   ; 12 FIDENTIFY patch
-; afnumb:
-  ; dw interpret_.f_number    ; 14 FNUMBER patch
-; nfps:
-  ; dw f_stack_size   ; 16 floating point stack size (bytes)
-; anumb:
-  ; dw interpret_.number_question_patch   ; 18 NUMBER? patch ; XXX FIXME not used to patch the code?
-; nfpm:
-  ; dw f_stack_items*float    ; 20 fp-stack min (bytes)
-; nrts:
-  ; dw return_stack_size   ; 22 return stack (bytes)
-; nus:
-  ; dw user_data_size    ; 24 user area (bytes)
-; npno: ; XXX OLD 
-;   dw pictured_numeric_output_buffer_size   ; 26 HOLD buffer size (bytes)
-;nmscon: ; XXX OLD
-;  dw -2386   ; 28 MS timing constant
-;ntmode: ; XXX OLD
-;  dw 3   ; 30 Timer 0 mode
-
 ; }}} **********************************************************
 ; Variables {{{
 
@@ -5968,6 +5926,7 @@ sys_.variable:
 ; occupies 2 cells
 ; XXX TODO separate and rename
 ; In Gforth: LATESTXT and LATEST
+; XXX TODO : latest-xt latest-nt latest-name latest-nfa ?
 
   _header _hidden,'LAST'
 last_:
@@ -6200,88 +6159,39 @@ case_sensitive_search_user_variable: equ 44
 ; }}} **********************************************************
 ; Forth system {{{
 
-; SYS?  ( -- flag ) sys@ 0<>
+; SYS?  ( -- flag )
+; sys @ 0<>
 
-  ; XXX OLD
+  ; XXX OLD -- but still used by
   _header _hidden,'SYS?'
 sys_question_:
-  ld hl,sys_.variable
-sys_question_.1: ; XXX TODO rename, because it's used by other words
-  ; XXX TODO -- faster method
-  ld e,(hl)
-  inc hl
-  ld d,(hl)
-  push de
-  jp zero_not_equals_
+  ld hl,(sys_.variable)
+  jp zero_not_equals_hl
 
 ; COMPILING?  ( -- flag )
 ;   state @ 0<>
 
   _header _public,'COMPILING?'
 compiling_question_:
-  if 0 ; XXX OLD -- original method
-    ld hl,state_.variable
-    jp sys_question_.1
-  else
-    ; XXX NEW -- faster
-    ld a,(state_.variable)
-    ld l,a
-    ld a,(state_.variable+1)
-    ld h,a
-    jp zero_not_equals_hl
-  endif
+  ld hl,(state_.variable)
+  jp zero_not_equals_hl
 
 ; EXECUTING?  ( -- flag )
 ;   state @ 0<>
 
   _header _public,'EXECUTING?'
 executing_question_:
-  if 0 ; XXX OLD -- original method
-    ld hl,state_.variable
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-    push de
-    jp zero_equals_
-  else
-    ; XXX NEW -- faster
-    ld a,(state_.variable)
-    ld l,a
-    ld a,(state_.variable+1)
-    ld h,a
-    jp zero_equals_hl
-  endif
+  ld hl,(state_.variable)
+  jp zero_equals_hl
 
 ; CHECK?  ( -- flag ) checking @ 0<>
 
   _header _hidden,'CHECK?'
 check_question_:
-  ld hl,checking_.variable
-  jp sys_question_.1
-
-; APPLICATION  ( -- )
-; sys off
-; XXX OLD
-
-  ; _header _public,'APPLICATION'
-; application_:
-  ; ld hl,sys_.variable
-  ; jp off_.hl
-
-; XXX OLD
-;;; h  ( -- a )    sys@ if dph else dp then
-;;
-;;  header hidden,'H'
-;;hh:
-;;  ld hl,(sys.variable)
-;;  ld a,l
-;;  or h
-;;  jp z,dp
-;;  jp dph
+  ld hl,(checking_.variable)
+  jp zero_not_equals_hl
 
 ; ALLOT  ( n -- )
-;   here over 0max dup unused u>
-;       abort" no data space" erase h +!
 
   _header _public,'ALLOT'
 allot_:
@@ -6289,8 +6199,8 @@ allot_:
   dw here_,over_
   dw zero_max_,dup_
   dw unused_,u_greater_
-  dw paren_abort_quote_
-  _dcs 'no data space'
+  dw lit_,-8 ; dictionary overflow
+  dw and_,throw_
   dw erase_
   dw dp_,plus_store_
   dw paren_exit_
@@ -6526,27 +6436,27 @@ question_csp_:
   dw paren_exit_
 
 ; ?COMP  ( -- )
-;   state? 0= abort" compilation only'
+;   executing? -14 and throw
 ; XXX TODO rename '?compiling'
 
   _header _public,'?COMP'
 question_comp_:
   call do_colon
-  dw compiling_question_,zero_equals_
-  dw paren_abort_quote_
-  _dcs 'compilation only'
+  dw executing_question_
+  dw lit_,-14 ; interpreting a compile-only word
+  dw and_,throw_
   dw paren_exit_
 
 ; ?EXEC  ( -- )
-;   compiling? abort" execution only'
+;   compiling? -14 and throw
 ; XXX TODO rename '?executing'
 
   _header _public,'?EXEC'
 question_exec_:
   call do_colon
   dw compiling_question_
-  dw paren_abort_quote_
-  _dcs 'execution only'
+  dw lit_,-256 ; compiling an interpret-only word ; XXX TMP
+  dw and_,throw_
   dw paren_exit_
 
 ; ?STACK  ( -- )
@@ -6558,23 +6468,22 @@ question_exec_:
   _header _public,'?STACK'
 question_stack_:
   call do_colon
-;  dw parenexit ; XXX TMP
   dw sp_fetch_
   dw s0_,fetch_
   dw u_greater_
-  dw paren_abort_quote_
-  _dcs 'stack underflow'
+  dw lit_,-4 ; stack underflow
+  dw and_,throw_
   ; XXX TODO
-;  dw spfetch,s0,fetch,uless
-;  dw parenabortquote
-;  dcs 'stack overflow'
+;  dw sp_fetch_,s0_,fetch_,u_less_
+;  dw lit_,-3 ; stack overrflow
+;  dw and_,throw_
   dw rp_fetch_,r0_,fetch_,u_greater_
-  dw paren_abort_quote_
-  _dcs 'return stack underflow'
+  dw lit_,-6 ; return stack underflow
+  dw and_,throw_
   ; XXX TODO
 ;  dw rpfetch,r0,fetch,uless
-;  dw parenabortquote
-;  dcs 'return stack overflow'
+;  dw lit_,-5 ; return stack overflow
+;  dw and_,throw_
 ;  XXX TODO -- fp stack, if separated
   dw paren_exit_
 
@@ -6584,10 +6493,6 @@ question_stack_:
 question_defined_:
   call do_colon
   dw zero_equals_
-; XXX OLD:
-;  dw paren_abort_quote_
-;  _dcs 'undefined word: '
-; XXX NEW:
   dw lit_,-13 ; undefined word
   dw and_,throw_
 
@@ -6647,7 +6552,7 @@ compile_:
     ;jr $
   endif
   call do_colon
-  dw question_comp_   ; prevent crash if interpreting
+  dw question_comp_
   dw from_r_
   dw dup_,cell_plus_
   dw to_r_
@@ -7591,7 +7496,7 @@ paren_refill_:
   dw blk_,fetch_,question_dup_
   dw branch_if_0_,paren_refill_.no_block
   dw one_plus_,dup_
-  dw nscr_,u_less_
+  dw number_screens_,u_less_
   dw and_,dup_
   dw branch_if_0_,paren_refill_.end
   dw dup_,blk_,store_
@@ -7746,7 +7651,8 @@ return_:
   _header _public,'BYE'
 bye_:
 ;  im 1 ; XXX TODO ?
-  ld sp,(system_stack_pointer)
+system_stack_pointer: equ $+1
+  ld sp,0
   ld iy,sys_err_nr ; XXX TODO -- check if needed
   rst 0x08     ; error
   db 0xFF      ; 0: "OK"
@@ -7822,8 +7728,9 @@ recurse_:
 ; Errors {{{
 
 ; ------------------------------
+
 ; THROW code assignments in Forth-94
-;
+
 ;  -1 ; ABORT
 ;  -2 ; ABORT"
 ;  -3 ; stack overflow
@@ -7855,7 +7762,7 @@ recurse_:
 ; -29 ; compiler nesting
 ; -30 ; obsolescent feature
 ; -31 ; >BODY used on non-CREATEd definition
-; -32 ; invalid name argument (e.g., TO xx)
+; -32 ; invalid name argument (e.g., TO name)
 ; -33 ; block read exception
 ; -34 ; block write exception
 ; -35 ; invalid block number
@@ -7882,6 +7789,39 @@ recurse_:
 ; -56 ; QUIT
 ; -57 ; exception in sending or receiving a character
 ; -58 ; [IF], [ELSE], or [THEN] exception
+
+; Additional THROW code assignments in Forth-2012
+
+; -59 ; ALLOCATE
+; -60 ; FREE
+; -61 ; RESIZE
+; -62 ; CLOSE-FILE
+; -63 ; CREATE-FILE
+; -64 ; DELETE-FILE
+; -65 ; FILE-POSITION
+; -66 ; FILE-SIZE
+; -67 ; FILE-STATUS
+; -68 ; FLUSH-FILE
+; -69 ; OPEN-FILE
+; -70 ; READ-FILE
+; -71 ; READ-LINE
+; -72 ; RENAME-FILE
+; -73 ; REPOSITION-FILE
+; -74 ; RESIZE-FILE
+; -75 ; WRITE-FILE
+; -76 ; WRITE-LINE
+; -77 ; Malformed xchar
+; -78 ; SUBSTITUTE
+; -79 ; REPLACES
+
+; Values in the range {-4095...-256} and their meanings are implementation defined.
+;
+; -256 ; compiling an interpret-only word ; XXX TMP
+; -257 ; invalid vocabulary ; XXX TMP
+; -258 ; no filename specified ; XXX TMP
+; -259 ; can not resize block file ; XXX TMP
+
+; ------------------------------
 
 ; (ABORT)  ( -- )
 ;   s0 @ sp! fs0 @ fsp ! boot? if 1 return then
@@ -8266,10 +8206,10 @@ cold_:
   ld sp,(cold_s0) ; XXX NEW
 
   ; init the user data
-  ld hl,(user_data_pointer)
+  ld hl,(user_data_pointer) ; to
   ex de,hl
-  ld hl,init_user_variables
-  ld bc,init_user_variables.end-init_user_variables
+  ld hl,init_user_variables  ; from
+  ld bc,init_user_variables_size ; count
   call move_block_upwards
 
   ; patch 'pause' to do nothing
@@ -8347,7 +8287,7 @@ freeze_:
   call do_colon
   dw udp_,fetch_ ; from
   dw lit_,init_user_variables ; to
-  dw lit_,init_user_variables.end-init_user_variables ; count
+  dw lit_,init_user_variables_size ; count
   dw cmove_
   dw paren_exit_
 
@@ -8466,9 +8406,8 @@ behead_.1:
   _header _hidden,'?VOC'
 question_voc_:
   call do_colon
-  dw paren_abort_quote_
-  _dcs  'invalid vocabulary'
-  dw paren_exit_
+  dw lit_,-257 ; invalid vocabulary ; XXX TMP
+  dw throw_
 
 ;  CHAIN   ( "name" -- )    get-current postpone addr @ 2dup =
 ;          ?voc cell- $2001 over @ - ?voc
@@ -8572,9 +8511,10 @@ forget_:
   dw get_current_
   dw context_,store_
   dw name_question_
+  ; XXX TODO why an alias is not allowed?:
   dw minus_alias_,zero_equals_  ; alias?
-  dw paren_abort_quote_
-  _dcs 'is alias'
+  dw lit_,-15 ; invalid FORGET
+  dw and_,throw_
   dw swap_
   dw limit_ ; XXX OLD
   dw over_,u_less_
@@ -9725,15 +9665,13 @@ read_line_:
 ;;  dw paren_exit_
 
 ; PARSE-FILENAME  ( "filename" -- ca len )
-;   parse-name dup 0= abort" specify filename"
 
   _header _public,'PARSE-FILENAME'
 parse_filename_:
   call do_colon
-  dw parse_name_
-  dw dup_,zero_equals_
-  dw paren_abort_quote_
-  _dcs 'specify filename'
+  dw parse_name_,dup_,zero_equals_
+  dw lit_,-258 ; no filename specified ; XXX TMP
+  dw and_,throw_
   dw paren_exit_
 
 ; SAVE-SYSTEM  ( "filename[.COM]" -- )
@@ -9905,7 +9843,7 @@ fdb_.2:
   dw cell_plus_
   dw paren_loop_,fdb_.do
 fdb_.3:
-  dw paren_abort_quote_
+  dw paren_abort_quote_ ; XXX TODO convert to 'throw'
   _dcs 'too many files'
   dw paren_exit_
 
@@ -10017,7 +9955,7 @@ question_open_:
   call do_colon
   dw file_question_
   dw zero_equals_
-  dw paren_abort_quote_
+  dw paren_abort_quote_ ; XXX TODO convert to 'throw'
   _dcs 'no file open'
   dw paren_exit_
 
@@ -10025,7 +9963,7 @@ question_open_:
 ;   ?open blks @
 
   _header _public,'#SCREENS'
-nscr_:
+number_screens_:
   call do_colon
   dw question_open_
   dw blks_,fetch_
@@ -10061,7 +9999,9 @@ update_:
   _header _hidden,'BLKERR'
 blkerr_:
   call do_colon
-  dw paren_abort_quote_
+  dw paren_abort_quote_ ; XXX TODO convert to 'throw'
+; -33 ; block read exception
+; -34 ; block write exception
   _dcs 'block r/w error'
   dw paren_exit_
 
@@ -10093,17 +10033,14 @@ blk_rw_.2:
   dw paren_exit_
 
 ; ?BLK  ( +n -- +n )
-;   dup #screens 0 within
-;   abort" block out of range"
 
   _header _hidden,'?BLK'
 question_blk_:
   call do_colon
   dw dup_
-  dw nscr_,zero_
-  dw within_    ; block in range?
-  dw paren_abort_quote_
-  _dcs 'block out of range'
+  dw number_screens_,zero_,within_ ; block in range?
+  dw lit_,-35 ; invalid block number
+  dw and_,throw_
   dw paren_exit_
 
 ; SAVE-BUFFERS  ( -- )
@@ -10179,7 +10116,7 @@ next_block_:
   call do_colon
   dw blk_,fetch_,zero_equals_
   dw paren_abort_quote_
-  _dcs 'loading only'
+  _dcs 'loading only' ; XXX TODO convert to 'throw'
   dw paren_refill_,drop_
   dw paren_exit_
 
@@ -10252,7 +10189,7 @@ fnbuf_:
   _header _hidden,'(FBK)'
 paren_fbk_:
   call do_colon
-  dw nscr_    ; tests if file open
+  dw number_screens_    ; tests if file open
   dw two_dup_,u_less_
   dw question_branch_,paren_fbk_.3
   dw drop_,dup_
@@ -10293,15 +10230,15 @@ paren_fbk_.do.2:
 paren_fbk_.end:
   dw paren_exit_
 
-; FILEBLOCKS  ( +n -- )
+; RESIZE-BLOCK-FILE  ( +n -- )
 ;   ['] (fbk) catch abort" can't resize file"
 
-  _header _public,'FILEBLOCKS'
-fbloc_:
+  _header _public,'RESIZE-BLOCK-FILE'
+resize_block_file_:
   call do_colon
   dw lit_,paren_fbk_
-  dw catch_
-  dw paren_abort_quote_
+  dw catch_ ; XXX TODO why? study this
+  dw paren_abort_quote_ ; XXX TODO convert to 'throw' -259
   _dcs "can't resize file"
   dw paren_exit_
 
@@ -10471,7 +10408,7 @@ paren_open_:
   call do_colon
   dw read_write_,open_block_file_
   ; XXX FIXME
-  dw paren_abort_quote_
+  dw paren_abort_quote_ ; XXX TODO convert to 'throw'
   _dcs "can't open file"
   dw paren_exit_
 
