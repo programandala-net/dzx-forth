@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502031248'  ; release
+  db                            '201502130451'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -5290,7 +5290,7 @@ xnfa:
 ;       bl-word  ( ca )
 ;       dup c@ 32 1 within abort" invalid name"
 ;       dup find nip r> and
-;       if  dup count type ."  is redefined"  then
+;       if  dup count type ."  redefined"  then
 ;       dup count tuck +
 ;       get-current wordlist>name over ! cell+ swap
 ;       5 + dph @ over dph +!  dup
@@ -5328,7 +5328,7 @@ header_:
   ; ( ca )
   dw dup_,count_,type_
   dw paren_dot_quote_
-  _dcs ' is redefined'
+  _dcs ' redefined'
 header_.1:
   ; the name was not found or 'warning' is off
   dw dup_,count_ ; ( ca ca1 len1 )
@@ -5830,7 +5830,8 @@ chars_per_line_.value:
 ; buffer, word headers and system definitions.
 
 ; LIMIT  ( -- a )
-; ; XXX OLD -- still used by 'forget'
+; ; XXX OLD -- still used by 'forget' and 'words'
+; XXX TODO convert
 ; XXX TODO move to <src/dxforth.fs>
 
   _header _public,'LIMIT'
