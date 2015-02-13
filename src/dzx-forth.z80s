@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 2           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502010223'  ; release
+  db                            '201502031248'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -95,15 +95,21 @@ _version: macro
 ; }}} **********************************************************
 ; XXX TODO {{{
 
+; 2015-02-08: Ideas from 40-80 Forth: 'time@' and 'time0', color constants,
+; 'ltape', 'message', 'p!', 'p@'
+;
+; 2015-02-01: new: '?exit' after Gforth.
+;
 ; 2015-01-29: fix: improve the "undefined word" message to show the word name.
-; this is required in order to know what fails about 'include'.
+; this is required in order to know what fails about 'include'. 2015-02-01: The
+; solution seems to use the new 'latest-word'.
 ;
 ; 2015-01-30, 2015-01-16: fix: '(create-file)'. fix the strange issue with its
 ; fam: +3DOS can not create r/o or s/r files.  The solution is to change the
 ; fam, create the file and then force the original fam.
 ;
 ; 2015-01-30: Fix: redo the lost renamings in <tools.fb>: 'fname' to
-; 'current-stream-file'; 'loadfile' to 'current-file'. Better names?
+; 'current-stream-file'; 'loadfile' to 'current-block-file'. Better names?
 ;
 ; 2015-01-29: idea: make every 'dw here_' optional, depending on
 ; 'size_optimization', with the alternative 'dw dp_,fetch_'
@@ -6682,10 +6688,6 @@ paren_accept_key_:
   _header _hidden,'(ACCEPT)'
 paren_accept_:
   call do_colon
-  if 0 ; debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs '(ACCEPT)',cr_char
-  endif
   dw zero_ ; len2
 paren_accept_.do:
   dw c_lit_
@@ -7184,6 +7186,13 @@ debug_interpret:
 
 ; INTERPRET  ( -- )
 
+; ; XXX TODO Inform the author abouth this:
+; ; in the original code,
+; ; the branch to inte3 can be direct to inte14:
+;   dw  bran,inte3
+; inte2:  dw  exec
+; inte3:  dw  bran,inte14
+
   _header _public,'INTERPRET'
 interpret_:
   call do_colon
@@ -7486,10 +7495,6 @@ evaluate_:
   _header _hidden,'(REFILL)'
 paren_refill_:
   call do_colon
-  if 0 ; debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs '(REFILL_) '
-  endif
 
   if block_files?
 
@@ -7623,10 +7628,6 @@ quit_.start:
   dw reset_interpreter_
 quit_.begin:
   dw paren_refill_,drop_
-  if 0 ; debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'QUIT '
-  endif
   dw interpret_
   dw executing_question_
   dw branch_if_false_,quit_.begin
@@ -7815,6 +7816,8 @@ recurse_:
 ; -79 ; REPLACES
 
 ; Values in the range {-4095...-256} and their meanings are implementation defined.
+; 
+; XXX TODO search for a list used by a Forth system
 ;
 ; -256 ; compiling an interpret-only word ; XXX TMP
 ; -257 ; invalid vocabulary ; XXX TMP
@@ -7901,11 +7904,14 @@ dot_error_.1:
   dw c_lit_
   db '"'
   dw dup_,emit_
+
+  ; XXX OLD -- use 'latest-word'
   dw pwa_,count_
   dw c_lit_
   db max_word_length
   dw min_
   dw type_
+
   dw emit_
   dw paren_exit_
 
@@ -7921,20 +7927,14 @@ dot_error_.1:
   _header _public,'ERROR'
 error_:
   call do_colon
-  if debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'error',cr_char
-  endif
-  dw true_    ; -1
-  dw paren_of_,error_.1
+
+  dw true_    ; -1 = 'abort'
+  dw paren_of_,error_.check_abort_quote
   dw paren_abort_
-error_.1:
-  if debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'error.1',cr_char
-  endif
-  dw lit_,-2
-  dw paren_of_,error_.3
+
+error_.check_abort_quote:
+  dw lit_,-2  ; -2 = 'abort"'
+  dw paren_of_,error_.other
 
 ; XXX OLD -- DX-Forth
 ;  dw boot_,cell_plus_,fetch_
@@ -7943,21 +7943,39 @@ error_.1:
 ;  dw dot_error_    ; skipped by applications
 
 error_.2:
-  if debug? ; XXX INFORMER
-    dw paren_dot_quote_
-    _dcs 'error.2',cr_char
-  endif
   dw space_
   dw abort_message_,two_fetch_
   dw type_
   dw paren_abort_
 
-error_.3:
+error_.other:
+  dw pwa_,count_
+  dw lit_,latest_word_.value,two_store_
   dw paren_dot_quote_
   _dcs ' exception = '
-  dw dot_
+  dw dup_,dot_
+  dw lit_,-13 ; undefined word
+  dw equals_
+  dw branch_if_false_,error_.end
+  dw latest_word_,type_
+error_.end:
   dw paren_abort_
-  dw paren_exit_
+;  dw paren_exit_ ; XXX OLD -- not needed -- inform DX-Forth's author:
+; XXX this is the original code:
+; error3: dw  pdotq
+;   dcs ' exception = '
+;   dw  dot
+;   dw  pabor
+;   dw  exit
+
+; LATEST-WORD  ( -- ca len )
+; Return the latest word parsed before any error.
+
+  _header _public,'LATEST-WORD'
+latest_word_:
+  call do_two_constant
+latest_word_.value:
+  ds 2*cell
 
 ; CATCH  ( xt -- n | 0 )
 ;   sp@ >r fsp @ >r catcher @ >r rp@ catcher
@@ -8282,6 +8300,7 @@ cold_.3:
 
 ; FREEZE  ( -- )
 
+  ; XXX FIXME -- new words are lost after 'freeze'
   _header _public,'FREEZE'
 freeze_:
   call do_colon
@@ -8295,7 +8314,7 @@ freeze_:
 ;;;  'prune      variable 'prune  'prune off
 ;;
 ;;  header hidden,"'PRUNE"
-;;tprun:
+;;prune_:
 ;;  call docreate
 ;;  dw topprunes    ; 0=end
 
@@ -8306,9 +8325,9 @@ freeze_:
 ;;  header public,'REMEMBER'
 ;;remember:
 ;;  call docolon
-;;  dw tprun,linkcomma
+;;  dw prune_,link_comma_
 ;;  dw comma
-;;  dw parenexit
+;;  dw paren_exit
 
 ; XDP  ( adr -- adr xdp )
 ;   dup limit u< if dp else dph then
@@ -8328,21 +8347,21 @@ freeze_:
 ;;;        while 2@ 'prune ! execute repeat then drop
 ;;
 ;;  header hidden,'PRUNES'
-;;pruns:
+;;prunes_:
 ;;  call docolon
-;;pruns.1:
-;;  dw tprun_,fetch_
+;;prunes_.1:
+;;  dw prune_,fetch_
 ;;  dw dup
-;;  dw question_branch_,pruns.2
+;;  dw question_branch_,prunes_.2
 ;;  dw dup
 ;;  dw xdp_,fetch_
 ;;  dw u_less_,zero_equals_
-;;  dw question_branch_,pruns.2
+;;  dw question_branch_,prunes_.2
 ;;  dw two_fetch_
-;;  dw tprun_,store_
+;;  dw prune_,store_
 ;;  dw execute_
-;;  dw branch_,pruns.1
-;;pruns.2:
+;;  dw branch_,prunes_.1
+;;prunes_.2:
 ;;  dw drop_
 ;;  dw paren_exit_
 
@@ -8485,7 +8504,7 @@ paren_forget_.5:
   dw question_branch_,paren_forget_.6
   dw freeze_    ; fix bootup values
 paren_forget_.6:
-;;  dw pruns    ; run prunes chain ; XXX OLD
+;;  dw prunes_    ; run prunes chain ; XXX OLD
   dw paren_exit_
 
 ; EMPTY  ( -- )
@@ -8681,7 +8700,7 @@ pause_.action:
   dw noop_   ; patched by 'cold'
 
 ; Y/N  ( -- flag )
-;   ." (y/n) N\bs" key upcase [char] Y = dup
+;   ." (y/n) N\bs" key toupper [char] Y = dup
 ;       if [char] Y else [char] N then emit space
 ; XXX TODO move to a .fs file
 
@@ -8694,14 +8713,14 @@ yn_:
   dw c_lit_
   db 'Y'
   dw equals_,dup_
-  dw question_branch_,yn1
+  dw question_branch_,yn_.1
   dw c_lit_
   db 'Y'
-  dw branch_,yn2
-yn1:
+  dw branch_,yn_.2
+yn_.1:
   dw c_lit_
   db 'N'
-yn2:
+yn_.2:
   dw emit_,space_
   dw paren_exit_
 
@@ -9765,6 +9784,22 @@ flush_file_:
   pop hl
   jp false_
 
+; XXX TODO
+; ------------------------------
+; Source text files words, converted from files.fs (from tools.fb)
+; ------------------------------
+
+; ; LOADLINE  ( -- a )
+; ; line number being loaded
+
+;   _header _public,'LOADLINE'
+
+; loadline_:
+;   call do_create
+;   ds cell
+
+
+
 ; }}} **********************************************************
 ; Block files {{{
 
@@ -9823,7 +9858,10 @@ swap_file_:
 ; FDB  ( -- a )
 ;   (filedescriptorblockstable) (maxopensourcefiles) 0 do dup @ @ 0= if unloop exit
 ;        then cell+ loop abort" too many files"
-; XXX TODO 
+
+; XXX TODO  this word must be out of the blocks, because it's required also
+; by source text files.
+
   _header _public,'FDB'
   ; get a free slot
 fdb_:
@@ -9873,8 +9911,9 @@ fd_:
 
   _header _hidden,'FID'
 fid_:
-  ld e,cell    ; file handle field
-fid_.e:
+  ld e,cell    ; ofsset to file handle field
+
+fid_.e:  ; XXX TODO rename this label
   ld d,0
   push de
   call do_colon
@@ -9939,7 +9978,6 @@ file_question_:
   dw paren_exit_
 
 ; CURRENT-BLOCK-FILE  ( -- ca len )
-;   fnb count
 
   _header _public,'CURRENT-BLOCK-FILE'
 current_block_file_:
