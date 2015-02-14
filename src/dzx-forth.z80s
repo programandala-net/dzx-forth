@@ -3,9 +3,9 @@
 _version: macro
   version.major:                equ 'A'         ; = alpha state
   db version.major
-  version.minor:                equ 2           ; branch
+  version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502130451'  ; release
+  db                            '201502140126'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -63,7 +63,7 @@ _version: macro
 ; + single-quoted chars as a number format
 ; + text translation table
 
-; Version A-02-xxxxxxxx (under development)
+; Version A-02-20150214
 ; + 'defer!', 'defer@'
 ; + 'alias'
 ; + 'hex.'
@@ -91,10 +91,17 @@ _version: macro
 ; + 'control>bl'
 ; + block files can be opened and loaded.
 ; + circular string buffer
+; ! no TAP file required anymore: now the system boots from disk
+
+; Version A-03 (under development)
 
 ; }}} **********************************************************
 ; XXX TODO {{{
 
+; 2015-02-14: Fix: 'at-xy' errors return to BASIC.
+;
+; 2015-02-14: New: 'cconstant', 'cvariable'?
+;
 ; 2015-02-08: Ideas from 40-80 Forth: 'time@' and 'time0', color constants,
 ; 'ltape', 'message', 'p!', 'p@'
 ;
@@ -148,7 +155,7 @@ _version: macro
 ;
 ; Check problems with backspace (char 8), depending on the ZX Spectrum ROM.
 ; Already solved?
-;
+
 ; See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM routines.
 
 
@@ -10571,6 +10578,8 @@ endif ; end of block file words
 
 ; AT-XY  ( u1 u2 -- )
 ;   position cursor at col u1, row u2
+
+; XXX FIXME -- out of range error in BASIC
 
   _header _public,'AT-XY'
 at_xy_:

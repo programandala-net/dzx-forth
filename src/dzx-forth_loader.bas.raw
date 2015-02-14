@@ -1,0 +1,5 @@
+   10 REM DZX-Forth
+   20 REM Copyright (c) 2014,2015 Marcos Cruz (programandala.net)
+   30 CLEAR VAL"XXXXX-1"
+   40 LOAD "DZXFORTH.B" CODE VAL"XXXXX"
+   50 RANDOMIZE USR VAL "XXXXX"
