@@ -56,6 +56,8 @@
 VPATH = src:doc:bin
 MAKEFLAGS = --no-print-directory
 
+.ONESHELL:
+
 .PHONY : all
 all : tap dsk doc
 
@@ -78,19 +80,19 @@ doc:
 # ----------------------------------------------
 # Disk BASIC loader
 
-disk.bas : disk.bas.raw dzxforth.bin.tap
-	@make dzxforth.bin.tap
+disk.bas : disk.bas.raw dzx-forth_kernel.tap
+	@make dzx-forth_kernel.tap
 	./_tools/patch_the_loader.fs
 
-disk.tap : disk.bas
-	bas2tap -a10 -sDISK src/disk.bas bin/disk.tap
+dzx-forth_loader.tap : disk.bas
+	bas2tap -a10 -sDISK src/disk.bas bin/dzx-forth_loader.tap
 
 # ----------------------------------------------
 # Kernel
 
-dzxforth.bin.tap : dzx-forth.z80s
+dzx-forth_kernel.tap : dzx-forth.z80s
 	pasmo -I src --name "DZXFORTH.B" --tap \
-		src/dzx-forth.z80s bin/dzxforth.bin.tap \
+		src/dzx-forth.z80s bin/dzx-forth_kernel.tap \
 		src/dzx-forth.symbols.z80s
 
 # XXX OLD
@@ -112,14 +114,20 @@ dzxforth.bin.tap : dzx-forth.z80s
 
 forth_block_files = $(wildcard src/*.fb)
 
-block_files.tap : $(forth_block_files)
-	for file in $(forth_block_files); do \
-		bin2tap $$file $$file.tap; \
+dzx-forth_block_files.tap : $(forth_block_files)
+	cd src ; \
+	for file in $$(ls -1 *.fb); do \
+		bin2code $$file $$file.tap; \
 	done; \
-	cat src/*.fb.tap > bin/forth_block_files.tap
+	cat *.fb.tap > ../bin/dzx-forth_block_files.tap ; \
+	cd - 
 
-dzx-forth.tap : disk.tap dzxforth.bin.tap forth_block_files.tap
-	cat bin/disk.tap bin/dzxforth.bin.tap bin/forth_block_files.tap > bin/dzx-forth.tap
+dzx-forth.tap : dzx-forth_loader.tap dzx-forth_kernel.tap dzx-forth_block_files.tap
+	cat \
+		bin/dzx-forth_loader.tap \
+		bin/dzx-forth_kernel.tap \
+		bin/dzx-forth_block_files.tap \
+		> bin/dzx-forth.tap
 
 .PHONY : tap
 tap:
