@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502140126'  ; release
+  db                            '201502170104'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -94,9 +94,23 @@ _version: macro
 ; ! no TAP file required anymore: now the system boots from disk
 
 ; Version A-03 (under development)
+; - (name) n>count
+; + name>string (Gforth and Forth-2012)
 
 ; }}} **********************************************************
 ; XXX TODO {{{
+
+; 2015-02-15:
+;
+; Fix:
+;
+; block r/w error happens because of '#screens' is 1 greater.  No matter the
+; tool the DSK file is created by, 'tap2dsk' or 'mkp3fs'.  But 'tap2dsk'
+; creates +3DOS headers, while 'mkp3fs' doesn't.
+;
+; The problem happens because of the +3DOS HEADER. Also, '#screens' returns one
+; more than expected for the <list.fb> file, why?
+; 
 
 ; 2015-02-14: Fix: 'at-xy' errors return to BASIC.
 ;
@@ -121,7 +135,7 @@ _version: macro
 ; 2015-01-29: idea: make every 'dw here_' optional, depending on
 ; 'size_optimization', with the alternative 'dw dp_,fetch_'
 ;
-; 2015-01-28: new: 'block-included' from Gforth; 'reposition-block-file'
+; 2015-01-28: new: 'block-included' from Gforth; also 'reposition-block-file'.
 ;
 ; 2015-01-28: idea: a variable with the first loadable block (0/1)
 ;
@@ -769,14 +783,6 @@ init_user_variables_size: equ $-init_user_variables
 ;;  ds cell    ; LIMIT for turnkey ; XXX NEW -- from DX-Forth 4.09
 ;;  ds 2   ; spare
 
-; Scratch buffer - shared by several functions:
-; +EXT  DELETE-FILE  RENAME-FILE
-
-; Buffer for temporary filename/fcb
-; ; XXX OLD -- modified and moved and to 'filename-buffers'
-; zb_size:  equ filename_buffer_size+1+36 ; XXX OLD
-; zb.1:   ds zb_size
-; zb.2:   ds zb_size
 
 ; }}} **********************************************************
 ; Misc. subroutines {{{
@@ -877,7 +883,8 @@ move_block_downwards:
   jp move_block_downwards
 
 ; XXX OLD -- not used
-; amovd:
+; amovd: ; XXX OLD name
+; move_block_downwards.a:
 
 ;   ; Move block downwards
 ;   ; hl = source
@@ -5814,24 +5821,6 @@ bl_:
   call do_byte_constant
   db sp_char
 
-; B/BUF  ( -- u )
-;   bytes per screen buffer
-
-  _header _public,'B/BUF'
-bytes_per_buffer_:
-  call do_value
-bytes_per_buffer_.value:
-  dw 1024 ; default
-
-; C/L  ( -- u )
-;   chars per screen line
-
-  _header _public,'C/L'
-chars_per_line_:
-  call do_value
-chars_per_line_.value:
-  dw 64 ; default
-
 ; For applications, LIMIT is the upper limit of available memory.
 ; In Forth, it is the beginning of the area which holds the screen file
 ; buffer, word headers and system definitions.
@@ -5847,16 +5836,6 @@ limit_:
 limit_.1:
   ds cell    ; patched by COLD
 
-; HBUF  ( -- a )
-; handle r/w buffer
-; XXX OLD -- still used by 'use', that will be removed
-
-  _header _hidden,'HBUF'
-hbuf_:
-  call do_value
-hbuf_.value:
-  ds cell    ; patched by COLD
-
 ; 'NEXT  ( -- a )
 ;   address of NEXT
 
@@ -5865,37 +5844,6 @@ tick_next_:
   call do_constant
 tick_next_.variable:
   dw next
-
-; MAX-FILE-ID  ( -- u )
-; XXX NEW
-;   max number of file handle
-
-  _header _public,'MAX-FILE-ID'
-max_file_id_:
-  call do_byte_constant
-  db max_file_id
-
-; #FCB  ( -- u )
-; number of file handles
-; XXX TODO rename
-
-; XXX OLD
-  ; _header _public,'#FCB'
-; nfcb_:
-  ; call do_value
-; nfcb_.value:
-  ; dw max_file_ids
-
-; FILE-ID-TABLE  ( -- a )
-; XXX NEW
-; XXX TODO rename?
-; XXX TODO -- use also to remember which files are headed, one bit
-
-  _header _public,'FILE-ID-TABLE'
-file_id_table_:
-  call do_create
-file_id_table: ; XXX NEW
-  ds max_file_ids
 
 ; }}} **********************************************************
 ; Variables {{{
@@ -6250,7 +6198,7 @@ to_body_:
   ld de,3
   jp plus_de
 
-; BODY>  ( a -- xt ) 3 -
+; BODY>  ( a -- xt )
 ;
 ; XXX -- this word was commented out in DX-Forth, why?
   _header _hidden,'BODY>'
@@ -6258,35 +6206,12 @@ from_body_:
   ld de,-3
   jp plus_de
 
-; XXX NEW -- DX-Forth 4.09
-; N>COUNT  ( nfa -- ca len )
-;   aka (name) n>count
-
-  _header _hidden,'N>COUNT',,paren_name_
-ncnt_: equ  paren_name_
-
-; XXX OLD -- DX-Forth 4.00
-;;; n>link  ( nfa -- lfa )
-;;
-;;  header x,'N>LINK',,1
-;;nlnk:
-;;  pop hl
-;;  ld a,(hl)  ; name length and flags
-;;  and 0x1F    ; name length only
-;;  ld e,a
-;;  ld d,0
-;;  add hl,de
-;;  inc hl
-;;  jp pushhl
-
-; XXX NEW -- DX-Forth 4.09
 ; N>LINK  ( nfa -- lfa )
-;   n>count +
 
   _header _public,'N>LINK'
 n_to_link_:
   call do_colon
-  dw ncnt_,plus_
+  dw name_to_string_,plus_
   dw paren_exit_
 
 ; N>NAME  ( nfa1 -- nfa2 | 0 )
@@ -6373,11 +6298,14 @@ to_name_.5:
   dw nip_
   dw paren_exit_    ; not found
 
-; (NAME)  ( nfa -- ca len )
-; XXX TODO rename after Gforth and Forth-2012
+; NAME>STRING  ( nfa -- ca len )
 
-  _header _public,'(NAME)'
-paren_name_:
+; XXX TODO
+; DX-Forth had '(name)' and 'n>count' for the same function.
+; Ask Ed why.
+
+  _header _hidden,'NAME>STRING'
+name_to_string_:
   pop de
   ld a,(de)
   inc  de
@@ -6391,14 +6319,13 @@ paren_name_:
 ;         ." [noname]"
 
   _header _public,'.ID'
-dotid_:
+dot_id_:
   call do_colon
   dw question_dup_
-  dw question_branch_,dotid_.1
-  dw paren_name_
-  dw type_
+  dw question_branch_,dot_id_.1
+  dw name_to_string_,type_
   dw paren_exit_
-dotid_.1:
+dot_id_.1:
   dw paren_dot_quote_
   _dcs '[noname]'
   dw paren_exit_
@@ -6410,21 +6337,21 @@ dotid_.1:
 
 ; .NAME  ( xt -- )
 ;   >name .id
+; XXX TODO -- remove, ambiguous
 
   _header _public,'.NAME'
 dot_name_:
   call do_colon
-  dw to_name_,dotid_
+  dw to_name_,dot_id_
   dw paren_exit_
 
 ; .WID  ( wid -- )
-;   cell+ cell+ @ .id
-; XXX Renamed to '.VOC' in DX-Forth 4.09
+; XXX NEW Renamed from '.VOC' (DX-Forth 4.09)
   _header _public,'.WID'
 dot_wid_:
   call do_colon
   dw cell_plus_,cell_plus_
-  dw fetch_,dotid_
+  dw fetch_,dot_id_
   dw paren_exit_
 
 ; !CSP  ( -- )
@@ -8741,6 +8668,50 @@ dzx_forth_:
   jp push_version
 
 ; }}} **********************************************************
+; Files control {{{
+
+; HBUF  ( -- a )
+; handle r/w buffer
+; XXX OLD -- still used by 'use', that will be removed
+
+  _header _hidden,'HBUF'
+hbuf_:
+  call do_value
+hbuf_.value:
+  ds cell    ; patched by COLD
+
+; MAX-FILE-ID  ( -- u )
+; XXX NEW
+;   max number of file handle
+
+  _header _public,'MAX-FILE-ID'
+max_file_id_:
+  call do_byte_constant
+  db max_file_id
+
+; #FCB  ( -- u )
+; number of file handles
+; XXX TODO rename
+
+; XXX OLD
+  ; _header _public,'#FCB'
+; nfcb_:
+  ; call do_value
+; nfcb_.value:
+  ; dw max_file_ids
+
+; FILE-ID-TABLE  ( -- a )
+; XXX NEW
+; XXX TODO rename?
+; XXX TODO -- use also to remember which files are headed, one bit
+
+  _header _public,'FILE-ID-TABLE'
+file_id_table_:
+  call do_create
+file_id_table: ; XXX NEW
+  ds max_file_ids
+
+; }}} **********************************************************
 ; Files {{{
 
 ; XXX Note on +3DOS filenames:
@@ -9701,6 +9672,18 @@ parse_filename_:
   dw and_,throw_
   dw paren_exit_
 
+; FLUSH-FILE  ( fid -- ior )  94  ; XXX NEW
+
+  _header _public,'FLUSH-FILE'
+flush_file_:
+  ; XXX TODO fid -> disk of fid -> call dos_flush
+  ; XXX TMP
+  pop hl
+  jp false_
+
+; }}} **********************************************************
+; Save system {{{
+
 ; SAVE-SYSTEM  ( "filename[.COM]" -- )
 ;        0 0 freeze parsefilename s" com" +ext
 ;        ?create >r over swap boot 2! (cold_.6) (zb1)
@@ -9782,19 +9765,12 @@ turnkey_system_:
 ;;  dw zero
 ;;  dw branch,turnkey_.1
 
-; FLUSH-FILE  ( fid -- ior )  94  ; XXX NEW
-
-  _header _public,'FLUSH-FILE'
-flush_file_:
-  ; XXX TODO fid -> disk of fid -> call dos_flush
-
-  ; XXX TMP
-  pop hl
-  jp false_
+; }}} **********************************************************
+; Source files {{{
 
 ; XXX TODO
 ; ------------------------------
-; Source text files words, converted from files.fs (from tools.fb)
+; Converted from files.fs (from tools.fb)
 ; ------------------------------
 
 ; ; LOADLINE  ( -- a )
@@ -9836,6 +9812,24 @@ block_buffer:
 
 block_updated_mask: equ 0x8000
 block_number_mask:  equ 0x7FFF
+
+; B/BUF  ( -- u )
+;   bytes per screen buffer
+
+  _header _public,'B/BUF'
+bytes_per_buffer_:
+  call do_value
+bytes_per_buffer_.value:
+  dw 1024 ; default
+
+; C/L  ( -- u )
+;   chars per screen line
+
+  _header _public,'C/L'
+chars_per_line_:
+  call do_value
+chars_per_line_.value:
+  dw 64 ; default
 
 ; SFP  ( -- a )
 ; screen file selector
@@ -9931,6 +9925,7 @@ fid_.e:  ; XXX TODO rename this label
 ; BLKS  ( -- a )
 ;
 ; XXX TODO -- document this
+; XXX TODO -- rename to 'blocks'?
 
   _header _hidden,'BLKS'
 blks_:
@@ -10007,6 +10002,7 @@ question_open_:
 
 ; #SCREENS  ( -- +n )
 ;   ?open blks @
+; XXX TODO remove?
 
   _header _public,'#SCREENS'
 number_screens_:
@@ -10792,7 +10788,7 @@ inverse_:
 normal_:
   call do_colon
   dw c_lit_
-  db 7
+  db 4
   dw dup_,border_,paper_
   dw zero_,ink_
   dw zero_,flash_
