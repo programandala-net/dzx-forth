@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502170104'  ; release
+  db                            '201502180009'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -100,6 +100,67 @@ _version: macro
 ; }}} **********************************************************
 ; XXX TODO {{{
 
+; 2014: Check problems with backspace (char 8), depending on the ZX Spectrum
+; ROM.  Already solved?
+;
+; 2014: Fix the missing 'cr' after errors; it was removed from 'quit'. Where
+; should it be?
+;
+; 2014: See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM
+; routines.
+;
+; 2015-01-12: implement 'allocate' in the ram disk? [better use the tool that
+; uses the dictionary]
+;
+; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
+;
+; 2015-01-14: change the format of headers created by 'defer'?
+;
+; 2015-01-21: erase 'file-id-table' in 'cold'.
+;
+; 2015-01-24: 'forth-wordlist'
+;
+; 2015-01-24: redirect emit to a file using a word like Gforth's 'outfile-id'
+; to hold the fid of the current file, or a value that represents the console
+; (could be the xt of the printing routine).
+;
+; 2015-01-26: check if 'last-filename' works fine, or the addresses of
+; 'filename-buffers' change.
+;
+; 2015-01-26: improve 'file-id-table' to hold also if every opened file is
+; headed.  use one bit for "open", other bit for "headed". [also if it's a
+; block file; and its filename?]
+;
+; 2015-01-28: change: Simplify the 'dzx-forth' word: use only the version
+; string, and make 'dzx-forth' return it
+;
+; 2015-01-28: idea: a variable with the first loadable block (0/1)
+;
+; 2015-01-28: new: 'block-included' from Gforth; also 'reposition-block-file'.
+;
+; 2015-01-29: fix: improve the "undefined word" message to show the word name.
+; this is required in order to know what fails about 'include'. 2015-02-01: The
+; solution seems to use the new 'latest-word'.
+;
+; 2015-01-29: idea: make every 'dw here_' optional, depending on
+; 'size_optimization', with the alternative 'dw dp_,fetch_'
+;
+; 2015-01-30, 2015-01-16: fix: '(create-file)'. fix the strange issue with its
+; fam: +3DOS can not create r/o or s/r files.  The solution is to change the
+; fam, create the file and then force the original fam.
+;
+; 2015-01-30: Fix: redo the lost renamings in <tools.fb>: 'fname' to
+; 'current-stream-file'; 'loadfile' to 'current-block-file'. Better names?
+;
+; 2015-02-01: new: '?exit' after Gforth.
+;
+; 2015-02-08: Ideas from 40-80 Forth: 'time@' and 'time0', color constants,
+; 'ltape', 'message', 'p!', 'p@'
+;
+; 2015-02-14: Fix: 'at-xy' errors return to BASIC.
+;
+; 2015-02-14: New: 'cconstant', 'cvariable'?
+;
 ; 2015-02-15:
 ;
 ; Fix:
@@ -111,66 +172,25 @@ _version: macro
 ; The problem happens because of the +3DOS HEADER. Also, '#screens' returns one
 ; more than expected for the <list.fb> file, why?
 ; 
+; 2015-02-17:
+;
+; The problem above is double:
+;
+; 1) 'file-size' returns 3200 for a headerless 3072-byte file, maybe because of
+; the 128-bound rounding?
+;
+; 2) 'file-size' returns 3200 for a 3072-byte file with header, because of the
+; 128-byte header.
+; 
+; Then 'init-scr' calculates the number of blocks in the file this way:
+;
+;   file-size drop b/buf um/mod nip blks ! ; XXX FIXME fails with +3DOS headers
+;
+; What returns 3, correct.
+; But it returns 4 when the file is loaded after <words.fs>, that has 4 blocks.
+;
 
-; 2015-02-14: Fix: 'at-xy' errors return to BASIC.
-;
-; 2015-02-14: New: 'cconstant', 'cvariable'?
-;
-; 2015-02-08: Ideas from 40-80 Forth: 'time@' and 'time0', color constants,
-; 'ltape', 'message', 'p!', 'p@'
-;
-; 2015-02-01: new: '?exit' after Gforth.
-;
-; 2015-01-29: fix: improve the "undefined word" message to show the word name.
-; this is required in order to know what fails about 'include'. 2015-02-01: The
-; solution seems to use the new 'latest-word'.
-;
-; 2015-01-30, 2015-01-16: fix: '(create-file)'. fix the strange issue with its
-; fam: +3DOS can not create r/o or s/r files.  The solution is to change the
-; fam, create the file and then force the original fam.
-;
-; 2015-01-30: Fix: redo the lost renamings in <tools.fb>: 'fname' to
-; 'current-stream-file'; 'loadfile' to 'current-block-file'. Better names?
-;
-; 2015-01-29: idea: make every 'dw here_' optional, depending on
-; 'size_optimization', with the alternative 'dw dp_,fetch_'
-;
-; 2015-01-28: new: 'block-included' from Gforth; also 'reposition-block-file'.
-;
-; 2015-01-28: idea: a variable with the first loadable block (0/1)
-;
-; change: Simplify the 'dzx-forth' word: use only the version string, and make
-; 'dzx-forth' return it
-;
-; 2015-01-26: check if 'last-filename' works fine, or the addresses of
-; 'filename-buffers' change.
-;
-; 2015-01-26: improve 'file-id-table' to hold also if every opened file is
-; headed.  use one bit for "open", other bit for "headed". [also if it's a
-; block file; and its filename?]
-;
-; 2015-01-24: 'forth-wordlist'
-;
-; 2015-01-24: redirect emit to a file using a word like Gforth's 'outfile-id'
-; to hold the fid of the current file, or a value that represents the console
-; (could be the xt of the printing routine).
-;
-; 2015-01-21: erase 'file-id-table' in 'cold'.
-;
-; 2015-01-14: change the format of headers created by 'defer'?
-;
-; 2015-01-12: implement 'allocate' in the ram disk? [better use the tool that
-; uses the dictionary]
-;
-; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
-;
-; Fix the missing 'cr' after errors; it was removed from 'quit'. Where should
-; it be?
-;
-; Check problems with backspace (char 8), depending on the ZX Spectrum ROM.
-; Already solved?
-
-; See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM routines.
+; 2015-02-17: call 'dos set message' to disable the messages, if needed.
 
 
 ; }}} **********************************************************
@@ -1808,8 +1828,10 @@ abs_hl:
   ret p
 
 negate_hl:
-  dec hl    ; two's complement
+  ; two's complement
+  dec hl
 negate_hl.1:
+  ; one's complement
   ld a,l
   cpl
   ld l,a
@@ -4476,13 +4498,13 @@ convert_dos_error_code:
   ; XXX TODO see '>ior' and combine both
   ; XXX TODO use the standard codes
   ; Input:   a  = original DOS error code (0..36)
-  ; Outptut: hl = DOS error code converted to Forth range (1000..1036)
+  ; Outptut: hl = DOS error code converted to Forth range (-1000..-1036)
   ld h,0
   ld l,a
 convert_dos_error_code.hl:
   ld de,1000
   add hl,de
-  ret
+  jp negate_hl
 
 get_current_drive:
   ld a,0xFF
@@ -7759,6 +7781,39 @@ recurse_:
 ; -258 ; no filename specified ; XXX TMP
 ; -259 ; can not resize block file ; XXX TMP
 
+; Recoverable +3DOS errors:
+
+; -1000       Drive not ready
+; -1001       Disk is write protected
+; -1002       Seek fail
+; -1003       CRC data error
+; -1004       No data
+; -1005       Missing address mark
+; -1006       Unrecognised disk format
+; -1007       Unknown disk error
+; -1008       Disk changed whilst +3DOS was using it
+; -1009       Unsuitable media for drive
+
+; Non-recoverable +3DOS errors:
+
+; -1020      Bad filename
+; -1021      Bad parameter
+; -1022      Drive not found
+; -1023      File not found
+; -1024      File already exists
+; -1025      End of file
+; -1026      Disk full
+; -1027      Directory full
+; -1028      Read-only file
+; -1029      File number not open (or open with wrong access)
+; -1030      Access denied (file is in use already)
+; -1031      Cannot rename between drives
+; -1032      Extent missing (which should be there)
+; -1033      Uncached (software error)
+; -1034      File too big (trying to read or write past 8 megabytes)
+; -1035      Disk not bootable (boot sector is not acceptable to DOS BOOT)
+; -1036      Drive in use (trying to re-map or remove a drive with files open)
+
 ; ------------------------------
 
 ; (ABORT)  ( -- )
@@ -9898,12 +9953,12 @@ fdb_.3:
 ;  FNB  'filenamesize' bytes  file name
 
 ; FD  ( -- a )
-;
-; XXX TODO -- document this
+; File descriptor field,
+; first field of the file descriptor block.
 
   _header _hidden,'FD'
 fd_:
-  call do_colon    ; file descriptor field
+  call do_colon
   dw sfp_,fetch_,fetch_
   dw paren_exit_
 
@@ -9929,7 +9984,7 @@ fid_.e:  ; XXX TODO rename this label
 
   _header _hidden,'BLKS'
 blks_:
-  ld e,cell*2    ; file size field
+  ld e,cell*2    ; offset to file size field
   jp fid_.e
 
 ; SCR#  ( -- a )
@@ -9938,7 +9993,7 @@ blks_:
 
   _header _hidden,'SCR#'
 scr_number_:
-  ld e,cell*3    ; current SCR_# field
+  ld e,cell*3    ; offset to current SCR_# field
   jp fid_.e
 
 ; FNB  ( -- a )
@@ -9947,7 +10002,7 @@ scr_number_:
 
   _header _hidden,'FNB'
 fnb_:
-  ld e,cell*4    ; file name field
+  ld e,cell*4    ; offset to file name field
   jp fid_.e
 
 ; BUF  ( -- a )
@@ -9968,8 +10023,6 @@ blk_number_.variable:
   ds cell
 
 ; FILE?  ( -- flag )
-;
-; XXX TODO rename
 ;
 ; XXX TODO rename
 
@@ -10262,6 +10315,7 @@ paren_fbk_.2:
   dw fid_,store_
 paren_fbk_.3:
   dw over_
+  _debug "(fbk) about to update BLKS",1
   dw blks_,store_  ; update max block
   dw paren_question_do_,paren_fbk_.end
 paren_fbk_.do.2:
@@ -10387,10 +10441,13 @@ last_filename_:
 ; init screenfile
 ;
 ;   if drop exit then
-;   fdb sfp ! fd on
-;   dup fid ! file-size drop b/buf
-;   um/mod nip blks ! lastfile fnb
-;   place current-block-file upper empty-buffers
+;   fdb sfp !
+;   fd on
+;   dup fid !
+;   file-size drop b/buf um/mod nip blks ! ; XXX FIXME fails with +3DOS headers
+;   lastfile fnb place
+;   current-block-file upper
+;   empty-buffers
 
   _header _hidden,'INIT-SCR'
 init_scr_:
@@ -10405,7 +10462,16 @@ init_scr_.no_error:
   dw fd_,on_
   dw dup_,fid_,store_
   dw file_size_,drop_
+  _debug "files size",1
+
+  dw blks_,fetch_
+  _debug "current content of BLKS",1
+  dw drop_
+
   dw bytes_per_buffer_,umslm_,nip_  ; overflow stores $FFFF
+
+  _debug "new content of BLKS",1
+
   dw blks_,store_
   dw last_filename_,fnb_,place_
 
@@ -10448,7 +10514,8 @@ open_block_file_:
   _header _hidden,'(OPEN)'
 paren_open_:
   call do_colon
-  dw read_write_,open_block_file_
+  dw read_write_  ; XXX TODO read_only_ ?
+  dw open_block_file_
   ; XXX FIXME
   dw paren_abort_quote_ ; XXX TODO convert to 'throw'
   _dcs "can't open file"
