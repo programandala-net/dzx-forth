@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502180009'  ; release
+  db                            '201502182253'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -94,8 +94,11 @@ _version: macro
 ; ! no TAP file required anymore: now the system boots from disk
 
 ; Version A-03 (under development)
-; - (name) n>count
-; + name>string (Gforth and Forth-2012)
+; - '(name)', 'n>count'
+; + 'name>string' (Gforth and Forth-2012)
+; - '>ior'
+; ! '(read-file)' renamed to 'page-read-file'
+; ! '(write-file)' renamed to 'page-write-file'
 
 ; }}} **********************************************************
 ; XXX TODO {{{
@@ -186,12 +189,20 @@ _version: macro
 ;
 ;   file-size drop b/buf um/mod nip blks ! ; XXX FIXME fails with +3DOS headers
 ;
-; What returns 3, correct.
-; But it returns 4 when the file is loaded after <words.fs>, that has 4 blocks.
+; What returns 3, correct.  But it returns 4 when the file is loaded after
+; <words.fs>, that has 4 blocks.
 ;
+;
+; Note: The content of BLKS somehow is restored between two 'open-block file'
+; even after 'close-all'. 
+;
+; Pero 'blks' apunta a una ficha de file_descriptor_blocks. Puede que la ficha
+; no se borre. Pero ¿por qué el nuevo valor es igual que el antiguo cuando el
+; segundo fichero de bloques que se abre es menor?
 
 ; 2015-02-17: call 'dos set message' to disable the messages, if needed.
-
+;
+; 2015-02-18: Now 'file-size' returns 5 KiB for small files, why?
 
 ; }}} **********************************************************
 ; Boot {{{
@@ -268,6 +279,8 @@ ff_char:                    equ 0x0C ; form feed (printer only)
 cursor_left_word_char:      equ 0x18 ; XXX TODO -- implement
 cursor_right_word_char:     equ 0x19 ; XXX TODO -- implement
 
+ctrl_z_char:                equ 0x1A ; used by +3DOS to pad the files
+
 ; ------------------------------
 ; +3DOS
 
@@ -290,6 +303,8 @@ filename_buffer_size:   equ filename_size+1 ; for trailing 0xFF
 ; XXX TODO organize and documentate
 
 debug?:                           equ no ; debugging messages?
+
+debug_blocks?: equ no  ; XXX TMP
 
 case_insensitive_names?:          equ yes
 control_flow_stack_extensions?:   equ yes
@@ -1894,7 +1909,6 @@ s_to_d_:
   jp push_de_hl
 
 ; D>S  ( d -- n )
-;   aka drop d>s
 
   _header _public,'D>S',,drop_
 d_to_s_: equ drop_
@@ -5364,7 +5378,8 @@ header_:
   ; ( ca )
   dw dup_,count_,type_
   dw paren_dot_quote_
-  _dcs ' redefined'
+  _dcs ' redefined  '
+  ; XXX TODO  "redefined WORD  ", after Gforth, clearer?
 header_.1:
   ; the name was not found or 'warning' is off
   dw dup_,count_ ; ( ca ca1 len1 )
@@ -7598,6 +7613,10 @@ quit_.begin:
 
   _header _public,'RETURN'
 return_:
+
+; XXX TODO -- after Gforth, if blocks:
+; ['] flush catch drop
+
   pop bc
   ld iy,sys_err_nr ; XXX TODO -- check if needed
   ld sp,(system_stack_pointer)
@@ -7605,9 +7624,12 @@ return_:
 
 ; BYE  ( -- )
 ; Exit to the BASIC command line.
-
   _header _public,'BYE'
 bye_:
+
+; XXX TODO -- after Gforth, if blocks:
+; ['] flush catch drop
+
 ;  im 1 ; XXX TODO ?
 system_stack_pointer: equ $+1
   ld sp,0
@@ -7813,6 +7835,10 @@ recurse_:
 ; -1034      File too big (trying to read or write past 8 megabytes)
 ; -1035      Disk not bootable (boot sector is not acceptable to DOS BOOT)
 ; -1036      Drive in use (trying to re-map or remove a drive with files open)
+
+; Custom additions:
+
+; -1100      Too many files open
 
 ; ------------------------------
 
@@ -8723,17 +8749,7 @@ dzx_forth_:
   jp push_version
 
 ; }}} **********************************************************
-; Files control {{{
-
-; HBUF  ( -- a )
-; handle r/w buffer
-; XXX OLD -- still used by 'use', that will be removed
-
-  _header _hidden,'HBUF'
-hbuf_:
-  call do_value
-hbuf_.value:
-  ds cell    ; patched by COLD
+; Files control XXX NEW {{{
 
 ; MAX-FILE-ID  ( -- u )
 ; XXX NEW
@@ -8743,6 +8759,86 @@ hbuf_.value:
 max_file_id_:
   call do_byte_constant
   db max_file_id
+
+; FILE-ID-TABLE  ( -- a )
+; XXX NEW
+; XXX TODO rename?
+; XXX TODO -- use also to remember which files are headed, one bit
+
+  _header _public,'FILE-ID-TABLE'
+file_id_table_:
+  call do_create
+file_id_table: ; XXX NEW
+  ds max_file_ids
+
+; FILE-ID  ( -- fid true | false )
+
+  _header _public,'FILE-ID'
+file_id_:
+  call do_colon
+  dw max_file_id_
+file_id_.begin:
+  dw dup_
+  dw file_id_table_,plus_,dup_,c_fetch_
+  dw branch_if_0_,file_id_.found
+  dw drop_,one_minus_,dup_,zero_less_
+  ; XXX TODO use '0>=' when available, and save one branch 
+  dw branch_if_0_,file_id_.begin
+  dw branch_,file_id_.begin
+file_id_.found:
+  dw c_lit_
+  db 0xFF
+  dw swap_,c_store_
+  dw true_
+file_id_.end:
+  dw paren_exit_
+
+; >FILENAME-BUFFER  ( ca len -- ca2 )
+;
+;   (filenamesize-1) min filename-buffers @ packed 0 affix
+;   filename-buffers 2@ swap filename-buffers 2!
+
+; Convert the string ca len to a 0xFF-terminated counted string
+; ca2 in the filename buffer.  A maximum of two filenames can
+; exist in the buffer at one time.  ca2 returns the counted
+; string, whereas ca2 + 1 returns the 0xFF-terminated string.
+
+; Note: The returned string resides in a transient region which may
+; be overwritten by subsequent operations.
+
+; XXX TODO return ca2+1? this is what +3DOS needs
+
+
+  _header _public,'>FILENAME-BUFFER'
+to_filename_buffer_:
+
+  call do_colon
+  dw c_lit_
+  db filename_size
+  dw min_
+  dw filename_buffers_,fetch_
+  dw packed_
+  dw c_lit_
+  db 0xFF
+  dw affix_  ; trailing 0xFF
+  dw filename_buffers_,two_fetch_
+  dw swap_
+  dw filename_buffers_,two_store_
+  dw paren_exit_
+
+
+; }}} **********************************************************
+; Files control XXX OLD {{{
+
+; HBUF  ( -- a )
+; Handle r/w buffer (size: 128)
+; XXX OLD -- still used by 'use', that will be removed
+
+;   _header _hidden,'HBUF'
+; hbuf_:
+;   call do_value
+; hbuf_.value:
+;   ds cell    ; patched by COLD
 
 ; #FCB  ( -- u )
 ; number of file handles
@@ -8755,16 +8851,128 @@ max_file_id_:
 ; nfcb_.value:
   ; dw max_file_ids
 
-; FILE-ID-TABLE  ( -- a )
-; XXX NEW
-; XXX TODO rename?
-; XXX TODO -- use also to remember which files are headed, one bit
+; FH  ( -- fid )
+; current file handle
+; XXX OLD -- useless after rewriting 'get-file-handle' ('file-id')?
+  ; _header _hidden,'FH'
+; fh_:
+  ; call do_value
+; fh_.value:
+  ; dw 0
 
-  _header _public,'FILE-ID-TABLE'
-file_id_table_:
-  call do_create
-file_id_table: ; XXX NEW
-  ds max_file_ids
+; /FH  ( -- )
+;   #fcb (filehandlesize) * hbuf over - swap erase
+;
+; XXX TODO rename
+
+  ; _header _hidden,'/FH'
+; zfh_:
+  ; ld hl,(nfcb_.value)
+  ; ld de,file_handle_size
+  ; call hl_by_de_to_hlde_unsigned
+  ; ld hl,(hbuf_.value)
+  ; call hl_minus_de_to_hl
+  ; push hl
+  ; push de
+  ; jp erase_
+
+; USE  ( -- a )
+; XXX Control data of the current file?
+; fh (file_handle_size) negate * hbuf +
+; XXX OLD -- only used by 'getfh' ('get-file-handle'), that was rewritten ('file-id'?)
+
+  ; _header _hidden,'USE'
+; use_:
+  ; ld hl,(fh_.value)
+  ; ld de,-file_handle_size
+  ; call hl_by_de_to_hlde_unsigned
+  ; ld hl,(hbuf_.value)
+  ; add hl,de
+  ; if size_optimization?
+  ;   jp push_hl
+  ; else
+  ;   push hl
+  ;   jp next
+  ; endif
+
+; UID  ( -- a )
+;   use 1+
+; user number
+; XXX OLD ?
+
+  ; _header _hidden,'UID'
+; uid_:
+  ; call do_colon
+  ; dw use_,one_plus_
+  ; dw paren_exit_
+
+; FCB  ( -- a )
+; FCB address
+;   use 6 +
+; XXX OLD ?
+
+  ; _header _hidden,'FCB'
+; fcb_:
+  ; call do_colon
+  ; dw use_
+  ; dw c_lit_
+  ; db 6
+  ; dw plus_
+  ; dw paren_exit_
+
+; RWP@  ( -- ud )
+; Fetch the read/Write pointer of the current file
+;   use 2+ 2@
+
+  ; _header _hidden,'RWP@'
+; rwp_fetch_:
+  ; call do_colon
+  ; dw use_,two_plus_
+  ; dw two_fetch_
+  ; dw paren_exit_
+
+; RWP!  ( ud -- )
+; Store into the Read/Write pointer of the current file
+;   use 2+ 2! ;
+; XXX OLD
+
+  ; _header _hidden,'RWP!'
+; rwpst_:
+  ; call do_colon
+  ; dw use_,two_plus_
+  ; dw two_store_
+  ; dw paren_exit_
+
+; >IOR  ( err# -- ior )
+;   dup if $fe00 or then
+; XXX OLD 
+
+  ; _header _public,'>IOR'
+; to_ior_:
+  ; pop hl
+  ; ld a,h
+  ; or l
+  ; _jump_z to_ior_.end
+  ; ld h,0xFE
+; to_ior_.end:
+  ; _push_hl_jp_next
+
+
+; >FCB  ( a u -- fcb usr )
+;   2dup >fname 18 + -rot 2 pick set-fcb
+; XXX OLD
+
+  ; _header _public,'>FCB'
+; tfcb_:
+  ; call do_colon
+  ; dw two_dup_,to_filename_buffer_
+  ; dw c_lit_
+  ; db 18
+  ; dw plus_
+  ; dw minus_rot_
+  ; dw two_,pick_
+  ; dw set_fcb_
+  ; dw paren_exit_
 
 ; }}} **********************************************************
 ; Files {{{
@@ -8953,7 +9161,10 @@ old_user: equ $+1
 endif
 
 ; GET-DRIVE  ( -- c )
-
+;
+; Get the default drive (i.e. the drive implied by all filenames that do not
+; specify a drive).
+;
 ; c = drive (ASCII 'A'..'P')
 
   _header _public,'GET-DRIVE'
@@ -8977,165 +9188,6 @@ set_drive_.a:
   call set_current_drive
   jp nc,dos_error_.a
   jp next
-
-; >FILENAME-BUFFER  ( ca len -- ca2 )
-;
-;   (filenamesize-1) min filename-buffers @ packed 0 affix
-;   filename-buffers 2@ swap filename-buffers 2!
-
-; Convert the string ca len to a 0xFF-terminated counted string
-; ca2 in the filename buffer.  A maximum of two filenames can
-; exist in the buffer at one time.  ca2 returns the counted
-; string, whereas ca2 + 1 returns the 0xFF-terminated string.
-
-; Note: The returned string resides in a transient region which may
-; be overwritten by subsequent operations.
-
-; XXX TODO return ca2+1? this is what +3DOS needs
-
-
-  _header _public,'>FILENAME-BUFFER'
-to_filename_buffer_:
-
-  call do_colon
-  dw c_lit_
-  db filename_size
-  dw min_
-  dw filename_buffers_,fetch_
-  dw packed_
-  dw c_lit_
-  db 0xFF
-  dw affix_  ; trailing 0xFF
-  dw filename_buffers_,two_fetch_
-  dw swap_
-  dw filename_buffers_,two_store_
-  dw paren_exit_
-
-; FH  ( -- a )
-; current file handle
-; XXX OLD -- useless after rewriting 'get-file-handle'
-  ; _header _hidden,'FH'
-; fh_:
-  ; call do_value
-; fh_.value:
-  ; dw 0
-
-; /FH  ( -- )
-;   #fcb (filehandlesize) * hbuf over - swap erase
-;
-; XXX TODO rename
-
-  ; _header _hidden,'/FH'
-; zfh_:
-  ; ld hl,(nfcb_.value)
-  ; ld de,file_handle_size
-  ; call hl_by_de_to_hlde_unsigned
-  ; ld hl,(hbuf_.value)
-  ; call hl_minus_de_to_hl
-  ; push hl
-  ; push de
-  ; jp erase_
-
-; USE  ( -- a )
-; fh (file_handle_size) negate * hbuf +
-; XXX OLD -- only used by 'getfh' ('get-file-handle'), that was rewritten
-
-  ; _header _hidden,'USE'
-; use_:
-  ; ld hl,(fh_.value)
-  ; ld de,-file_handle_size
-  ; call hl_by_de_to_hlde_unsigned
-  ; ld hl,(hbuf_.value)
-  ; add hl,de
-  ; if size_optimization?
-  ;   jp push_hl
-  ; else
-  ;   push hl
-  ;   jp next
-  ; endif
-
-; UID  ( -- a )
-;   use 1+
-; user number
-; XXX OLD ?
-
-  ; _header _hidden,'UID'
-; uid_:
-  ; call do_colon
-  ; dw use_,one_plus_
-  ; dw paren_exit_
-
-; FCB  ( -- a )
-; FCB address
-;   use 6 +
-; XXX OLD ?
-
-  ; _header _hidden,'FCB'
-; fcb_:
-  ; call do_colon
-  ; dw use_
-  ; dw c_lit_
-  ; db 6
-  ; dw plus_
-  ; dw paren_exit_
-
-; RWP@  ( -- ud )
-;   use 2+ 2@
-
-  ; _header _hidden,'RWP@'
-; rwp_fetch_:
-  ; call do_colon
-  ; dw use_,two_plus_
-  ; dw two_fetch_
-  ; dw paren_exit_
-
-; RWP!  ( ud -- )
-;   use 2+ 2! ;
-; XXX OLD
-
-  ; _header _hidden,'RWP!'
-; rwpst_:
-  ; call do_colon
-  ; dw use_,two_plus_
-  ; dw two_store_
-  ; dw paren_exit_
-
-; >IOR  ( err# -- ior )
-;   dup if $fe00 or then
-; XXX OLD -- still used
-; XXX TODO adapt
-
-  _header _public,'>IOR'
-to_ior_:
-  pop hl
-  ld a,h
-  or l
-  _jump_z to_ior_.end
-  ld h,0xFE
-to_ior_.end:
-  _push_hl_jp_next
-
-; FILE-ID  ( -- fid true | false )
-
-  _header _public,'FILE-ID'
-file_id_:
-  call do_colon
-  dw max_file_id_
-file_id_.begin:
-  dw dup_
-  dw file_id_table_,plus_,dup_,c_fetch_
-  dw branch_if_0_,file_id_.found
-  dw drop_,one_minus_,dup_,zero_less_
-  ; XXX TODO use '0>=' when available, and save one branch 
-  dw branch_if_0_,file_id_.begin
-  dw branch_,file_id_.begin
-file_id_.found:
-  dw c_lit_
-  db 0xFF
-  dw swap_,c_store_
-  dw true_
-file_id_.end:
-  dw paren_exit_
 
 ; FILE-POSITION  ( fid -- ud ior )
 ;
@@ -9388,9 +9440,7 @@ no_free_fid:
   ; Error
   ; ( ca2 fam )
   dw drop_ ; leave only ca2, as an undefined fid
-  dw c_lit_
-  db 4 ; XXX TODO -- adapt this error code
-  dw to_ior_
+  dw lit_,-1100,throw_
   dw paren_exit_
 
 ; (CREATE-FILE)  ( ca fam fid -- fid ior )
@@ -9462,22 +9512,6 @@ create_file_:
   dw paren_create_file_
   dw paren_exit_
 
-; >FCB  ( a u -- fcb usr )
-;   2dup >fname 18 + -rot 2 pick set-fcb
-; XXX OLD
-
-  ; _header _public,'>FCB'
-; tfcb_:
-  ; call do_colon
-  ; dw two_dup_,to_filename_buffer_
-  ; dw c_lit_
-  ; db 18
-  ; dw plus_
-  ; dw minus_rot_
-  ; dw two_,pick_
-  ; dw set_fcb_
-  ; dw paren_exit_
-
 ; (RENAME-FILE)  ( ca1 ca2 -- ior )
 ;
 ; ca1 = current filename, as a 0xFF-terminated string
@@ -9504,16 +9538,16 @@ rename_file_:
   dw paren_rename_file_
   dw paren_exit_
 
-; (READ-FILE)  ( ca len fid +n -- ior )
+; PAGE-READ-FILE  ( ca len fid +n -- ior )
 ;
 ; ca len = filename
-; +n = RAM bank paged at 0xC000..0xFFFF
+; +n = RAM page for 0xC000..0xFFFF
 
-  _header _public,'(READ-FILE)'
-parent_read_file_:
+  _header _public,'PAGE-READ-FILE'
+page_read_file_:
   pop hl ; l = bank
   ld a,l
-paren_read_file_.bank_a:
+page_read_file_.a:
   call save_ip
   ld c,a
   pop hl
@@ -9525,7 +9559,7 @@ paren_read_file_.bank_a:
   call dos
   pop hl ; len
   call restore_ip
-  jr c,paren_read_file_.no_error
+  jr c,page_read_file_.no_error
 
   ; error
   ; hl = len
@@ -9536,11 +9570,11 @@ paren_read_file_.bank_a:
   ; hl = bytes actually read
   pop af
   cp 21 ; is it "bad parameter"? XXX TODO label
-  jr z, paren_read_file_.no_error
+  jr z, page_read_file_.no_error
   push hl
   jp back_from_dos.error
 
-paren_read_file_.no_error:
+page_read_file_.no_error:
   ; no error
   ; hl = len
   push hl
@@ -9552,17 +9586,17 @@ paren_read_file_.no_error:
 read_file_:
   ld a,(sys_bankm) ; XXX TODO factor out if size_optimization
   and %111 ; current page for 0xC000..0xFFFF
-  _jump paren_read_file_.bank_a
+  _jump page_read_file_.a
 
-; (WRITE-FILE)  ( ca len fid +n -- ior )
+; PAGE-WRITE-FILE  ( ca len fid +n -- ior )
 ;
-; +n = RAM bank paged at 0xC000..0xFFFF
+; +n = RAM page for 0xC000..0xFFFF
 
-  _header _public,'(WRITE-FILE)'
-parent_write_file_:
+  _header _public,'PAGE-WRITE-FILE'
+page_write_file_:
   pop hl ; l = bank
   ld a,l
-paren_write_file_.bank_a:
+page_write_file_.a:
   call save_ip
   ld c,a
   pop hl
@@ -9580,7 +9614,7 @@ paren_write_file_.bank_a:
 write_file_:
   ld a,(sys_bankm)
   and %111 ; current page for 0xC000..0xFFFF
-  _jump paren_write_file_.bank_a
+  _jump page_write_file_.a
 
 ; NEW-LINE  ( -- ca len )  Gforth's 'newline' ; XXX NEW
 ; String used by 'WRITE-LINE' as end of line
@@ -9611,8 +9645,14 @@ write_line_.end_of_line:
   dw paren_exit_
 
 ; EOL?  ( c -- 2|1|0 )
+; c=CR  -> 2
+; c=LF  -> 1
+; other -> 0
+;
 ; XXX NEW --- modified to accept a char, not an address
+
 ; XXX TODO --- return the char (cr or lf) or zero
+; (but that would break 'read-line')
 
   _header _hidden,'EOL?'
 eol_question_:
@@ -9659,6 +9699,8 @@ write_byte_:
   pop bc  ; restore the Forth IP
   jp back_from_dos
 
+if false
+
 ; READ-LINE  ( ca len1 fid -- len2 flag ior )
 ;
 ;   >r over swap r> read-file ?dup if  exit  then
@@ -9674,48 +9716,56 @@ write_byte_:
 
   _header _public,'READ-LINE'
 read_line_:
+
 ; XXX TODO
+
+
+; XXX TMP
   pop hl
   pop hl
   pop hl
   jp next
+
 ; XXX OLD -- DX-Forth 4.00
-;;  call do_colon
-;;  dw tor_,over_,swap_,from_r_
-;;  dw readfile_,question_dup_
-;;  dw question_branch_,read_line_.1
-;;  dw paren_exit_
-;;read_line_.1:
-;;  dw two_dup_,over_,plus_,swap_
-;;  dw paren_question_do_,read_line_.5
-;;read_line.do:
-;;  dw i_
-;;  dw dup_,c_fetch_
-;;  dw c_lit_
-;;  db ctlz_
-;;  dw equals_
-;;  dw question_branch_,read_line_.3
-;;  dw rot_,minus_
-;;  dw fh_,file_size_,drop_,rwpst_
-;;  dw paren_leave_,read_line_.do-cell
-;;read_line_.3:
-;;  dw c_fetch_,eol_question_,question_dup_
-;;  dw question_branch_,read_line_.4
-;;  dw i_,plus_,tor_
-;;  dw over_,plus_
-;;  dw from_r_
-;;  dw swap_,minus_
-;;  dw dup_,zero_not_equals_  ; handle buffer > 32K
-;;  dw rwp_fetch_,d_plus_,rwp_store_
-;;  dw i_,swap_,minus_
-;;  dw true_,zero_
-;;  dw unloop_,paren_exit_
-;;read_line_.4:
-;;  dw paren_loop_,read_line.do_
-;;read_line_.5:
-;;  dw nip_
-;;  dw dup_,zero_not_equals_,zero_
-;;  dw paren_exit_
+
+  call do_colon
+  dw to_r_,over_,swap_,from_r_
+  dw read_file_,question_dup_
+  dw question_branch_,read_line_.1
+  dw paren_exit_
+read_line_.1:
+  dw two_dup_,over_,plus_,swap_
+  dw paren_question_do_,read_line_.5
+read_line.do:
+  dw i_
+  dw dup_,c_fetch_
+  dw c_lit_
+  db ctrl_z_char_
+  dw equals_
+  dw question_branch_,read_line_.3
+  dw rot_,minus_
+  dw fh_,file_size_,drop_,rwpst_
+  dw paren_leave_,read_line_.do-cell
+read_line_.3:
+  dw c_fetch_,eol_question_,question_dup_
+  dw question_branch_,read_line_.4
+  dw i_,plus_,tor_
+  dw over_,plus_
+  dw from_r_
+  dw swap_,minus_
+  dw dup_,zero_not_equals_  ; handle buffer > 32K
+  dw rwp_fetch_,d_plus_,rwp_store_
+  dw i_,swap_,minus_
+  dw true_,zero_
+  dw unloop_,paren_exit_
+read_line_.4:
+  dw paren_loop_,read_line.do_
+read_line_.5:
+  dw nip_
+  dw dup_,zero_not_equals_,zero_
+  dw paren_exit_
+
+endif
 
 ; PARSE-FILENAME  ( "filename" -- ca len )
 
@@ -10315,7 +10365,7 @@ paren_fbk_.2:
   dw fid_,store_
 paren_fbk_.3:
   dw over_
-  _debug "(fbk) about to update BLKS",1
+  _debug "(fbk) about to update BLKS",debug_blocks?
   dw blks_,store_  ; update max block
   dw paren_question_do_,paren_fbk_.end
 paren_fbk_.do.2:
@@ -10452,6 +10502,7 @@ last_filename_:
   _header _hidden,'INIT-SCR'
 init_scr_:
   call do_colon
+  _debug "Entry of 'init-scr'",debug_blocks?
 
   dw branch_if_0_,init_scr_.no_error
   dw drop_
@@ -10462,15 +10513,15 @@ init_scr_.no_error:
   dw fd_,on_
   dw dup_,fid_,store_
   dw file_size_,drop_
-  _debug "files size",1
+  _debug "files size",debug_blocks?
 
   dw blks_,fetch_
-  _debug "current content of BLKS",1
+  _debug "current content of BLKS",debug_blocks?
   dw drop_
 
   dw bytes_per_buffer_,umslm_,nip_  ; overflow stores $FFFF
 
-  _debug "new content of BLKS",1
+  _  ; XXX TMPdebug "new content of BLKS",debug_blocks?
 
   dw blks_,store_
   dw last_filename_,fnb_,place_
