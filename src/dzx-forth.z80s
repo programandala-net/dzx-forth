@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502182253'  ; release
+  db                            '201502192122'  ; release
   endm
 
 ; A direct-threaded almost-standard Forth for ZX Spectrum,
@@ -99,6 +99,7 @@ _version: macro
 ; - '>ior'
 ; ! '(read-file)' renamed to 'page-read-file'
 ; ! '(write-file)' renamed to 'page-write-file'
+; * +3DOS errors changed to negative (range -1000..-1036, with additions from -1100)
 
 ; }}} **********************************************************
 ; XXX TODO {{{
@@ -7158,13 +7159,6 @@ debug_interpret:
 
 ; INTERPRET  ( -- )
 
-; ; XXX TODO Inform the author abouth this:
-; ; in the original code,
-; ; the branch to inte3 can be direct to inte14:
-;   dw  bran,inte3
-; inte2:  dw  exec
-; inte3:  dw  bran,inte14
-
   _header _public,'INTERPRET'
 interpret_:
   call do_colon
@@ -7976,13 +7970,6 @@ error_.other:
   dw latest_word_,type_
 error_.end:
   dw paren_abort_
-;  dw paren_exit_ ; XXX OLD -- not needed -- inform DX-Forth's author:
-; XXX this is the original code:
-; error3: dw  pdotq
-;   dcs ' exception = '
-;   dw  dot
-;   dw  pabor
-;   dw  exit
 
 ; LATEST-WORD  ( -- ca len )
 ; Return the latest word parsed before any error.
@@ -9701,66 +9688,88 @@ write_byte_:
 
 if false
 
-; READ-LINE  ( ca len1 fid -- len2 flag ior )
-;
-;   >r over swap r> read-file ?dup if  exit  then
-;   2dup over + swap ?do
-;     i dup c@ $1A = if
-;       rot - fh file-size drop rwp! leave
-;     then
-;     c@ eol? ?dup if
-;       i + >r over + r> swap - dup
-;       0<> rwp@ d+ rwp! i swap - -1 0 unloop exit
-;     then
-;   loop  nip dup 0<> 0
+; READ-LINE  ( ca1 len1 fid -- len2 flag ior )
 
   _header _public,'READ-LINE'
 read_line_:
 
-; XXX TODO
-
-
-; XXX TMP
-  pop hl
-  pop hl
-  pop hl
-  jp next
-
-; XXX OLD -- DX-Forth 4.00
+; XXX TODO -- finish and check
+  ; ca1   = address of the first char
+  ; ca1'  = address of the currently examined char, in the loop
+  ; ca2   = ca1'+eol = address after the end of line
+  ; ca3   = ca1+len1' = address after the last char actually read
+  ; eol   = type of EOL char (1=LF, 2=CR)
+  ; flag  = succesful?
+  ; ior   = input/output report
+  ; len1' = number of chars actually read
+  ; len2  = number of chars actually read, without line terminators
+  ; n     = offset from the current file position to the start of
+  ;         the next line
 
   call do_colon
+
+  dw dup_,lit_,read_line_.fid,store_
+  dw dup_,file_position_
+  dw question_dup_
+  dw branch_if_zero_,read_line_.save_file_position
+  ; 'file-position' error
+  dw to_r_,two_drop_,two_drop_,zero_,zero_,from_r_
+  dw paren_exit_
+
+read_line_.save_file_position
+  dw lit_,read_line_.file_position,two_store_
   dw to_r_,over_,swap_,from_r_
   dw read_file_,question_dup_
-  dw question_branch_,read_line_.1
+  dw branch_if_zero_,read_line_.main
+  ; 'read-file' error
+  dw to_r_,nip_,zero_,from_r_
   dw paren_exit_
-read_line_.1:
-  dw two_dup_,over_,plus_,swap_
-  dw paren_question_do_,read_line_.5
-read_line.do:
-  dw i_
-  dw dup_,c_fetch_
+
+read_line_.main:
+  ; ( ca1 len1' )
+  dw two_dup_,bounds_
+  dw paren_question_do_,read_line_.end_of_loop
+
+read_line_.do:
+  ; ( ca1 len1' )
+  dw i_,dup_,c_fetch_ ; current char
   dw c_lit_
   db ctrl_z_char_
-  dw equals_
-  dw question_branch_,read_line_.3
-  dw rot_,minus_
-  dw fh_,file_size_,drop_,rwpst_
+  dw equals_ ; CTRL-Z?
+  dw question_branch_,read_line_.check_eol
+  ; CTRL-Z found
+  ; ( ca1 len1' ca1')
+  dw rot_,minus_  ; ( len1' len2 )
+  dw lit_
+read_line_.fid
+  ds cell ; patched at the start
+  dw file_size_,drop_ ; XXX TODO manage the ior
+  dw lit_,read_line.fid_,fetch_
+  dw reposition_file_,drop_  ; XXX TODO manage the ior
+  ; ( len1' len2 )
   dw paren_leave_,read_line_.do-cell
-read_line_.3:
+
+read_line_.check_eol:
   dw c_fetch_,eol_question_,question_dup_
-  dw question_branch_,read_line_.4
+  dw question_branch_,read_line_.loop
+  ; EOL found
+  ; ( ca1 len1' eol )
   dw i_,plus_,tor_
   dw over_,plus_
-  dw from_r_
+  dw from_r_ ; ( ca1 ca3 ca2 )
   dw swap_,minus_
   dw dup_,zero_not_equals_  ; handle buffer > 32K
-  dw rwp_fetch_,d_plus_,rwp_store_
-  dw i_,swap_,minus_
-  dw true_,zero_
+  dw lit_,read_line_.fid,fetch_
+  dw file_position_,drop_ ; XXX TODO manage the ior
+  dw d_plus_
+  dw lit_,read_line_.fid,fetch_
+  dw reposition_file_,drop_ ; XXX TODO manage the ior
+  dw i_,swap_,minus_,true_,zero_
   dw unloop_,paren_exit_
-read_line_.4:
+
+read_line_.loop:
   dw paren_loop_,read_line.do_
-read_line_.5:
+read_line_.end_of_loop:
   dw nip_
   dw dup_,zero_not_equals_,zero_
   dw paren_exit_
