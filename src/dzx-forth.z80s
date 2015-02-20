@@ -5,10 +5,10 @@ _version: macro
   db version.major
   version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502192122'  ; release
+  db                            '201502202215'  ; release
   endm
 
-; A direct-threaded almost-standard Forth for ZX Spectrum,
+; A direct-threaded Forth for ZX Spectrum,
 ; with support for +3DOS and IDEDOS
 ;
 ; (Project under development)
@@ -29,181 +29,8 @@ _version: macro
 ; You should have received a copy of the GNU General Public License along with
 ; DZX-Forth; if not, see <http://gnu.org/licenses>.
 
-; }}} **********************************************************
-; Version history {{{
-
-; Note: "+" = new, "-" = removed, "*" = fixed, "!" = changed
-
-; 2014-11-03: Start.
-
-; Version A-00-20150112:
-; * 'emit'
-; + 'border'
-; + 'toupper', 'tolower', 'lower'
-; * 'bye'
-; * 'return'
-; * 'key', 'key?'
-; * 'type'
-; + 'boot-message'
-; * 'quit', 'accept', 'interpret'
-; + 'alias'
-; + "%" number prefix
-; + 'binary'
-; - 'not'
-; * 'page'
-; ! '@execute'
-; + '@?execute'
-
-; Version A-01-20150114
-; + 'get-user', 'set-user', 'restore-user'
-; + 'tib', '#tib'
-; * 'dos-version'
-; + 'unused-disk'
-; + 'get-drive', 'set-drive'
-; + single-quoted chars as a number format
-; + text translation table
-
-; Version A-02-20150214
-; + 'defer!', 'defer@'
-; + 'alias'
-; + 'hex.'
-; + 'file-position'
-; + 'paper', 'ink', 'bright', 'flash', 'normal'
-; + 'create-file', 'close-file'
-; + 'cell', '4', 'float'
-; + 'delete-file'
-; ! now block files support is optional, by conditional assembling
-; + 'write-file'
-; + 'rdrop'
-; + 'write-line', 'read-file', 'open-file'
-; ! 'token' renamed to 'parse-name', after Gforth and Forth 2012
-; + 'file-id'
-; + 'reposition-file', 'abandon-file', 'headed', 'file-size'
-; + 'read-byte', 'write-byte'
-; - 'filetype?'
-; + 'filetype'
-; ! 'zbuf' renamed to 'filename-buffers'
-; ! 'lastfile' renamed to 'last-filename'
-; - '.lastfile'
-; ! '>fname'renamed to '>filename-buffer'
-; + 'rename-file'
-; ! faster '+string'
-; + 'control>bl'
-; + block files can be opened and loaded.
-; + circular string buffer
-; ! no TAP file required anymore: now the system boots from disk
-
-; Version A-03 (under development)
-; - '(name)', 'n>count'
-; + 'name>string' (Gforth and Forth-2012)
-; - '>ior'
-; ! '(read-file)' renamed to 'page-read-file'
-; ! '(write-file)' renamed to 'page-write-file'
-; * +3DOS errors changed to negative (range -1000..-1036, with additions from -1100)
-
-; }}} **********************************************************
-; XXX TODO {{{
-
-; 2014: Check problems with backspace (char 8), depending on the ZX Spectrum
-; ROM.  Already solved?
-;
-; 2014: Fix the missing 'cr' after errors; it was removed from 'quit'. Where
-; should it be?
-;
-; 2014: See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM
-; routines.
-;
-; 2015-01-12: implement 'allocate' in the ram disk? [better use the tool that
-; uses the dictionary]
-;
-; 2015-01-12: use 'throw' with Forth-94 codes instead of '(abort")'
-;
-; 2015-01-14: change the format of headers created by 'defer'?
-;
-; 2015-01-21: erase 'file-id-table' in 'cold'.
-;
-; 2015-01-24: 'forth-wordlist'
-;
-; 2015-01-24: redirect emit to a file using a word like Gforth's 'outfile-id'
-; to hold the fid of the current file, or a value that represents the console
-; (could be the xt of the printing routine).
-;
-; 2015-01-26: check if 'last-filename' works fine, or the addresses of
-; 'filename-buffers' change.
-;
-; 2015-01-26: improve 'file-id-table' to hold also if every opened file is
-; headed.  use one bit for "open", other bit for "headed". [also if it's a
-; block file; and its filename?]
-;
-; 2015-01-28: change: Simplify the 'dzx-forth' word: use only the version
-; string, and make 'dzx-forth' return it
-;
-; 2015-01-28: idea: a variable with the first loadable block (0/1)
-;
-; 2015-01-28: new: 'block-included' from Gforth; also 'reposition-block-file'.
-;
-; 2015-01-29: fix: improve the "undefined word" message to show the word name.
-; this is required in order to know what fails about 'include'. 2015-02-01: The
-; solution seems to use the new 'latest-word'.
-;
-; 2015-01-29: idea: make every 'dw here_' optional, depending on
-; 'size_optimization', with the alternative 'dw dp_,fetch_'
-;
-; 2015-01-30, 2015-01-16: fix: '(create-file)'. fix the strange issue with its
-; fam: +3DOS can not create r/o or s/r files.  The solution is to change the
-; fam, create the file and then force the original fam.
-;
-; 2015-01-30: Fix: redo the lost renamings in <tools.fb>: 'fname' to
-; 'current-stream-file'; 'loadfile' to 'current-block-file'. Better names?
-;
-; 2015-02-01: new: '?exit' after Gforth.
-;
-; 2015-02-08: Ideas from 40-80 Forth: 'time@' and 'time0', color constants,
-; 'ltape', 'message', 'p!', 'p@'
-;
-; 2015-02-14: Fix: 'at-xy' errors return to BASIC.
-;
-; 2015-02-14: New: 'cconstant', 'cvariable'?
-;
-; 2015-02-15:
-;
-; Fix:
-;
-; block r/w error happens because of '#screens' is 1 greater.  No matter the
-; tool the DSK file is created by, 'tap2dsk' or 'mkp3fs'.  But 'tap2dsk'
-; creates +3DOS headers, while 'mkp3fs' doesn't.
-;
-; The problem happens because of the +3DOS HEADER. Also, '#screens' returns one
-; more than expected for the <list.fb> file, why?
-; 
-; 2015-02-17:
-;
-; The problem above is double:
-;
-; 1) 'file-size' returns 3200 for a headerless 3072-byte file, maybe because of
-; the 128-bound rounding?
-;
-; 2) 'file-size' returns 3200 for a 3072-byte file with header, because of the
-; 128-byte header.
-; 
-; Then 'init-scr' calculates the number of blocks in the file this way:
-;
-;   file-size drop b/buf um/mod nip blks ! ; XXX FIXME fails with +3DOS headers
-;
-; What returns 3, correct.  But it returns 4 when the file is loaded after
-; <words.fs>, that has 4 blocks.
-;
-;
-; Note: The content of BLKS somehow is restored between two 'open-block file'
-; even after 'close-all'. 
-;
-; Pero 'blks' apunta a una ficha de file_descriptor_blocks. Puede que la ficha
-; no se borre. Pero ¿por qué el nuevo valor es igual que el antiguo cuando el
-; segundo fichero de bloques que se abre es menor?
-
-; 2015-02-17: call 'dos set message' to disable the messages, if needed.
-;
-; 2015-02-18: Now 'file-size' returns 5 KiB for small files, why?
+; Version history: see the file <VERSIONS.md>.
+; TO-DO list: see the file <TO-DO.md>.
 
 ; }}} **********************************************************
 ; Boot {{{
@@ -1689,6 +1516,11 @@ c_toggle_.hl:
 
   _header _public,'CHAR+',,one_plus_
 char_plus_: equ one_plus_
+
+; CHAR-  ( ca1 -- ca2 )
+
+  _header _public,'CHAR-',,one_minus_
+char_minus_: equ one_minus_
 
 ; CHARS  ( n1 -- n2 )
 
@@ -6043,20 +5875,6 @@ set_current_:
   ld hl,current.variable
   jp store_.into_hl_pointer
 
-; FILENAME-BUFFERS ( -- a )
-; filename buffer pointers
-
-  _header _hidden,'FILENAME-BUFFERS'
-filename_buffers_:
-  call do_create
-filename_buffers_.next:
-  dw filename_buffer.next ; address of the filename buffer to be used next
-filename_buffers_.last:
-  dw filename_buffer.last ; address of the filename buffer used last
-
-filename_buffer.next: ds filename_buffer_size
-filename_buffer.last: ds filename_buffer_size
-
 ; }}} **********************************************************
 ; User variables {{{
 
@@ -8780,24 +8598,48 @@ file_id_.found:
 file_id_.end:
   dw paren_exit_
 
-; >FILENAME-BUFFER  ( ca len -- ca2 )
-;
-;   (filenamesize-1) min filename-buffers @ packed 0 affix
-;   filename-buffers 2@ swap filename-buffers 2!
+if circular_string_buffer?
 
-; Convert the string ca len to a 0xFF-terminated counted string
-; ca2 in the filename buffer.  A maximum of two filenames can
-; exist in the buffer at one time.  ca2 returns the counted
-; string, whereas ca2 + 1 returns the 0xFF-terminated string.
+; >FILENAME  ( ca len -- ca2 )
+
+; Convert the filename ca len to a 0xFF-terminated string at ca2 in the string
+; buffer.
+;
+; ca2 = address of the first char of the 0xFF-terminated string,
+;       as required by +3DOS
+
+  _header _public,'>FILENAME'
+to_filename_:
+
+  call do_colon
+  dw c_lit_
+  db filename_size
+  dw min_
+  dw char_plus_ ; for the trailing 0xFF
+  dw save_string_
+  dw two_dup_,plus_,char_minus_ ; address of the last char
+  dw c_lit_
+  db 0xFF
+  dw swap_,c_store_  ; trailing 0xFF
+  dw drop_
+  dw paren_exit_
+
+else
+
+; >FILENAME  ( ca len -- ca2 )
+
+; Convert the filename ca len to a 0xFF-terminated string at ca2 in the
+; filename buffer.  A maximum of two filenames can exist in the buffer at one
+; time.
+;
+; ca2 = address of the first char of the 0xFF-terminated string,
+;       as required by +3DOS
 
 ; Note: The returned string resides in a transient region which may
 ; be overwritten by subsequent operations.
 
-; XXX TODO return ca2+1? this is what +3DOS needs
-
-
-  _header _public,'>FILENAME-BUFFER'
-to_filename_buffer_:
+  _header _public,'>FILENAME'
+to_filename_:
 
   call do_colon
   dw c_lit_
@@ -8811,8 +8653,27 @@ to_filename_buffer_:
   dw filename_buffers_,two_fetch_
   dw swap_
   dw filename_buffers_,two_store_
+  dw char_plus_
   dw paren_exit_
 
+endif
+
+; FILENAME-BUFFERS ( -- a )
+; filename buffer pointers
+
+; XXX TODO this will not be necessary with the circular string buffer,
+; but still needed by '+ext'
+
+  _header _hidden,'FILENAME-BUFFERS'
+filename_buffers_:
+  call do_create
+filename_buffers_.next:
+  dw filename_buffer.next ; address of the filename buffer to be used next
+filename_buffers_.last:
+  dw filename_buffer.last ; address of the filename buffer used last
+
+filename_buffer.next: ds filename_buffer_size
+filename_buffer.last: ds filename_buffer_size
 
 ; }}} **********************************************************
 ; Files control XXX OLD {{{
@@ -9069,19 +8930,24 @@ filetype_:
   dw paren_exit_
 
 ; +EXT  ( ca1 len1 ca2 len2 -- ca3 len3 )
+; 
+; Add the filetype ca2 len2 to the filename ca1 len1, if needed.
+; 
+; ca2 len2 = filetype without the dot
 ;
-;        2over filetype? if 2drop exit then
+;        2over filetype nip if 2drop exit then
 ;        3 min s" ." 2rot -trailing (filenamesize-4) min
 ;        filename-buffers @ 1+ 0 +string +string +string
-; uses filename buffer
 
   _header _public,'+EXT'
 plus_ext_:
   call do_colon
+
   dw two_over_,filetype_,nip_
-  dw question_branch_,plus_ext_.1
+  dw branch_if_zero_,plus_ext_.do_it
   dw two_drop_,paren_exit_
-plus_ext_.1:
+
+plus_ext_.do_it:
   dw three_,min_
   dw paren_s_quot_
   _dcs '.'
@@ -9090,9 +8956,14 @@ plus_ext_.1:
   dw c_lit_
   db filename_size-4 ; 4 = the length of a filetype, including the dot
   dw min_
-  dw filename_buffers_,fetch_    ; unused
-  dw one_plus_
-  dw zero_
+  if circular_string_buffer? and 0
+    ; XXX TODO
+    dw dup_
+  else
+    dw filename_buffers_,fetch_    ; unused
+    dw one_plus_
+    dw zero_
+  endif
   dw plus_string_
   dw plus_string_
   dw plus_string_
@@ -9277,7 +9148,7 @@ paren_delete_file_:
   _header _public,'DELETE-FILE'
 delete_file_:
   call do_colon
-  dw to_filename_buffer_,one_plus_
+  dw to_filename_
   dw paren_delete_file_
   dw paren_exit_
 
@@ -9415,7 +9286,7 @@ do_dos_open.error
 open_file_:
 
   call do_colon
-  dw to_r_,to_filename_buffer_,one_plus_,from_r_
+  dw to_r_,to_filename_,from_r_
   ; ( ca2 fam )
   dw file_id_
   dw branch_if_zero_,no_free_fid
@@ -9491,7 +9362,7 @@ paren_create_file_.actions
 create_file_:
 
   call do_colon
-  dw to_r_,to_filename_buffer_,one_plus_,from_r_
+  dw to_r_,to_filename_,from_r_
   ; ( ca2 fam )
   dw file_id_
   dw branch_if_zero_,no_free_fid
@@ -9520,8 +9391,8 @@ paren_rename_file_:
   _header _public,'RENAME-FILE'
 rename_file_:
   call do_colon
-  dw to_filename_buffer_,one_plus_,to_r_
-  dw to_filename_buffer_,one_plus_,from_r_
+  dw to_filename_,to_r_
+  dw to_filename_,from_r_
   dw paren_rename_file_
   dw paren_exit_
 
@@ -9686,8 +9557,6 @@ write_byte_:
   pop bc  ; restore the Forth IP
   jp back_from_dos
 
-if false
-
 ; READ-LINE  ( ca1 len1 fid -- len2 flag ior )
 
   _header _public,'READ-LINE'
@@ -9709,23 +9578,15 @@ read_line_:
   call do_colon
 
   dw dup_,lit_,read_line_.fid,store_
-  dw dup_,file_position_
+  dw to_r_,over_,swap_,from_r_ ; ( ca1 ca1 len1 fid )
+  dw read_file_ ; ( ca1 len1' ior )
   dw question_dup_
-  dw branch_if_zero_,read_line_.save_file_position
-  ; 'file-position' error
-  dw to_r_,two_drop_,two_drop_,zero_,zero_,from_r_
-  dw paren_exit_
-
-read_line_.save_file_position
-  dw lit_,read_line_.file_position,two_store_
-  dw to_r_,over_,swap_,from_r_
-  dw read_file_,question_dup_
-  dw branch_if_zero_,read_line_.main
+  dw branch_if_zero_,read_line_.ready
   ; 'read-file' error
   dw to_r_,nip_,zero_,from_r_
   dw paren_exit_
 
-read_line_.main:
+read_line_.ready:
   ; ( ca1 len1' )
   dw two_dup_,bounds_
   dw paren_question_do_,read_line_.end_of_loop
@@ -9734,47 +9595,56 @@ read_line_.do:
   ; ( ca1 len1' )
   dw i_,dup_,c_fetch_ ; current char
   dw c_lit_
-  db ctrl_z_char_
+  db ctrl_z_char
   dw equals_ ; CTRL-Z?
-  dw question_branch_,read_line_.check_eol
+  dw branch_if_false_,read_line_.check_eol
+
   ; CTRL-Z found
   ; ( ca1 len1' ca1')
   dw rot_,minus_  ; ( len1' len2 )
   dw lit_
-read_line_.fid
-  ds cell ; patched at the start
+read_line_.fid:
+  ds cell ; the file id is stored here at the start
   dw file_size_,drop_ ; XXX TODO manage the ior
-  dw lit_,read_line.fid_,fetch_
+  ; XXX TODO faster with 'dup' and 'rot'?:
+  dw lit_,read_line_.fid,fetch_
   dw reposition_file_,drop_  ; XXX TODO manage the ior
   ; ( len1' len2 )
-  dw paren_leave_,read_line_.do-cell
+  dw paren_leave_,read_line_.do-cell ; leave the loop
 
 read_line_.check_eol:
+  ; ( ca1 len1' ca1' )
   dw c_fetch_,eol_question_,question_dup_
-  dw question_branch_,read_line_.loop
+  dw branch_if_zero_,read_line_.loop
   ; EOL found
   ; ( ca1 len1' eol )
-  dw i_,plus_,tor_
+  dw i_,plus_,to_r_
   dw over_,plus_
   dw from_r_ ; ( ca1 ca3 ca2 )
-  dw swap_,minus_
-  dw dup_,zero_not_equals_  ; handle buffer > 32K
+  dw swap_,minus_ ; ( ca1 n )
+  dw dup_,zero_not_equals_  ; handle buffer > 32K XXX ?
+
+  ; Update the file position to the start of the next line
+  ; ( ca1 d )
   dw lit_,read_line_.fid,fetch_
   dw file_position_,drop_ ; XXX TODO manage the ior
   dw d_plus_
   dw lit_,read_line_.fid,fetch_
   dw reposition_file_,drop_ ; XXX TODO manage the ior
-  dw i_,swap_,minus_,true_,zero_
+
+  ; ( ca1 )
+  dw i_,swap_,minus_    ; ( len2 )
+  dw true_,zero_        ; ( flag ior )
+  ; ( len2 flag ior )
   dw unloop_,paren_exit_
 
 read_line_.loop:
-  dw paren_loop_,read_line.do_
+  dw paren_loop_,read_line_.do
 read_line_.end_of_loop:
-  dw nip_
-  dw dup_,zero_not_equals_,zero_
+  ; ( ca1 len2 | len1' len2 )
+  dw nip_,dup_,zero_not_equals_,zero_
+  ; ( len2 flag ior )
   dw paren_exit_
-
-endif
 
 ; PARSE-FILENAME  ( "filename" -- ca len )
 
