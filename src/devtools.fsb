@@ -1,0 +1,29 @@
+\ DZX-Forth development tools
+
+\ Some simple tools used for debugging
+\ during the development of DZX-Forth.
+
+\ 2015-02-21
+
+( Load block )
+
+forth definitions  decimal  warning off
+
+cr .( Loading development tools...)  2 #screens 1- thru
+
+forth definitions  decimal  warning on
+
+( l )
+
+15 value l-fid
+: l  ( -- )
+  \ Read and show a line from the 'l-fid' file.
+  l-fid pad pad 80 read-line throw .s cr type cr ;
+
+( sized )
+: .size  ( ca len -- )
+  \ Show the size of a closed file.
+  r/o open-file throw
+  dup file-size throw d.
+  close-file throw  ;
+

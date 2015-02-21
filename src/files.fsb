@@ -1,0 +1,141 @@
+\ files.fsb
+\ This file is part of DZX-Forth
+\ http://programandala.net/en.programa.dzx-forth.html
+\
+\ This file contains words extracted from <tools.fs> in order
+\ to document them and implement them in the DZX-Forth kernel.
+\
+\ 2015-02-08: Code extracted from <tools.fs>.
+\ 2015-02-13: A copy is converted to <files.fbs> in order to
+\ load it into DZX-Forth and debug the code. This remains the
+\ main file.
+
+( Load block )
+forth definitions  decimal  warning off
+
+cr .( Loading file words...)  2 #screens 1- thru
+
+forth definitions  decimal  warning on
+
+( description block )
+\ Text files are automatically closed.  If an error occurs only
+\ the current file is closed.  Use '\\' to skip compilation as
+\ 'QUIT' will leave files open and cause loading problems.
+\ Should the latter occur use 'close-included' or 'close-all'.
+
+variable included-line#  included-line# off
+
+\ XXX FIXME why init here with fdb? '(included)' will do:
+fdb value tfdb
+
+: fd           ( -- a )  tfdb @  ;
+: fs-file-id   ( -- a )  fd cell+  ;
+: fs-position  ( -- a )  fd [ 2 cells ] literal +  ;
+: fs-filename  ( -- a )  fd [ 4 cells ] literal +  ;
+
+( close-included )
+: CLOSE-INCLUDED ( -- )
+  fd @ if  fs-file-id @ close-file throw  fd off  then
+  ;
+( tread )
+: tread ( -- ca len flag )
+  ." tread" cr \ XXX INFORMER
+  80 \ XXX TODO configure
+  dup string-allocate  dup rot  ( ca ca len )
+  fs-file-id @ read-line .s cr throw
+  >r included-line# ? 2dup type cr key drop r>
+  \ XXX already done later in '(evaluate)':
+  \ >r  control>bl r>
+  ;
+( text-file-source? )
+: text-file-source? ( -- flag )
+  \ Is the source a text file?
+  fd @  blk @ 0=  and  ;
+
+( text-file-refill )
+: text-file-refill ( -- flag )
+  ." text-file-refill" cr \ XXX INFORMER
+  fs-file-id @ file-position throw  fs-position 2!
+  tread >r  'source 2!  >in off  1 included-line# +!  r>
+  ;
+
+( ?line )
+: ?line ( -- )
+  \ Reload the current line
+  ." ?line" cr \ XXX INFORMER
+  fd @ if
+    fs-position 2@ fs-file-id @ reposition-file throw
+    tread drop 2drop
+  then
+  ;
+
+( included )
+: (included) ( ca len fid -- )
+  \ ca len = filename
+  ." (included)" cr \ XXX INFORMER
+  tfdb included-line# @ 2>r source 2>r  >in @  blk @  2>r
+  fdb to tfdb
+  fd [ 4 cells ] literal  erase  fs-file-id !
+  16 min fs-filename place  fs-filename count upper
+  fd on  included-line# off
+  begin   text-file-refill
+  while   blk off  interpret  \ XXX TODO why 'blk off'?
+  repeat  close-included
+  2r> blk !  >in !  2r> 'source 2!  2r> included-line# !
+  to tfdb
+  ?line  ?block ;
+( included )
+: INCLUDED ( ca len -- )
+  \ ca len = filename
+  ." included" cr \ XXX INFORMER
+  2dup r/o open-file throw
+  ." before (included)" cr \ XXX INFORMER
+  ['] (included) catch ?dup if
+    fd @ if  \ XXX why this check?
+      cr fs-filename count type
+      ."  Line "  included-line# @ u.  close-included
+    then  throw
+  then
+  ;
+( include )
+: INCLUDE ( "filename" -- )
+  \ XXX TODO configurable extension
+  parse-filename s" fs" +ext included  ;
+
+( refill )
+:noname ( -- flag )
+  \ New 'refill'
+  text-file-source?
+  if    text-file-refill
+  else  [ addr refill @ compile, ]  \ XXX TODO use 'defers'
+  then
+  ;  is refill
+( Comments: ( )
+: ( ( "ccc<delim>" -- )
+  \ Line comment -- end with ')'
+  text-file-source? if
+    begin  [char] ) parse + source + =
+    while  text-file-refill 0=  until then
+  else  postpone (  ( )  then  ;  immediate
+( Comments: \\ )
+: \\ ( -- )
+  \ Skip the remainder of the file or screen.
+  text-file-source?
+  if  begin  text-file-refill 0=  until
+  else  postpone \\  then
+  ;  immediate
+( Comments: (* )
+: (* ( "ccc<delim>" )
+  \ Block comment -- end with '*)'
+  begin
+    parse-name dup
+    if    s" *)" compare
+    else  2drop refill  then  0=
+  until
+  ;  immediate
+
+( source-filename )
+\ XXX TODO -- current-stream-file
+\ : SOURCE-FILENAME ( -- ca len )  \ XXX NEW name
+\  text-file-source? if  current-stream-file
+\  else  current-block-file  then ;

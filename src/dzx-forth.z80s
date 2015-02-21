@@ -5,7 +5,7 @@ _version: macro
   db version.major
   version.minor:                equ 3           ; branch
   db '-0',version.minor+'0','-'
-  db                            '201502202215'  ; release
+  db                            '201502212203'  ; release
   endm
 
 ; A direct-threaded Forth for ZX Spectrum,
@@ -3762,7 +3762,7 @@ then_:
          ; immediate
 
   _header _public,'IF',_immediate
-iff_:
+if_:
   call do_colon
   dw compile_,question_branch_
   dw forward_mark_
@@ -3820,7 +3820,7 @@ again_:
 while_:
   call do_colon
   dw question_depth_
-  dw iff_
+  dw if_
   dw swap_
   dw paren_exit_
 
@@ -4310,7 +4310,7 @@ question_:
   jp dot_
 
 ; .  ( n -- )
-;   s>d d.
+
   _header _public,'.'
 dot_:
   call do_colon
@@ -4342,10 +4342,10 @@ back_from_dos.error:
   jp push_hl
 
 convert_dos_error_code:
-  ; XXX TODO see '>ior' and combine both
-  ; XXX TODO use the standard codes
   ; Input:   a  = original DOS error code (0..36)
   ; Outptut: hl = DOS error code converted to Forth range (-1000..-1036)
+  ; XXX TODO use standard codes?
+  ; XXX TODO make a Forth word to access this code?
   ld h,0
   ld l,a
 convert_dos_error_code.hl:
@@ -5284,38 +5284,24 @@ colon_.1:
 ;   postpone (exit) ; immediate
 
   _header _public,'EXIT',_immediate
-exit_: ; XXX TODO rename 'exit'
-  if  0;debug? ; XXX INFORMER
-    push af
-    ld a,2
-    out (254),a
-    pop af
-    ;jr $
-  endif
-
+exit_:
   call do_colon
-
-  if  0;debug? ; XXX INFORMER
-    ; XXX FIXME this resets the machine:
-    ;dw lit,2,border_
-    ;dw paren_dotquote_
-    ;_dcs 'exit',crchar
-  endif
-
   dw compile_,paren_exit_
-  if  0;debug? ; XXX INFORMER
-    ; XXX FIXME this resets the machine
-    ;dw lit,3,border_
-    ;dw paren_dotquote_
-    ;_dcs 'exit',crchar
-  endif
   dw paren_exit_
 
-; XXX TMP NEW layout
-; : ;  ( -- )
+; : ?EXIT  ( -- ) ; XXX NEW
+;   postpone if  postpone exit  postpone then ; immediate
+
+  _header _public,'?EXIT',_immediate
+question_exit_:
+  call do_colon
+  dw if_,exit_,then_
+  dw paren_exit_
+
+; ;  ( -- )
 ;   postpone exit  bal @ ?bal ?csp smudge
 ;   postpone [
-   ; immediate
+;  ; immediate
 
   _header _public,';',_immediate
 semicolon_:
@@ -7161,6 +7147,10 @@ interpret_.end:
 
   dw paren_exit_
 
+if false
+
+; XXX First version, converts only some control chars.
+
 ; (CONTROL>BL)  ( ca len -- ca len )
 ; 
 ; Change all end-of-word control chars (CR, LF, TAB)
@@ -7203,6 +7193,35 @@ paren_control_to_bl_.repeat:
 control_to_bl_:
   call fetch_execute_
   dw paren_control_to_bl_
+
+else
+
+; XXX Second version, convert all control chars, faster and simpler.
+
+; CONTROL>BL  ( ca len -- ca len )
+  _header _public,'CONTROL>BL'
+control_to_bl_:
+  ; XXX TODO -- other method faster than pop-push:
+  pop de
+  pop hl
+  push hl
+  push de
+paren_control_to_bl_.begin:
+  ; hl = pointer to current char
+  ; de = remaining chars
+  ld a,d
+  or e
+  jp z,next
+  dec de
+  ld a,(hl)
+  cp space_char
+  jp nc, paren_control_to_bl_.repeat
+  ld (hl),sp_char
+paren_control_to_bl_.repeat:
+  inc hl
+  jp paren_control_to_bl_.begin
+
+endif
 
 ; (EVALUATE)  ( ca len blk -- )
 ;
@@ -9105,6 +9124,18 @@ reposition_file_:
 
 ; FILE-SIZE  ( fid -- ud ior )
 
+; XXX FIXME The return is unpredictable:
+; - the exact size
+; - the size rounded to 128-byte blocks
+; - the size of the previous checked file
+
+; Examples (real -> reported)
+; 92 -> 4096
+; 11264 -> 11264
+; 31 -> 11264
+
+; XXX TODO write 'flush-disk' and try it before every 'file-size'.
+
   _header _public,'FILE-SIZE'
 file_size_:
 
@@ -9396,10 +9427,30 @@ rename_file_:
   dw paren_rename_file_
   dw paren_exit_
 
+; EOF?  ( fid -- wf )
+; XXX NEW
+
+  _header _public,'EOF?'
+eof_question:
+  call do_colon
+  dw dup_,file_size_,throw_
+  dw rot_,file_position_,throw_
+  dw d_equals_
+  dw paren_exit_
+  ;
+
 ; PAGE-READ-FILE  ( ca len fid +n -- ior )
 ;
 ; ca len = filename
 ; +n = RAM page for 0xC000..0xFFFF
+
+; XXX FIXME
+;
+; +3DOS causes EOF error when the desired length is beyond the end of file (not
+; counting the padding 0x1A at the end). This makes it impossible to behave
+; according to Forth-94.
+;
+; Solution: check the file position at the start.
 
   _header _public,'PAGE-READ-FILE'
 page_read_file_:
@@ -9423,6 +9474,8 @@ page_read_file_.a:
   ; hl = len
   ; a = error code
   ; de = number of bytes remaining unread
+
+
   push af
   call hl_minus_de_to_hl
   ; hl = bytes actually read
@@ -9442,7 +9495,7 @@ page_read_file_.no_error:
 
   _header _public,'READ-FILE'
 read_file_:
-  ld a,(sys_bankm) ; XXX TODO factor out if size_optimization
+  ld a,(sys_bankm) ; XXX TODO factor out if 'size_optimization?' is on
   and %111 ; current page for 0xC000..0xFFFF
   _jump page_read_file_.a
 
@@ -9562,7 +9615,6 @@ write_byte_:
   _header _public,'READ-LINE'
 read_line_:
 
-; XXX TODO -- finish and check
   ; ca1   = address of the first char
   ; ca1'  = address of the currently examined char, in the loop
   ; ca2   = ca1'+eol = address after the end of line
@@ -9583,7 +9635,6 @@ read_line_:
   dw question_dup_
   dw branch_if_zero_,read_line_.ready
   ; 'read-file' error
-  dw to_r_,nip_,zero_,from_r_
   dw paren_exit_
 
 read_line_.ready:
@@ -9622,7 +9673,15 @@ read_line_.check_eol:
   dw over_,plus_
   dw from_r_ ; ( ca1 ca3 ca2 )
   dw swap_,minus_ ; ( ca1 n )
-  dw dup_,zero_not_equals_  ; handle buffer > 32K XXX ?
+
+  dw dup_,zero_not_equals_  ; handle buffer > 32 KiB
+  ; When the text file and line buffer are both >32 KiB, 'n' can overflow the
+  ; negative number range.  'DUP 0<>' adjusts for this i.e.:
+  ; n          d
+  ; -32767     -32767
+  ; -32768     -32768
+  ; +32767     -32769
+  ; +32766     -32770
 
   ; Update the file position to the start of the next line
   ; ( ca1 d )
