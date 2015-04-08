@@ -1,6 +1,6 @@
 \ files.fsb
 \ This file is part of DZX-Forth
-\ http://programandala.net/en.programa.dzx-forth.html
+\ http://programandala.net/en.program.dzx-forth.html
 \
 \ This file contains words extracted from <tools.fs> in order
 \ to document them and implement them in the DZX-Forth kernel.

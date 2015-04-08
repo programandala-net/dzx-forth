@@ -1,30 +1,30 @@
 ; DZX-Forth {{{
 
-_version: macro
   version.major:                equ 'A'         ; = alpha state
-  db version.major
   version.minor:                equ 3           ; branch
-  db '-0',version.minor+'0','-'
-  db                            '201502212203'  ; release
+
+_version: macro
+  db version.major,'-0',version.minor+'0','-'
+  db '20150408'  ; release
   endm
 
-; A direct-threaded Forth for ZX Spectrum,
-; with support for +3DOS and IDEDOS
+; A direct-threaded Forth for ZX Spectrum +3e
 ;
 ; (Project under development)
-;
+
 ; DZX-Forth is a fork of CP/M DX-Forth v4.09 (2014-12)
 
 ; Copyright (C) 2014,2015 Marcos Cruz (programandala.net)
 ;
 ; DZX-Forth is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 3 of the License, or (at your option) any later
-; version.
+; the terms of the GNU General Public License as published by the Free
+; Software Foundation; either version 3 of the License, or (at your option)
+; any later version.
 ;
 ; DZX-Forth is distributed in the hope that it will be useful, but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-; A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+; details.
 ;
 ; You should have received a copy of the GNU General Public License along with
 ; DZX-Forth; if not, see <http://gnu.org/licenses>.
@@ -40,7 +40,7 @@ start: equ 25000 ; start of DZX-Forth in memory
   org start
 
   jp cold_boot
-;  jp warm_boot  ; XXX TODO
+  jp warm_boot
 
 ; }}} **********************************************************
 ; Labels {{{
@@ -68,6 +68,8 @@ start: equ 25000 ; start of DZX-Forth in memory
 ; }}} **********************************************************
 ; System configuration {{{
 
+debug?: equ no ; debugging messages?
+
 ; ------------------------------
 ; Generic
 
@@ -86,7 +88,6 @@ top_prunes:             defl 0 ; XXX OLD ?
 ; XXX TODO Convert stack sizes to user variables? The point is
 ; a task could need just a little stack.
 
-parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
 user_data_size:               equ 128
 max_word_length:              equ 31
 word_buffer_size:             equ max_word_length+5
@@ -121,16 +122,16 @@ filename_size:          equ 16 ; "uud:nnnnnnnn.eee"
 filename_buffer_size:   equ filename_size+1 ; for trailing 0xFF
 ;file_handle_size:       equ 6+36  ; (keep even) ; XXX OLD
 
-
 ; }}} **********************************************************
 ; User configuration {{{
 
+; XXX TODO -- organize and documentate, in order to move this section to its
+; own file <dzx-forth.config.z80s>.
+
+parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
+
 ; The values in this section may be changed by the user in order to assemble a
 ; specific version of DZX-Forth, with or without certain features.
-
-; XXX TODO organize and documentate
-
-debug?:                           equ no ; debugging messages?
 
 debug_blocks?: equ no  ; XXX TMP
 
@@ -150,28 +151,39 @@ defer_uses_body?:                  equ yes
 floored_division?:                 equ yes  ; integer division method
 
 ; ..............................
+; Block files
 
-block_files?:                     equ yes
-; XXX Note: >1743 bytes used
+; Block files support in the kernel?
+; (approx. 1.7 KiB will be used):
+block_files?: equ yes
 
 if block_files?
-  max_open_source_files:  equ 6  ; (min = 2) ; XXX OLD
-  block_size:                   equ 1024
+
+  max_open_source_files:  equ 6     ; (min = 2) ; XXX OLD
+  block_size:             equ 1024
+
+  ; XXX TODO configure also non-standard block layouts
+
 endif
 
 ; ..............................
+; Floating point
 
-; user config
-
-floating_point?:           equ no
-; XXX Note: aprox. 2336 bytes used
+; Floating point support in the kernel?
+; (approx. 2.2 KiB will be used):
+floating_point?: equ no
 
 if floating_point?
+
   floating_point_engineering_output?:  equ yes
-  floating_point_stack?:               equ no ; XXX TODO -- not fully implemented in DX-Forth
-  if floatin_poin_stack?
+
+  ; XXX TODO -- not fully implemented in DX-Forth
+  floating_point_stack?: equ no
+
+  if floatin_point_stack?
     f_stack_items: defl 6
   endif
+
 endif
 
 ; system
@@ -227,6 +239,7 @@ stack_size:                           equ 256
 return_stack_size:                    equ 256
 tib_size:                             equ 80    ; Terminal Input Buffer
 
+
 ; }}} **********************************************************
 ; Description {{{
 
@@ -278,7 +291,7 @@ tib_size:                             equ 80    ; Terminal Input Buffer
 ;     ds length           ; name
 ; lfa dw previousnfa
 ; cfa dw codeaddress
-; pfa ds ...              ; data or code
+; pfa    ...              ; data or code
 
 ; ------------------------------
 ; Memory map
@@ -802,6 +815,16 @@ do_user_variable:
   _header _public,'NOOP'
 noop_: equ $
 
+  ; jr next ; XXX 2015-03-16: added because of 'NEXT' above
+
+; ; NEXT ( -- )
+; ; XXX 2015-03-16:
+; ; XXX NEW -- created because of the assembler
+; ; XXX OLD -- already exists the word `'NEXT`
+
+  ; _header _public,'NEXT'
+; next_: equ $
+
 ; NEXT - The Forth Address Interpreter
 
 next:
@@ -822,7 +845,7 @@ unnest_: equ r_drop_
 ;   exit colon definition
 
   _header _public,'(EXIT)'
-paren_exit_: ; XXX TODO rename 'paren_exit'
+paren_exit_:
   ld bc,next
   push bc
   ld hl,(return_stack_pointer)  ; pop IP from return stack
@@ -909,7 +932,7 @@ two_lit_:
   jp push_de_hl
 
 ; }}} **********************************************************
-; Stack pointer manipulation {{{
+; Stack pointers manipulation {{{
 
 ; SP@  ( -- a )
 
@@ -984,7 +1007,6 @@ r_fetch_:
   _header _public,'2>R'
 two_to_r_:
   ld hl,(return_stack_pointer)
-  ; XXX TODO faster per macro loop with 'inc hl'?
   ld de,-cell*2
   add hl,de
   ld (return_stack_pointer),hl
@@ -1442,12 +1464,12 @@ plus_store_.de_into_hl:
   _header _public,'MOVE'
 move_:
   ld l,c
-  ld h,b
+  ld h,b  ; the Forth IP
   pop bc
   pop de
-  ex (sp),hl
+  ex (sp),hl ; save the Forth IP
   call move_block
-  pop bc
+  pop bc  ; restore the Forth IP
   jp next
 
 ; ERASE  ( a len -- )
@@ -1455,29 +1477,33 @@ move_:
   _header _public,'ERASE'
 erase_:
   ld e,0
-  jp fill_.1
+  jp fill_.e
 
 ; FILL  ( ca len c -- )
+
+  ; XXX TODO -- try a faster alternative with 'ldir'.
 
   _header _public,'FILL'
 fill_:
   pop de
-fill_.1:
-  ld l,c
-  ld h,b
-  pop bc
-  ex (sp),hl
-  jp fill_.3
 
-fill_.2:
+fill_.e:
+  ld l,c
+  ld h,b  ; the Forth IP
+  pop bc
+  ex (sp),hl  ; save the Forth IP
+  jp fill_.again
+
+fill_.begin:
   ld (hl),e
   inc hl
   dec bc
-fill_.3:
+
+fill_.again:
   ld a,c
   or b
-  jp nz,fill_.2
-  pop bc
+  jp nz,fill_.begin
+  pop bc  ; restore the Forth IP
   jp next
 
 ; ON  ( a -- )
@@ -2945,7 +2971,7 @@ cmovu_.1:
   _header _public,'BLANK'
 blank_:
   ld e,' '
-  jp fill_.1
+  jp fill_.e
 
 ; COUNT  ( ca1 -- ca2 len )
 ;   dup 1+ swap c@
@@ -3391,6 +3417,47 @@ plus_string_.address: equ $+1
 plus_string_.length: equ $+1
   ld hl,0
   _push_hl_jp_next
+
+
+; LENGTHS  ( ca1 len1 ca2 len2 -- ca1 len1 ca2 len2 len1 len2 )
+; XXX NEW
+; XXX TMP
+
+  _header _public,'LENGTHS'
+lengths_:
+  call do_colon
+  dw two_,pick_,over_
+
+; SMOVE  ( ca1 len1 ca2 -- )
+; XXX NEW
+
+  _header _public,'SMOVE'
+smove_:
+  dw swap_,move_
+  dw paren_exit_
+
+; S+  ( ca1 len1 ca2 len2 -- ca3 len3 )
+; XXX NEW
+;
+; Append the string ca2 len2 to the end of string ca1 len1 returning
+; the resulting string ca3 len3 in the circular string buffer.
+
+; XXX TODO write in Z80
+; XXX TODO write alternative without the circular string buffer
+
+  _header _public,'S+'
+s_plus_:
+  call do_colon
+  dw lengths_,plus_,to_r_ ; ( ca1 len2 ca2 len2 ) ( R: len3 )
+  dw r_fetch_
+  dw string_allocate_
+  dw to_r_                ; ( R: len3 ca3 )
+  dw two_,pick_
+  dw r_fetch_,plus_       ; ( ca1 len1 ca2 len2 len1+ca3 )
+  dw smove_               ; ( ca1 len1 ) \ second string to buffer
+  dw r_fetch_,smove_       ; first string to buffer
+  dw from_r_,from_r_
+  dw paren_exit_
 
 ; S.R  ( ca len n -- )
 ;
@@ -4443,6 +4510,17 @@ push_version:
   ld e,d
   ld d,a
   jp push_de_hl
+
+; XXX NEW
+; IDEDOS?  ( -- wf )
+; Is IDEDOS present?
+
+  _header _public,'IDEDOS?'
+idedos_question_:
+  ld ix,dos_version
+  call do_dos
+  jp m,true_
+  jp false_
 
 ; UNUSED-DISK ( c -- u )
 
@@ -6344,18 +6422,17 @@ compile_:
   dw paren_exit_
 
 ; POSTPONE  ( "name" -- )
-;   defined dup ?defined 0< if compile
-;   compile then compile, ; immediate
+;   defined dup ?defined 0< if compile compile then compile, ; immediate
 
   _header _public,'POSTPONE',_immediate
-postp_:
+postpone_:
   call do_colon
   dw defined_
   dw dup_,question_defined_
   dw zero_less_
-  dw question_branch_,postp_.1
+  dw question_branch_,postpone_.1
   dw compile_,compile_
-postp_.1:
+postpone_.1:
   dw compile_comma_
   dw paren_exit_
 
@@ -7134,7 +7211,6 @@ interpret_.number_done:
   dw from_r_,base_,store_
 
 interpret_.repeat:
-  ; XXX FIXME stack depth is -1 here after executing a word!
   _debug_variable 'interpret.repeat',debug_interpret
   dw question_stack_
   dw branch_,interpret_.begin
@@ -7149,7 +7225,7 @@ interpret_.end:
 
 if false
 
-; XXX First version, converts only some control chars.
+; XXX OLD -- First version, converts only some control chars.
 
 ; (CONTROL>BL)  ( ca len -- ca len )
 ; 
@@ -7196,7 +7272,8 @@ control_to_bl_:
 
 else
 
-; XXX Second version, convert all control chars, faster and simpler.
+; XXX NEW -- Second version, convert all control chars, faster and simpler;
+; also, no defered word.
 
 ; CONTROL>BL  ( ca len -- ca len )
   _header _public,'CONTROL>BL'
@@ -7226,6 +7303,8 @@ endif
 ; (EVALUATE)  ( ca len blk -- )
 ;
 ; does not restore block contents
+; 
+; XXX TODO -- write and use 'save-input' and 'restore-input'
 ;
 ;         blk @ >in @ 2>r
 ;         source 2>r
@@ -7449,8 +7528,10 @@ return_:
 ; ['] flush catch drop
 
   pop bc
-  ld iy,sys_err_nr ; XXX TODO -- check if needed
   ld sp,(system_stack_pointer)
+  ld iy,sys_err_nr ; XXX TODO -- check if needed
+  ld (iy+49),2 ; default value of the system variable DF SZ
+  im 1
   ret
 
 ; BYE  ( -- )
@@ -7465,11 +7546,13 @@ bye_:
 system_stack_pointer: equ $+1
   ld sp,0
   ld iy,sys_err_nr ; XXX TODO -- check if needed
+  ld (iy+49),2 ; default value of the system variable DF SZ
+  im 1
   rst 0x08     ; error
   db 0xFF      ; 0: "OK"
 
 if 0
-  ; XXX TODO -- Code from Benschop's ZX Spectrum Forth-83
+  ; XXX TODO -- Code from Benschop's SPECTRUM FORTH83:
   ld sp,(sys_err_sp)
   pop bc
   ld bc,0x1303
@@ -7566,7 +7649,7 @@ recurse_:
 ; -22 ; control structure mismatch
 ; -23 ; address alignment exception
 ; -24 ; invalid numeric argument
-; -25 ; return stack imbalance
+; -25 ; return stack imbalance ; XXX imbalance?
 ; -26 ; loop parameters unavailable
 ; -27 ; invalid recursion
 ; -28 ; user interrupt
@@ -7666,6 +7749,20 @@ recurse_:
 ; -1034      File too big (trying to read or write past 8 megabytes)
 ; -1035      Disk not bootable (boot sector is not acceptable to DOS BOOT)
 ; -1036      Drive in use (trying to re-map or remove a drive with files open)
+
+; IDEDOS errors:
+
+; -1056      Invalid partition
+; -1057      Partition already exists
+; -1058      Not implemented
+; -1059      Partition open
+; -1060      Out of partition handles
+; -1061      Not a swap partition
+; -1062      Drive already mapped
+; -1063      Out of XDPBs
+; -1064      No swap partition available
+; -1065      Invalid device
+; -1066      8-bit data transfer
 
 ; Custom additions:
 
@@ -7905,7 +8002,43 @@ abort_quote_:
 ; }}} **********************************************************
 ; Boot {{{
 
+boot_tasks:
+
+  ; Boot tasks common to warm and cold boots.
+
+  ; Save the system stack pointer
+  ld hl,0
+  add hl,sp
+  ; XXX TODO -- update hl to remove the last call?
+  ld (system_stack_pointer),hl
+  
+  ; Reset the number of lines in the lower part of the screen
+  xor a
+  ld (sys_df_sz),a
+
+  ; Set print to screen.
+  ; Without this, the system crashes.
+  ; This call is done by `TYPE`, but it's done here in case the
+  ; configurable boot message is not shown at the start.
+  call rom_chan_s
+
+  ret
+
+warm_boot:
+  call boot_tasks
+  ld sp,(cold_s0) ; init the stack pointer
+  jp quit_ ; jump to interpreter
+  ; call do_colon
+  ; XXX FIXME -- when `boot-message` is not called here, the system crashes:
+  ;dw paren_boot_message_
+  ; dw quit_      ; jump to interpreter
+
 cold_boot:
+  call boot_tasks
+  ; XXX TMP the stack pointer is reset again in `cold`,
+  ; but it should be reset here too if there were tasks to
+  ; be done before running `cold`.
+  ld sp,(cold_s0) ; init the stack pointer
 
   ; XXX TODO
   ; save default drive and user
@@ -7915,11 +8048,6 @@ cold_boot:
 ;  ld (defaultuser),a
 
 
-;;cldd.1:
-  ; Save the system stack pointer
-  ld hl,0
-  add hl,sp
-  ld (system_stack_pointer),hl
 ;;  sub 8     ; skip over CCP
 ;;
 ;;cldd.2:
@@ -7969,7 +8097,114 @@ cold_boot:
 ;;cldd.7:
 ;;  dw movpat      ; later patched to 'cold'
 
-  jp cold_ ; XXX TMP
+  jr cold_ ; XXX TMP
+
+; COLD ( -- )
+
+  _header _public,'COLD'
+cold_:
+; XXX TODO
+; XXX OLD
+;;  ld sp,tmpstack
+;;  ld hl,(limit.1)   ; get LIMIT
+;;  ld de,-recsiz    ; file r/w buffer size
+;;  add hl,de
+;;  ld (hbuf_.value),hl    ; patch HBUF ; XXX TODO this is required
+;;  push  hl
+;;  ld hl,(nfcb.1)    ; #fcb
+;;  ld de,-filehandlesize    ; handle size
+;;  call hlbydetohldeunsigned
+;;  pop hl
+;;  add hl,de
+;;  ex de,hl
+;;  ld hl,(nus)    ; user area size
+;;  call deminushltohl
+;;  ld (userdatapointer),hl    ; patch UP
+;;  ld (coldr0),hl    ; patch R0
+;;  ld (returnstackpointer),hl    ; patch RP
+;;  ex de,hl
+;;  ld hl,(nrts)   ; return stack size
+;;  call deminushltohl
+;;  ld (fsp.variable),hl   ; init fp stack
+;;  ld (coldfs0),hl   ; patch FS0
+;;; XXX These lines were commented out in the original source:
+;;; ex de,hl
+;;; ld hl,(nfps)   ; fp stack size
+;;; call deminushltohl
+;;  ld sp,hl     ; set cpu stack pointer
+;;  ld (colds0),hl    ; patch S0
+;;   if controlflowstackextensions
+;;  ld (cs0.variable),hl   ; init CS0 with safe value
+;;   endif
+
+
+  ld sp,(cold_s0) ; XXX TMP see note at cold_boot.
+
+  ; init the user data
+  ld hl,(user_data_pointer) ; to
+  ex de,hl
+  ld hl,init_user_variables  ; from
+  ld bc,init_user_variables_size ; count
+  call move_block_upwards
+
+  ; patch 'pause' to do nothing
+  ld hl,noop_
+  ld (pause_.action),hl
+
+  ; delete the last key
+  ; XXX needed by 'key?'?
+  xor a
+  ld (sys_last_k),a
+
+  ; init +3DOS
+  ; XXX needed?
+;  ld ix,dos_initialise
+;  call do_dos
+
+  call do_colon
+;;  dw zfh     ; reset handles
+;;  dw sys,off     ; default is APPLICATION
+
+  dw reset_     ; general reset
+cold_.1:
+  dw reset_forth_
+
+  if floating_point?
+;do_f_init_patch: ; XXX OLD
+    dw f_init_
+  endif
+
+; XXX TODO -- user boot
+;;  dw bootquestion
+;;  dw dup,boot,store     ; restore BOOT
+;;  dw questiondup
+;;  dw questionbranch,cold_.3
+;;  dw execute      ; run application
+;;  dw zero,return  ; exit to DOS
+;; cold_.3:
+
+;;  dw interpret      ; interpret
+  dw normal_
+
+;;cold_.6:
+  dw page_,boot_message_
+
+;;cold_.7:
+;;  dw parendotquote
+;;  db dofidentifypatch-$-1
+;;  db crchar,lfchar
+
+;;  dw file_question
+;;  dw question_branch_,cold_.10
+;;  dw cr_
+;;  dw paren_dot_quote
+;;  dcs 'Using '
+;;  dw current_block_file_,type_
+;;  dw cr
+;;cold_.10:
+
+  dw quit_      ; jump to interpreter
+
 
 ; XXX OLD
 ;;; BOOT?  ( -- xt )
@@ -8021,119 +8256,6 @@ paren_boot_message_.end
 boot_message_:
   call fetch_execute_
   dw paren_boot_message_
-
-; COLD ( -- )
-
-  _header _public,'COLD'
-cold_:
-; XXX TODO
-; XXX OLD
-;;  ld sp,tmpstack
-;;  ld hl,(limit.1)   ; get LIMIT
-;;  ld de,-recsiz    ; file r/w buffer size
-;;  add hl,de
-;;  ld (hbuf_.value),hl    ; patch HBUF ; XXX TODO this is required
-;;  push  hl
-;;  ld hl,(nfcb.1)    ; #fcb
-;;  ld de,-filehandlesize    ; handle size
-;;  call hlbydetohldeunsigned
-;;  pop hl
-;;  add hl,de
-;;  ex de,hl
-;;  ld hl,(nus)    ; user area size
-;;  call deminushltohl
-;;  ld (userdatapointer),hl    ; patch UP
-;;  ld (coldr0),hl    ; patch R0
-;;  ld (returnstackpointer),hl    ; patch RP
-;;  ex de,hl
-;;  ld hl,(nrts)   ; return stack size
-;;  call deminushltohl
-;;  ld (fsp.variable),hl   ; init fp stack
-;;  ld (coldfs0),hl   ; patch FS0
-;;; XXX These lines were commented out in the original source:
-;;; ex de,hl
-;;; ld hl,(nfps)   ; fp stack size
-;;; call deminushltohl
-;;  ld sp,hl     ; set cpu stack pointer
-;;  ld (colds0),hl    ; patch S0
-;;   if controlflowstackextensions
-;;  ld (cs0.variable),hl   ; init CS0 with safe value
-;;   endif
-
-
-  ld sp,(cold_s0) ; XXX NEW
-
-  ; init the user data
-  ld hl,(user_data_pointer) ; to
-  ex de,hl
-  ld hl,init_user_variables  ; from
-  ld bc,init_user_variables_size ; count
-  call move_block_upwards
-
-  ; patch 'pause' to do nothing
-  ld hl,noop_
-  ld (pause_.action),hl
-
-  ; delete the last key
-  ; XXX needed by 'key?'?
-  xor a
-  ld (sys_last_k),a
-
-  ; init +3DOS
-  ; XXX needed?
-;  ld ix,dos_initialise
-;  call do_dos
-
-  call do_colon
-;;  dw zfh     ; reset handles
-;;  dw sys,off     ; default is APPLICATION
-
-  dw reset_     ; general reset
-cold_.1:
-  dw reset_forth_
-
-  if floating_point?
-;do_f_init_patch: ; XXX OLD
-    dw f_init_
-  endif
-
-; XXX TODO -- user boot
-;;  dw bootquestion
-;;  dw dup,boot,store     ; restore BOOT
-;;  dw questiondup
-;;  dw questionbranch,cold_.3
-;;  dw execute      ; run application
-;;  dw zero,return  ; exit to DOS
-
-cold_.3:
-
-;;cold_.4:
-;;  dw interpret      ; interpret
-;;cold_.5:
-  dw normal_
-;;  dw cr,page
-;;  dw parendotquote
-;;  db cold_.8-$-1
-
-;;cold_.6:
-  dw page_,boot_message_
-
-;;cold_.7:
-;;cold_.8:
-;;  dw parendotquote
-;;  db dofidentifypatch-$-1
-;;  db crchar,lfchar
-
-;;  dw file_question
-;;  dw question_branch_,cold_.10
-;;  dw cr_
-;;  dw paren_dot_quote
-;;  dcs 'Using '
-;;  dw current_block_file_,type_
-;;  dw cr
-;;cold_.10:
-
-  dw quit_      ; jump to interpreter
 
 ; }}} **********************************************************
 ; Dictionary support {{{
@@ -9065,6 +9187,65 @@ set_drive_.a:
   call set_current_drive
   jp nc,dos_error_.a
   jp next
+
+; FLUSH-DRIVE  ( c -- )
+; XXX NEW
+;
+; Write any pending headers, data directory entries for the given drive.  This
+; word ensures that the disk is up to date. It can be used at any time, even
+; when files are open.
+;
+; c = drive (ASCII 'A'..'P')
+
+  _header _public,'FLUSH-DRIVE'
+flush_drive_:
+  pop hl
+  ld a,l
+  ld ix,dos_flush
+  call do_dos
+  jp nc,dos_error_.a
+  jp next
+
+; BASIC-FILE-HEADER  ( fid -- a )
+; XXX NEW
+
+; Point at the BASIC header data for the given file, in RAM page 7.
+
+; The header data area is 8 bytes long and may be used by the caller for any
+; purpose whatsoever. It is available even if the file does not have a header;
+; however, only files with a header and opened with write access will have the
+; header data recorded on disk.
+
+; Note that +3 BASIC uses these 8 bytes.  If creating a file that will
+; subsequently be LOADed within BASIC, then those bytes should be filled with
+; the relevant values.
+
+  _header _public,'BASIC-FILE-HEADER'
+basic_file_header_:
+  call save_ip
+  pop hl
+  ld b,l  ; fid
+  ld ix,dos_ref_head
+  call dos
+  call restore_ip
+  jp nc,dos_error_.a
+  push ix
+  jp next
+
+; ; DOS-FILE-HEADER  ( fid -- a )
+; ; Point at the DOS header data for the given file, in RAM page 7.
+
+; ; XXX OLD -- this was a try, but it does not work: the DOS-header is not
+; there.
+
+;   _header _public,'DOS-FILE-HEADER'
+; dos_file_header_:
+;   call do_colon
+;   dw basic_file_header_
+;   dw c_lit
+;   db 15
+;   dw minus_
+;   dw paren_exit_
 
 ; FILE-POSITION  ( fid -- ud ior )
 ;
@@ -10585,7 +10766,7 @@ loaded_:
 ; ?BLOCK   ( -- )
 ; reload block
 ; blk @ ?dup if block drop then
-; XXX OLD?
+; XXX OLD? -- used by '(evaluate)'
 ; XXX TODO rename
 
   _header _hidden,'?BLOCK'
@@ -10704,8 +10885,8 @@ page_:
 
   push bc
   call rom_cl_all
-  ld a,2
-  call rom_chan_open ; XXX TODO needed?
+;  ld a,2
+;  call rom_chan_open ; XXX TODO needed?
   pop bc
   jp next
 
@@ -10723,7 +10904,7 @@ page_:
 ; CLEAR-LINE  ( -- )
 
   _header _public,'CLEAR-LINE'
-cleol_:
+clear_line_:
 ; XXX TODO
   jp next
 ;;  ld hl,tceol
@@ -10732,7 +10913,7 @@ cleol_:
 ; INSERT-LINE  ( -- )
 
   _header _public,'INSERT-LINE'
-insln_:
+insert_line_:
 ; XXX TODO
   jp next
 ;;  ld hl,tinsln
@@ -10743,7 +10924,7 @@ insln_:
 ; DELETE-LINE  ( -- )
 
   _header _public,'DELETE-LINE'
-delln_:
+delete_line_:
 ; XXX TODO
   jp next
 ;;  ld hl,tdelln
@@ -10751,19 +10932,18 @@ delln_:
 
   _header _public,'BORDER'
 border_:
-  ; Code based on Lennart Benschop's ZX Spectrum Forth-83 System:
+  ; Code based on Lennart Benschop's SPECTRUM FORTH83:
   ;   : BORDER  ( n -- )
   ;     DUP DUP 4 < 7 AND SWAP 8 * + 23624 C! 254 P! ;
   ; This is my translation to Z80:
   pop hl
 border_.l:
+  ld a,l
+border_.a:
   if 0
-
-    ; XXX OLD -- the screen will be used as a whole, not like Sinclair BASIC,
+    ; XXX OLD -- the screen is used as a whole, not like Sinclair BASIC,
     ; so this is not needed.
-
     ; Set the paper of the bottom screen
-    ld a,l
     cp 4 ; dark color?
     jp nc,border_.a
     ; dark color
@@ -10772,10 +10952,7 @@ border_.l:
     sla a ; *8 (converted to paper_)
     add a,7 ; white ink
     ld (sys_bordcr),a
-
   endif
-  ld a,l
-border_.a:
   out (254),a
   jp next
 
@@ -10784,7 +10961,7 @@ border_.a:
 ; Print control char c, char +n and update the permanent attributes.
 
 ; This word was inspired by the 'COLOR' defining word from Lennart Lennart
-; Benchsop's ZX Spectrum Forth-83 Standard System (1988).
+; Benchsop's SPECTRUM FORTH83.
 
 ; XXX TODO don't print the codes, just change the variables...
 
@@ -10826,7 +11003,7 @@ flash_:
 ; OVERPRINT ( n -- )
   _header _public,'OVERPRINT'
 overprint_:
-  ; XXX TODO -- Benschop's Forth_-83 does this:
+  ; XXX TODO -- Benschop's SPECTRUM FORTH83 does this:
   ; 23697 DUP C@ 252 AND ROT 3 * OR SWAP C!
   pop hl
   jp next
@@ -10834,7 +11011,7 @@ overprint_:
 ; INVERSE  ( n -- )
   _header _public,'INVERSE'
 inverse_:
-  ; XXX TODO -- Benschop's Forth_-83 does this:
+  ; XXX TODO -- Benschop's SPECTRUM FORTH83 does this:
   ; 23697 DUP C@ 243 AND ROT 12 * OR SWAP C!
   pop hl
   jp next
