@@ -1,15 +1,15 @@
 = DZX-Forth
 :author: Marcos Cruz (programandala.net)
-:revdate: 2014-12-28
+:revdate: 2016-03-21
 :toc: left
 :toc-placement!:
 
 // History of this document
 //
 // 2014-12-28: Start convertion to Asciidoctor.
-
-// XXX FIXME why the first paragraph is bold?!!
-XXX Hello.
+// 
+// 2016-03-21: Some changes before commiting to the new Git
+// repository.
 
 This is the documentation for DZX-Forth.  It is divided into three parts.
 
@@ -98,7 +98,7 @@ See <files.txt>.
 No software is written in a vacuum. DZX-Forth is a fork of CP/M
 DX-Forth 4.09, and takes ideas and code from other Forth systems and
 ZX Spectrum programs.  Code copied from or inspired by other programs
-is acknowledged in the source.
+is always acknowledged in the source.
 
 The author wishes to gratefully acknowledge all those in the Forth and
 ZX Spectrum communities who have generously made their source code and
@@ -106,12 +106,15 @@ documentation available for public scrutiny.  Without these to serve
 as a starting point and source for ideas, DZX-Forth would not have
 been written.
 
-- CP/M DX-Forth 4.09, by XXX
-- ZX Spectrum Forth-83, by L. Benschop (1988).
+Beside DX-Forth, DZX-Forth took XXX
+
+- ZX Spectrum Forth-83 System, by Lennart Benschop (1988)
 - Z80 CamelForth, by XXX
 - Z88 CamelForth, by XXX
 - Z80 eForth, by XXX
-- Z88 FORTH, by Salvador Merino (1990).
+- Z88 FORTH, by Salvador Merino (1990)
+- Gforth by XXX
+- Abersoft Forth, by John Jones-Steele (1983).
 
 === Legal
 
@@ -128,7 +131,7 @@ at his or her own risk.
 
 === Installation
 
-XXX TODO // XXX TODO
+// XXX TODO
 
 === Getting started
 
@@ -171,7 +174,7 @@ To see the names of all Forth functions in the dictionary, type
 Press any key to stop the display or <space> to pause.  If you want
 to see only word names that contain the sequence 'MOD' then type
 
-     WORDS MOD
+     WORDS-LIKE MOD
 
 You will notice some words are accompanied by an attribute.
 
@@ -269,17 +272,17 @@ hold any type of data including text.  In DZX-Forth, blocks are used
 primarily to store Forth program source.  Each 'screen' (the name
 given to blocks that hold Forth text) represents 1024 bytes of data
 organized as 16 lines of 64 characters each.  DZX-Forth screens are
-saved as conventional DOS disk files and are distinguished by a .SCR
-filetype (some Forths use .BLK as the filetype).
+saved as conventional DOS disk files and are distinguished by a .FB
+filetype (some Forths use .SCR or .BLK as the filetype).
 
 DZX-Forth also supports Forth source in standard text files.  To load
 and compile such a file, use:
 
-     INCLUDE filename[.F]
+     INCLUDE filename[.FS]
 
-If no filetype is given then .F is assumed.  Another form is:
+If no filetype is given then .FS is assumed.  Another form is:
 
-     S" filename[.F]" INCLUDED  ( Forth-94 Standard )
+     S" filename[.FS]" INCLUDED  ( Forth-94 Standard )
 
 Forth source files (text or screen) may be nested to the default
 maximum of 6.
@@ -441,13 +444,13 @@ A sample filecopy program FCOPY is provided in source form.  As well
 as illustrating a complete Forth application, it also serves as a
 primer on using DZX-Forth's file functions.  It will show you how to:
 
-  get arguments from the DOS command line
-  create file-handles and assign file-buffers
-  open disk files
-  read data from a disk file
-  write data to a disk file
-  close disk files
-  handle errors
+-  get arguments from the DOS command line
+-  create file-handles and assign file-buffers
+-  open disk files
+-  read data from a disk file
+-  write data to a disk file
+-  close disk files
+-  handle errors
 
 Routines may be extracted for your own use or the entire program can
 serve as the basis for a more complex one.
@@ -460,8 +463,10 @@ and routine tasks such as command-line parsing and buffered I/O.  See
 
 === Error messages
 
-Compiler error messages
------------------------
+==== Compiler error messages
+
+----
+
 "block out of range"          Attempt to access a block past end of
                               file.
 "block r/w error"             Error encountered during a block read or
@@ -501,12 +506,15 @@ Compiler error messages
 "stack?"                      Data stack under/overflow.
 "r-stack?"                    Return stack under/overflow.
 "f-stack?"                    Floating point stack under/overflow.
+----
 
-Run-time error messages
------------------------
+==== Run-time error messages
+
 Apart from those listed below, DZX-Forth does not perform run-time error
 checking.  It is the responsibility of the application programmer to
 include error checking appropriate to the task.
+
+----
 
 "numeric buffer overflow"     The string being built in the pictured numeric
                               output buffer exceeded the buffer size.
@@ -519,9 +527,11 @@ include error checking appropriate to the task.
 "no data space"               Data space or dictionary full.
 "not enough RAM"              Insufficient DOS memory.
 "wrong DOS version"           Requires DOS version 2.x or later.
+----
 
-Assembler error messages
-------------------------
+==== Assembler error messages
+
+----
 "definition unbalanced"       Definition is not properly formed.
 "duplicate label"             Label number was previously used.
 "execution only"              Word may be used only during execution.
@@ -532,6 +542,7 @@ Assembler error messages
 "too many references"         Exceeded the maximum number of forward
                               references to labels.
 "unresolved reference"        A label was referenced but never defined.
+----
 
 
 == Programming reference
@@ -643,21 +654,6 @@ the programmer should be aware:
    by TURNKEY applications.
 
 
-=== No Warm-Boot option
-
-DZX-Forth and turnkey applications automatically perform a warm-boot
-(BDOS function 1) on exit.  The allows all the available TPA memory
-to be used by the program but has the disadvantage that the CP/M
-Console Command Processor must be reloaded on exit.  If this is not
-desired, the NO WARMBOOT option may be enabled by changing the byte
-at address location 272 (0110h) to a non-zero value, or by using the
-INSTALL program.
-
-NOTE: Enabling NO WARMBOOT reduces the amount of free memory.
-Turnkey applications will have 2K bytes less free memory and the
-DZX-Forth compiler will have 2K bytes less System memory.
-
-
 //// XXX OLD
 === User Patch area
 
@@ -707,10 +703,10 @@ See <overlay.fs> for a demonstration of a simple overlay system.
 A co-operative 'round robin' multi-tasker is provided with DZX-Forth.
 It permits an application to have several tasks run concurrently.
 
-Refer to the multitasker documentation <multi.txt> and the source file
-<multi.fs> for further details.
+Refer to the multitasker documentation <multitasker.txt> and the
+source file <multi.fs> for further details.
 
-// XXX TODO -- include multi.txt
+// XXX TODO -- include and adapt multitasker.txt
 
 
 === User variables

@@ -1,0 +1,14 @@
+; ZX Spectrum colors
+
+; By Marcos Cruz (programandala.net)
+
+; 2015-01-12
+
+black_color:    equ 0
+blue_color:     equ 1
+red_color:      equ 2
+magenta_color:  equ 3
+green_color:    equ 4
+cyan_color:     equ 5
+yellow_color:   equ 6
+white_color:    equ 7

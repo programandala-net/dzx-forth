@@ -1,0 +1,119 @@
+= DZX-Forth TO-DO list
+:author: Marcos Cruz (programandala.net)
+:revdate: 2016-03-17
+
+== To fix
+
+2014: Check problems with backspace (char 8), depending on the ZX Spectrum
+ROM.  Already solved?
+
+2014: Fix the missing `cr` after errors; it was removed from `quit`. Where
+should it be?
+
+2015-01-12: use `throw` with Forth-94 codes instead of `(abort")`
+
+2015-02-15:
+
+Fix:
+
+block r/w error happens because of `#screens` is 1 greater.  No matter the
+tool the DSK file is created by, `tap2dsk` or `mkp3fs`.  But `tap2dsk`
+creates +3DOS headers, while `mkp3fs` doesn't.
+
+The problem happens because of the +3DOS HEADER. Also, `#screens` returns one
+more than expected for the <list.fb> file, why?
+
+2015-02-17:
+
+The problem above is double:
+
+1) `file-size` returns 3200 for a headerless 3072-byte file, maybe because of
+the 128-bound rounding?
+
+2) `file-size` returns 3200 for a 3072-byte file with header, because of the
+128-byte header.
+
+Then `init-scr` calculates the number of blocks in the file this way:
+
+file-size drop b/buf um/mod nip blks ! ; XXX FIXME fails with +3DOS headers
+
+What returns 3, correct.  But it returns 4 when the file is loaded after
+<words.fs>, that has 4 blocks.
+
+
+Note: The content of BLKS somehow is restored between two `open-block file`
+even after `close-all`. 
+
+Pero `blks` apunta a una ficha de file_descriptor_blocks. Puede que la ficha
+no se borre. Pero ¿por qué el nuevo valor es igual que el antiguo cuando el
+segundo fichero de bloques que se abre es menor?
+
+2015-01-21: erase `file-id-table` in `cold`.
+
+2015-01-26: check if `last-filename` works fine, or the addresses of
+`filename-buffers` change.
+
+2015-01-29: fix: improve the "undefined word" message to show the word name.
+this is required in order to know what fails about `include`. 2015-02-01: The
+solution seems to use the new `latest-word`.
+
+2015-01-30, 2015-01-16: fix: `(create-file)`. fix the strange issue with its
+fam: +3DOS can not create r/o or s/r files.  The solution is to change the
+fam, create the file and then force the original fam.
+
+2015-01-30: Fix: redo the lost renamings in _tools.fb_: `fname` to
+`current-stream-file`; `loadfile` to `current-block-file`. Better names?
+
+2015-02-14: Fix: `at-xy` errors return to BASIC.
+
+2015-02-18: Now `file-size` returns 5 KiB for small files, why?
+
+== To change or improve
+
+2015-01-14: change the format of headers created by `defer`?
+
+2015-01-24: redirect emit to a file using a word like Gforth's `outfile-id`
+to hold the fid of the current file, or a value that represents the console
+(could be the xt of the printing routine).
+
+2015-01-26: improve `file-id-table` to hold also if every opened file is
+headed.  use one bit for "open", other bit for "headed". [also if it's a
+block file; and its filename?]
+
+2015-01-28: change: Simplify the `dzx-forth` word: use only the version
+string, and make `dzx-forth` return it
+
+2015-01-29: idea: make every `dw here_` optional, depending on
+`size_optimization`, with the alternative `dw dp_,fetch_`
+
+2015-09-13: the routine `hl_minus_de_to_hl` and others are not
+needed in Z80! `sbc hl,de` can be used instead!
+
+== To implement
+
+2015-01-12: implement `allocate` in the ram disk? [better use the tool that
+uses the dictionary]
+
+2015-02-17: call `dos set message` to disable the messages, if needed.
+
+2015-01-24: new: `forth-wordlist`
+
+2015-01-28: idea: a variable with the first loadable block (0/1)
+
+2015-01-28: new: `block-included` from Gforth; also `reposition-block-file`.
+
+2015-02-01: new: `?exit` after Gforth.
+
+2015-02-08: Ideas from 40-80 Forth: `time@` and `time0`, color constants,
+`ltape`, `message`, `p!`, `p@`
+
+2015-02-14: New: `cconstant`, `cvariable`?
+
+== To consult
+
+2014: See: "Programación en Ensamblador", by Tony Woods, p. 168, ROM
+routines.
+
+2015-02-20: Write Ed about this: `(name)` and `n>count` converted to `name>string` (after Gforth and Forth-2012).
+
+

@@ -5,7 +5,7 @@
 
 _version: macro
   db version.major,'-0',version.minor+'0','-'
-  db '20150408'  ; release
+  db '20151009'  ; release
   endm
 
 ; A direct-threaded Forth for ZX Spectrum +3e
@@ -135,12 +135,15 @@ parsed_string_buffer_size:    equ 255 ; XXX TODO create a circular string buffer
 
 debug_blocks?: equ no  ; XXX TMP
 
-case_insensitive_names?:          equ yes
-control_flow_stack_extensions?:   equ yes
-warning_options?:                 equ no ; XXX TODO does this causes trouble?
+case_insensitive_names?:            equ yes
+control_flow_stack_extensions?:     equ yes
+warning_options?:                   equ no ; XXX TODO does this causes trouble?
 
 ; XXX FIXME when yes, some things don't work fine:
-size_optimization?:                equ no ; if yes, the code will be smaller but slower
+size_optimization?:                 equ no ; if yes, the code will be smaller but slower
+
+; XXX TODO document this
+exx_optimization?:                  equ no
 
 ; Where the xt of a defered body is stored and managed.
 ; yes = the xt is stored into the pfa, so 'is' and 'to' are synonyms.
@@ -223,13 +226,13 @@ endif
 
 circular_string_buffer?: equ yes
 if circular_string_buffer?
-  cbs_size: equ 512
+  csb_size: equ 512
 endif
 
 classic_Forth_behaviours?:         equ no ; XXX OLD ; XXX TODO study and remove
 tib?:                        equ yes ; include the obsolescent words 'tib' and '#tib'?
 
-fast_emit?:                        equ yes ; if yes, some words jump directly into '(emit_)', don't call 'emit'
+fast_emit?:                        equ no ; if yes, some words jump directly into '(emit_)', don't call 'emit'
 
 ; XXX TMP
 restore_user?           equ no ; define the word 'restore-user'? (it needs 28 bytes)
@@ -253,7 +256,7 @@ tib_size:                             equ 80    ; Terminal Input Buffer
 ; SP    SP   Data stack pointer. Should be used only as data
 ;            stack across Forth words. May be used within Forth
 ;            words if restored before NEXT.
-;       DE   Input only when pushde called.
+;       DE   Input only when pushhlde called.
 ;       HL   Input only when pushhl called.
 
 ; ------------------------------
@@ -480,7 +483,7 @@ _jump_z: macro _address
     jp z,_address
   endif
   endm
-  
+
 _push_hl_jp_next: macro
   if size_optimization?
     jp push_hl
@@ -515,10 +518,27 @@ _border_halt: macro color
   jr $
   endm
 
+_border: macro color
+
+  ; Debug check point
+
+  ; Change the border to the given color (red by default).
+
+  local border_color
+  border_color: defl red_color
+  if not nul color
+    border_color: defl color
+  endif
+  push af
+  ld a,border_color
+  out (254),a
+  pop af
+  endm
+
 _debug: macro message,flag
 
   ; Debug check point for colon definitions
-  ; 
+  ;
   ; If the given flag is not zero or the 'debug?' label is not zero, then show
   ; the given message, show the content of the stack and wait for a key.
 
@@ -542,7 +562,7 @@ _debug_variable: macro message,address
 
   ; Debug check point for colon definitions, depending on a variable
   ;
-  ; 
+  ;
   ; If the content of the given address is not zero, then show the given
   ; message, show the content of the stack and wait for a key.
 
@@ -581,8 +601,13 @@ return_stack_0:
 
   if circular_string_buffer?
 
-    csb_unused:  dw cbs_size
-    csb0:        ds cbs_size
+    csb_unused:
+      if csb_size<256
+                 db csb_size
+      else
+                 dw csb_size
+      endif
+    csb0:        ds csb_size
 
 ;  else
   endif
@@ -672,6 +697,7 @@ de_minus_hl_to_hl:
   ex de,hl
 
 hl_minus_de_to_hl:
+  ; XXX TODO -- not needed in Z80!
   ; Input:  de, hl
   ; Output: hl = hl-de
   ld a,l
@@ -709,18 +735,29 @@ compare_de_hl_signed:
 ; ------------------------------
 ; BC is affected
 
-move_block_upwards:
+move_block_downwards:
 
   ; Move block upwards
+  ; Used by 'cmove>', 'move' and the user data init.
+
   ; hl = source
   ; de = destination
   ; bc = count
 
+  ; If bc is greater than zero, copy bc consecutive characters from the data
+  ; space starting at hl to that starting at de, proceeding
+  ; character-by-character from higher addresses to lower addresses.
+
+do_not_optimize_move_block_downwards? equ false
+
+if do_not_optimize_move_block_downwards?
+
+  ; XXX OLD
   add hl,bc
   ex de,hl
   add hl,bc
   ex de,hl
-move_block_upwards.1:
+move_block_downwards.1:
   ld a,c
   or b
   ret z
@@ -729,38 +766,76 @@ move_block_upwards.1:
   ld a,(hl)
   ld (de),a
   dec bc
-  jp move_block_upwards.1
+  jp move_block_downwards.1
+
+else
+
+  ; XXX NEW
+  ; XXX TODO check
+  ; XXX 2015-06-23 checked in Solo Forth and informed Ed
+  ld a,c
+  or b
+  ret z
+  add hl,bc
+  dec hl
+  ex de,hl
+  add hl,bc
+  dec hl
+  ex de,hl
+  lddr
+  ret
+
+endif
 
 move_block:
 
-  ; Move block up/down
+  ; Move block upwards or downwards
+  ; Used by 'move' and 'packed'.
+
   ; hl = source
   ; de = destination
   ; bc = count
+
+  ; If bc is greater than zero, copy the contents of bc consecutive address
+  ; units at hl to the bc consecutive address units at de. After the move
+  ; completes, the bc consecutive address units at de contain exactly what the
+  ; bc consecutive address units at hl contained before the move.
 
   call compare_de_hl_unsigned
-  jp c,move_block_upwards
+  jp c,move_block_downwards
 
-move_block_downwards:
+move_block_upwards:
 
-  ; Move block downwards
+  ; Move block upwards
+  ; Used by 'cmove', 'move', '-roll' and '+string'.
+
   ; hl = source
   ; de = destination
   ; bc = count
+
+  ; If bc is greater than zero, copy bc consecutive characters from the data
+  ; space starting at hl to that starting at de, proceeding
+  ; character-by-character from lower addresses to higher addresses.
 
   ld a,c
   or b
   ret z
-  ld a,(hl)
-  ld (de),a
-  inc hl
-  inc de
-  dec bc
-  jp move_block_downwards
+  ; XXX OLD original
+  ; ld a,(hl)
+  ; ld (de),a
+  ; inc hl
+  ; inc de
+  ; dec bc
+  ; jp move_block_upwards
+  ; XXX NEW optimized
+  ; XXX TODO inform the author of DX-Forth
+  ; XXX 2015-06-23 checked in Solo Forth and informed Ed
+  ldir
+  ret
 
 ; XXX OLD -- not used
 ; amovd: ; XXX OLD name
-; move_block_downwards.a:
+; move_block_upwards.a:
 
 ;   ; Move block downwards
 ;   ; hl = source
@@ -770,7 +845,7 @@ move_block_downwards:
 ;   push bc
 ;   ld c,a
 ;   ld b,0
-;   call move_block_downwards
+;   call move_block_upwards
 ;   pop bc
 ;   ret
 
@@ -838,6 +913,8 @@ next:
 
 ; UNNEST  ( -- )
 
+  ; XXX TODO -- remove?
+
   _header _public,'UNNEST',,r_drop_
 unnest_: equ r_drop_
 
@@ -893,9 +970,12 @@ c_lit_:
   ld a,(bc)
   inc bc
 
+  ; XXX TODO create constants with push_a, push_hl, push_de, push_hlde...
+  ; needed as reentry points in assembler definitions.
+
 push_a:
   ld l,a
-push_l:
+push_l: ; XXX TMP -- not used yet
   ld h,0
 push_hl:
   push hl
@@ -929,7 +1009,7 @@ two_lit_:
   ld a,(bc)
   ld d,a
   inc bc
-  jp push_de_hl
+  jp push_hlde
 
 ; }}} **********************************************************
 ; Stack pointers manipulation {{{
@@ -1035,10 +1115,19 @@ two_r_fetch_:
   _header _public,'RDROP'
 r_drop_:
 rdrop_:
+  ; XXX TODO -- simplify
+  ; XXX FIXME -- check if this new version works, or saving its
+  ; return address is not needed, because it's not a colon word.
+  ; In Solo Forth, it's not needed.
   ld hl,(return_stack_pointer)
+  ld e,(hl)
   inc hl
+  ld d,(hl)
   inc hl
   ld (return_stack_pointer),hl
+  ld (hl),e
+  inc hl
+  ld (hl),d
   jp next
 
 ; }}} **********************************************************
@@ -1099,7 +1188,7 @@ over_:
   pop de
   pop hl
   push hl
-  jp push_de_hl
+  jp push_hlde
 
 ; ROT  ( x1 x2 x3 -- x2 x3 x1 )
 
@@ -1108,7 +1197,7 @@ rot_:
   pop de
   pop hl
   ex (sp),hl
-  jp push_de_hl
+  jp push_hlde
 
 ; -ROT  ( x1 x2 x3 -- x3 x1 x2 )
 
@@ -1118,7 +1207,7 @@ minus_rot_:
   pop de
   ex (sp),hl
   ex de,hl
-  jp push_de_hl
+  jp push_hlde
 
 ; ROLL  ( xu xn .. x0 u -- xn .. x0 xu )
 
@@ -1138,9 +1227,24 @@ roll_:
   ld b,d
   ld e,l
   ld d,h
+
+if do_not_optimize_move_block_downwards?
+  ; XXX OLD
   inc de
   dec hl
-  call move_block_upwards.1
+  call move_block_downwards.1
+else
+  ; XXX NEW
+  ; XXX TODO check
+  ld a,b
+  or c
+  jp z,roll_.end
+  dec hl
+  dec hl
+  lddr
+roll_.end:
+endif
+
   pop hl
   pop bc
   ex (sp),hl
@@ -1168,7 +1272,7 @@ minus_roll_:
   ld d,h
   dec  de
   inc  hl
-  call move_block_downwards
+  call move_block_upwards
   pop hl
   pop bc
   ex de,hl
@@ -1190,8 +1294,7 @@ pick_:
   _header _public,'NIP'
 nip_:
   pop hl
-  inc sp
-  inc sp
+  pop af ; inc sp / inc sp
   _push_hl_jp_next
 
 ; TUCK  ( x1 x2 -- x2 x1 x2 )
@@ -1201,7 +1304,7 @@ tuck_:
   pop hl
   pop de
   push hl
-  jp push_de_hl
+  jp push_hlde
 
 ; 2DUP  ( x1 x2 -- x1 x2 x1 x2 )
 
@@ -1211,7 +1314,7 @@ two_dup_:
   pop de
   push de
   push hl
-  jp push_de_hl
+  jp push_hlde
 
 ; 2SWAP  ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 
@@ -1227,7 +1330,7 @@ two_swap_:
 ;;  dec sp
 ;;  ex de,hl
 ;;  ex (sp),hl
-;;  jp pushde
+;;  jp pushhlde
 ; XXX NEW -- DX-Forth 4.09
   pop hl
   pop de
@@ -1238,12 +1341,12 @@ two_swap_:
   ld a,(hl)
   ld (hl),d
   ld d,a
-  dec  hl
+  dec hl
   ld a,(hl)
   ld (hl),e
   ld e,a
   pop hl
-  jp push_de_hl
+  jp push_hlde
 
 ; 2OVER  ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
 
@@ -1273,11 +1376,9 @@ two_rot_:
 two_nip_:
   pop hl
   pop de
-  inc  sp
-  inc  sp
-  inc  sp
-  inc  sp
-push_de_hl: ; XXX this is DX-Forth's dpush
+  pop af ; inc sp / inc sp
+  pop af ; inc sp / inc sp
+push_hlde: ; XXX this is DX-Forth's dpush
   push de
   _push_hl_jp_next
 
@@ -1441,7 +1542,7 @@ two_fetch_.hl:
   ld h,(hl)
   ld l,a
   ex de,hl
-  jp push_de_hl
+  jp push_hlde
 
 ; +!  ( x aa -- )
 
@@ -1463,6 +1564,8 @@ plus_store_.de_into_hl:
 
   _header _public,'MOVE'
 move_:
+if not exx_optimization?
+  ; XXX OLD
   ld l,c
   ld h,b  ; the Forth IP
   pop bc
@@ -1470,6 +1573,16 @@ move_:
   ex (sp),hl ; save the Forth IP
   call move_block
   pop bc  ; restore the Forth IP
+else
+  ; XXX NEW -- optimized with exx
+  ; XXX TODO inform the author of DX-Forth
+  exx
+  pop bc
+  pop de
+  pop hl
+  call move_block
+  exx
+endif
   jp next
 
 ; ERASE  ( a len -- )
@@ -1485,16 +1598,22 @@ erase_:
 
   _header _public,'FILL'
 fill_:
+
+if not exx_optimization?
+  ; XXX OLD
+
   pop de
 
 fill_.e:
   ld l,c
   ld h,b  ; the Forth IP
-  pop bc
+  pop bc  ; count
   ex (sp),hl  ; save the Forth IP
   jp fill_.again
 
 fill_.begin:
+  ; XXX FIXME this happens when count is 0
+  ; XXX TODO inform the author of DX-Forth
   ld (hl),e
   inc hl
   dec bc
@@ -1504,6 +1623,35 @@ fill_.again:
   or b
   jp nz,fill_.begin
   pop bc  ; restore the Forth IP
+
+else
+
+  ; XXX NEW -- optimized with exx
+  ; XXX TODO inform the author of DX-Forth
+
+  exx
+  pop de
+
+fill_.e:
+  pop bc
+  pop hl
+  jp fill_.again
+
+fill_.begin:
+  ; XXX FIXME this happens when count is 0
+  ; XXX TODO inform the author of DX-Forth
+  ld (hl),e
+  inc hl
+  dec bc
+
+fill_.again:
+  ld a,c
+  or b
+  jp nz,fill_.begin
+  exx
+
+endif
+
   jp next
 
 ; ON  ( a -- )
@@ -1592,8 +1740,13 @@ if circular_string_buffer?
 ; CSB-UNUSED  ( -- len )
   _header _public,'CSB-UNUSED'
 csb_unused_:
-  ld hl,(csb_unused)
-  jp push_hl
+  if csb_size<256
+    ld a,(csb_unused)
+    jp push_a
+  else
+    ld hl,(csb_unused)
+    jp push_hl
+  endif
 
 ; CSB0  ( -- a )
   _header _public,'CSB0'
@@ -1609,7 +1762,7 @@ question_csb_:
   dw dup_,lit_,csb_unused,fetch_,greater_
   dw branch_if_false_,question_csb_.enough
   ; not enough space; reset the pointer
-  dw lit_,cbs_size
+  dw lit_,csb_size
   dw lit_,csb_unused,store_
 question_csb_.enough:
   dw negate_,lit_,csb_unused,plus_store_
@@ -1714,11 +1867,21 @@ negate_hl.1:
   ld h,a
   ret
 
+  ; Shift right arithmetic
+
+  ; XXX TODO 2015-11-13:
+  ; this code is 8080;
+  ; in Z80 it can be simply:
+  ;   sra h
+  ;   rr l
+
 sra_hl:
-  ld a,h   ; shift arithmetic right
+  ld a,h
   rlca
   rrca
 sra_hl.1:
+  ; cy=sign bit of hl
+  ; a=h
   rra
   ld h,a
   ld a,l
@@ -1763,9 +1926,9 @@ s_to_d_:
   pop de
   ld a,d
   or a
-  jp p,push_de_hl
+  jp p,push_hlde
   dec hl
-  jp push_de_hl
+  jp push_hlde
 
 ; D>S  ( d -- n )
 
@@ -1795,7 +1958,7 @@ d_negate_:
   pop hl
   pop de
   call negate_hlde
-  jp push_de_hl
+  jp push_hlde
 
 ; DABS  ( d -- +d )
 
@@ -1804,7 +1967,7 @@ d_abs_:
   pop hl
   pop de
   call abs_hlde
-  jp push_de_hl
+  jp push_hlde
 
 ; +  ( x1 x2 -- x3 )
 
@@ -1843,14 +2006,22 @@ d_plus_:
   add hl,de
   ex de,hl
   pop hl
+
+if 0 ; XXX OLD -- original
   ld a,l
   adc a,c
   ld l,a
   ld a,h
   adc a,b
   ld h,a
+else ; version of Abersoft Forth
+  adc hl,bc
+endif
+
   pop bc
-  jp push_de_hl
+  jp push_hlde
+
+; XXX TODO in Solo Forth there's an alternative from fig-Forth 1.1g
 
 ; D-  ( xd1 xd2 -- xd3 )
 ;   dnegate d+
@@ -1975,7 +2146,7 @@ umstr_:
   pop de
   pop hl
   call hl_by_de_to_hlde_unsigned
-  jp push_de_hl
+  jp push_hlde
 
 ; M*  ( n1 n2 -- d )
 ; 2dup xor >r abs swap abs um* r> ?dnegate
@@ -1985,7 +2156,7 @@ mstar_:
   pop de
   pop hl
   call hl_by_de_to_hlde_signed
-  jp push_de_hl
+  jp push_hlde
 
 ; *  ( x1 x2 -- x3 )
 ; um* drop
@@ -2072,6 +2243,8 @@ mum:
 
   _header _public,'UM/MOD'
 umslm_:
+if not exx_optimization?
+  ; XXX OLD:
   ld l,c
   ld h,b
   pop bc
@@ -2080,7 +2253,18 @@ umslm_:
   ex de,hl
   call mum
   pop bc
-  jp push_de_hl
+else
+  ; XXX NEW -- optimized with exx
+  ; XXX TODO check
+  ; XXX TODO inform the author of DX-Forth
+  exx
+  pop bc
+  pop hl
+  pop de
+  call mum
+  exx
+endif
+  jp push_hlde
 
 ; Signed 32/16 divide - floored
 ;
@@ -2118,7 +2302,7 @@ msm.1:
 msm.2:
   pop bc
   if size_optimization?
-    jp push_de_hl
+    jp push_hlde
   else
     push de
     push hl
@@ -2133,7 +2317,7 @@ s_m_slash_rem_:
   ld h,b
   pop bc
   pop de
-  ex (sp),hl
+  ex (sp),hl ; XXX TODO optimize with exx
   ex de,hl
 s_m_slash_rem_.1:
   call msm
@@ -2148,7 +2332,7 @@ fm_slash_mod_:
   ld h,b
   pop bc
   pop de
-  ex (sp),hl
+  ex (sp),hl ; XXX TODO optimize with exx
   ex de,hl
 fm_slash_mod_.1:
   call msm
@@ -2263,6 +2447,8 @@ two_star_:
 
 ; 2/  ( n1 -- n2 )
 
+  ; XXX TODO simplify after Solo Forth; DZX-Forth uses 8080 code.
+
   _header _public,'2/'
 two_slash_:
   pop hl
@@ -2282,7 +2468,8 @@ u_two_slash_:
 
 
 ; D2*  ( xd1 -- xd2 )
-; XXX TODO check if this works
+
+; XXX TODO -- convert 8080 code to Z80
 
   _header _public,'D2*'
 d_two_star_:
@@ -2297,7 +2484,7 @@ d_two_star_:
   ld d,a
   if size_optimization?
     ex de,hl
-    jp push_de_hl
+    jp push_hlde
   else
     push hl
     push de
@@ -2305,6 +2492,8 @@ d_two_star_:
   endif
 
 ; D2/  ( d1 -- d2 )
+
+; XXX TODO -- convert 8080 code to Z80
 
   _header _public,'D2/'
 d_two_slash_:
@@ -2318,7 +2507,7 @@ d_two_slash_:
   rra
   ld e,a
   if size_optimization?
-    jp push_de_hl
+    jp push_hlde
   else
     push de
     push hl
@@ -2415,6 +2604,8 @@ not_equals_:
 zero_less_:
   pop hl
 zero_less_.hl:
+  ; XXX Ace Forth uses `rld` with the high part, what needs 8T
+  ; and 2 bytes instead of 11T and 1 byte.
   add hl,hl
 true_if_cy: ; XXX TODO macro for this jump
   jp c,true_
@@ -2426,7 +2617,15 @@ true_if_cy: ; XXX TODO macro for this jump
 zero_greater_:
   pop de
   ld hl,0
-zero_greater_.1:
+  jp is_de_less_than_hl
+
+; <  ( n1 n2 -- flag )
+
+  _header _public,'<'
+less_:
+  pop de
+  pop hl
+is_de_less_than_hl:
   call compare_de_hl_signed
   if size_optimization?
     jp true_if_cy
@@ -2435,21 +2634,13 @@ zero_greater_.1:
     jp false_
   endif
 
-; <  ( n1 n2 -- flag )
-
-  _header _public,'<'
-less_:
-  pop de
-  pop hl
-  jp zero_greater_.1
-
 ; >  ( n1 n2 -- flag )
 
   _header _public,'>'
 greater_:
   pop hl
   pop de
-  jp zero_greater_.1
+  jp is_de_less_than_hl
 
 ; U<  ( u1 u2 -- flag )
 
@@ -2604,11 +2795,9 @@ d_less_:
   ex (sp),hl
   call compare_de_hl_unsigned
   jp z,u_less_
-  inc sp
-  inc sp
-  inc sp
-  inc sp
-  jp zero_greater_.1
+  pop af ; inc sp / inc sp
+  pop af ; inc sp / inc sp
+  jp is_de_less_than_hl
 
 ; DU<  ( ud1 ud2 -- flag )
 ;   rot swap 2dup u< if 2drop 2drop -1 exit
@@ -2825,16 +3014,17 @@ number_sign_greater_:
   dw paren_exit_
 
 ; +HLD  ( +n -- ca )
-;   negate hld +! hld @ dup dp @ u<
+;   negate hld +! hld @ dup here u<
 ;        abort" HOLD buffer overflow"
 
   _header _hidden,'+HLD'
-phld_:
+plus_hld_:
   call do_colon
   dw negate_,hld_,plus_store_
   dw hld_,fetch_,dup_
   dw here_,u_less_
   dw paren_abort_quote_
+  ; XXX FIXME 2015-05-13, this error happens continuously
   _dcs 'HOLD buffer overflow' ; XXX TODO ; -17 ; pictured numeric output string overflow
   dw paren_exit_
 
@@ -2844,8 +3034,7 @@ phld_:
   _header _public,'HOLD'
 hold_:
   call do_colon
-  dw one_,phld_
-  dw c_store_
+  dw one_,plus_hld_,c_store_
   dw paren_exit_
 
 ; SIGN  ( n -- )
@@ -2908,7 +3097,7 @@ number_sign_s_.begin:
   _header _public,'SHOLD'  ; hold string
 s_hold_:
   call do_colon
-  dw dup_,phld_
+  dw dup_,plus_hld_
   dw swap_,move_
   dw paren_exit_
 
@@ -2918,7 +3107,7 @@ s_hold_:
   _header _public,'NHOLD'  ; hold n characters
 n_hold_:
   call do_colon
-  dw over_,phld_
+  dw over_,plus_hld_
   dw minus_rot_,fill_
   dw paren_exit_
 
@@ -2940,29 +3129,58 @@ decimal_question_:
 ; CMOVE  ( ca1 ca2 len -- )
 
   _header _public,'CMOVE'
-cmove_:
-  ld l,c
-  ld h,b
-  pop bc
-  pop de
-  ex (sp),hl
-cmove_.1:
-  call move_block_downwards
-  pop bc
+c_move_:
+
+if not exx_optimization?
+  ; XXX OLD -- original
+  ld l,c      ;  4 T
+  ld h,b      ;  4 T
+  pop bc      ; 10 T
+  pop de      ; 10 T
+  ex (sp),hl  ; 19 T
+  call move_block_upwards
+  pop bc      ; 10 T
+              ; 57 T total
+else
+  ; XXX NEW -- optimized with exx
+  ; XXX TODO check
+  ; XXX TODO inform the author of DX-Forth
+  exx         ;  4 T
+  pop bc      ; 10 T
+  pop de      ; 10 T
+  pop hl      ; 10 T
+  call move_block_upwards
+  exx         ;  4 T
+              ; 38 T total
+endif
   jp next
 
 ; CMOVE>  ( ca1 ca2 len -- )
 
   _header _public,'CMOVE>'
-cmovu_:
-  ld l,c
-  ld h,b
-  pop bc
-  pop de
-  ex (sp),hl
-cmovu_.1:
-  call move_block_upwards
-  pop bc
+c_move_up_:
+if not exx_optimization?
+  ; XXX OLD
+  ld l,c      ;  4 T
+  ld h,b      ;  4 T
+  pop bc      ; 10 T
+  pop de      ; 10 T
+  ex (sp),hl  ; 19 T
+  call move_block_downwards
+  pop bc      ; 10 T
+              ; 57 T total
+else
+  ; XXX NEW -- optimized
+  ; XXX TODO check
+  ; XXX TODO inform the author of DX-Forth
+  exx         ;  4 T
+  pop bc      ; 10 T
+  pop de      ; 10 T
+  pop hl      ; 10 T
+  call move_block_downwards
+  exx         ;  4 T
+              ; 38 T total
+endif
   jp next
 
 ; BLANK  ( ca len -- )
@@ -2988,13 +3206,16 @@ count_:
 ;            2dup 2>r 1+ swap move 2r> tuck c!
 
 ; Store the string ca1 len1 as a counted string at ca2 leaving
-; the destination address on the stack.  The source and destination
-; strings are permitted to overlap.  An ambiguous condition exists
-; if len is greater than 255 or the buffer at ca2 is less than len+1
-; characters.
+; the destination address on the stack.  The source and
+; destination strings are permitted to overlap.  An ambiguous
+; condition exists if len is greater than 255 or the buffer at
+; ca2 is less than len1+1 characters.
 
   _header _public,'PACKED'
 packed_:
+
+if not exx_optimization?
+  ; XXX OLD
   ld l,c
   ld h,b
   pop de
@@ -3008,6 +3229,23 @@ packed_:
   pop de
   ld (hl),e
   pop bc
+else
+  ; XXX NEW -- optimized with exx
+  ; XXX TODO check
+  ; XXX TODO inform the author of DX-Forth
+  exx
+  pop de      ; de=ca2
+  pop bc      ; bc=len1
+  pop hl      ; hl=ca1
+  push bc
+  push de
+  inc  de
+  call move_block
+  pop hl
+  pop de
+  ld (hl),e
+  exx
+endif
   _push_hl_jp_next
 
 ; PLACE  ( ca1 len1 ca2 -- )
@@ -3058,7 +3296,7 @@ scan_:
   ld l,c
   ld h,b
   pop bc
-  ex (sp),hl ; XXX TODO use this trick in file words
+  ex (sp),hl ; XXX TODO optimize with exx
 scan_.1:
   ld a,c
   or b
@@ -3086,7 +3324,7 @@ skip_:
   ld l,c
   ld h,b
   pop bc
-  ex (sp),hl
+  ex (sp),hl  ; XXX TODO optimize with exx
 skip_.1:
   ld a,c
   or b
@@ -3125,12 +3363,12 @@ minus_trailing_.begin:
 
   _header _public,'/STRING'
 slash_string_:
-  pop de ; n
-  pop hl ; u1
-  call hl_minus_de_to_hl ; hl=u2
-  ex (sp),hl ; (sp)=u2 hl=ca1
-  add hl,de ; hl=ca2
-  ex (sp),hl ; (sp)=ca2 hl=u2
+  pop de                  ; n
+  pop hl                  ; u1
+  call hl_minus_de_to_hl  ; hl=u2
+  ex (sp),hl              ; (sp)=u2 hl=ca1
+  add hl,de               ; hl=ca2
+  ex (sp),hl              ; (sp)=ca2 hl=u2
   _push_hl_jp_next
 
 ; XXX OLD
@@ -3273,9 +3511,9 @@ compare_strings_case_sensitive:
 compare_:
   ld de,compare_.compare_strings
   call patch_compare_strings
-  pop de
-  pop hl
-  ex (sp),hl
+  pop de      ; de = len2
+  pop hl      ; hl = ca2
+  ex (sp),hl  ; hl = len1
   ld a,d
   cp h
   jp nz,compare_.1
@@ -3285,17 +3523,18 @@ compare_.1:
   jp c,compare_.2
   ex de,hl
 compare_.2:
+  ; de = smaller len
   ld l,c
-  ld h,b
-  pop bc
-  ex (sp),hl
-  push af
+  ld h,b ; hl = Forth IP
+  pop bc ; ca2
+  ex (sp),hl ; hl = ca1 ; save Forth IP
+  push af ; save carry flag
 compare_.compare_strings: equ $+1
   call 0 ; patched
   _jump_z compare_.4
-  pop bc
+  pop bc ; useless carry flag
 compare_.3:
-  pop bc
+  pop bc ; restore Forth IP
 ; XXX OLD -- Why this?:
 ;;  ld a,0
 ;;  ld (scaps),a
@@ -3325,15 +3564,15 @@ search_:
   ex de,hl
   pop hl
   ld (string_1_addr),hl
-  jp z,search_.2
+  jp z,search_.match
   dec hl
   inc de
 search_.1:
-  inc hl
-  dec de
-  ld a,e
+  inc hl ; address of current char of string 1
+  dec de ; remaining length of string 1
+  ld a,e ; end of string 1?
   or d
-  jp z,search_.4
+  jp z,search_.no_match
 ; XXX commented out in DX-Forth:
 ; ld a,(bc)
 ; CP  (hl)
@@ -3352,9 +3591,9 @@ search_.compare_strings: equ $+1
   pop de
   jp nz,search_.1
 
-search_.2:
-  ld bc,-1
-search_.3:
+search_.match:
+  ld bc,true
+search_.end:
   push hl
   push de
   push bc
@@ -3363,14 +3602,14 @@ search_.3:
 ;;  ld (scaps),a
   jp paren_exit_
 
-search_.4:
-  ld bc,0
+search_.no_match:
+  ld bc,false
 string_1_len equ $+1
   ld hl,0  ; length of the first string
   ex de,hl
 string_1_addr equ $+1
   ld hl,0  ; address of the first string
-  jp search_.3
+  jp search_.end
 
 ; +STRING  ( ca1 len1 ca2 len2 -- ca2 len3 )
 ;
@@ -3404,8 +3643,7 @@ plus_string_:
   add hl,bc
   ld (plus_string_.length),hl ; save len3
   pop hl
-  call move_block_downwards
-
+  call move_block_upwards
   ; Restore the Forth IP
 plus_string_.ip: equ $+1
   ld bc,0
@@ -3576,7 +3814,10 @@ branch_:
 
 ; <>0BRANCH  ( flag -- )
 
-  ; XXX TODO remove?
+  ; XXX 2015-05-22: I had this same idea for a Spectrum fig-Forth with
+  ; absolute branches. It can be used to implement a new structure `UNLESS ..
+  ; ELSE ... THEN'. Better name: '?BRANCH'.
+
   _header _hidden,'<>0BRANCH'
 not_equals_0_branch_:
 branch_if_not_0_:
@@ -3596,6 +3837,8 @@ branch_if_true_:
   endif
 
 ; ?BRANCH  ( flag -- )
+
+  ; XXX TODO Better name, the classic one: '0BRANCH'.
 
   _header _hidden,'?BRANCH'
 question_branch_:
@@ -4297,7 +4540,8 @@ paren_d_dot_:
   dw number_sign_greater_
   dw paren_exit_
 
-; U.R  ( u1 u2 -- ) 0 swap d.r
+; U.R  ( u1 u2 -- )
+; 0 swap d.r
 
   _header _public,'U.R'
 udotr_:
@@ -4381,7 +4625,8 @@ question_:
   _header _public,'.'
 dot_:
   call do_colon
-  dw s_to_d_,d_dot_
+  dw s_to_d_
+  dw d_dot_
   dw paren_exit_
 
 ; HEX.  ( n -- )  Gforth
@@ -4495,6 +4740,31 @@ do_dos:
   pop bc
   ret
 
+; GET-1346  ( -- n1 n2 n3 n4 )
+
+  ; n1 = First buffer on cache
+  ; n2 = Number of cache sector buffers
+  ; n3 = First buffer of RAM-disk
+  ; n4 = Number of RAM-disk sector buffers
+
+  _header _public,'GET-1346'
+get_1346_:
+  ld ix,dos_get_1346
+  call do_dos
+  ; d = First buffer on cache
+  ; e = Number of cache sector buffers
+  ; h = First buffer of RAM-disk
+  ; l = Number of RAM-disk sector buffers
+  ld a,e
+  ld e,d
+  ld d,0
+  push de ; n1
+  ld e,a
+  push de ; n2
+  ld e,h
+  ld h,0
+  jp push_hlde ; n3 n4
+
 ; DOS-VERSION  ( -- minor major )
 
   _header _public,'DOS-VERSION'
@@ -4509,7 +4779,7 @@ push_version:
   ld l,e
   ld e,d
   ld d,a
-  jp push_de_hl
+  jp push_hlde
 
 ; XXX NEW
 ; IDEDOS?  ( -- wf )
@@ -4634,12 +4904,13 @@ p_c_store_.1  equ  $-1
 ; ?TERMINAL  ( -- flag )
 
   _header _hidden,'?TERMINAL'
-qterm_:
+question_terminal_:
   call do_colon
 ; XXX OLD
 ;;  dw zero,two
 ;;  dw bios
 ; XXX TODO
+  dw false_
   dw paren_exit_
 
 ; CONIN  ( -- c )
@@ -4728,17 +4999,17 @@ paren_ms_.1:
   add hl,hl
   add hl,hl
 paren_ms_.2:
-  ex (sp),hl    ; 19T
-  ex (sp),hl    ; 19T
-  ex (sp),hl    ; 19T
-  ex (sp),hl    ; 19T
-  push hl    ; 11T
-  pop hl    ; 10T
-  dec  hl    ; 6T
-  ld a,0    ; 7T
-  ld a,l    ; 4T
-  or h    ; 4T
-  jp nz,paren_ms_.2    ; 10T
+  ex (sp),hl        ; 19T
+  ex (sp),hl        ; 19T
+  ex (sp),hl        ; 19T
+  ex (sp),hl        ; 19T
+  push hl           ; 11T
+  pop hl            ; 10T
+  dec  hl           ;  6T
+  ld a,0            ;  7T
+  ld a,l            ;  4T
+  or h              ;  4T
+  jp nz,paren_ms_.2 ; 10T
   dec  de
   jp paren_ms_.1
 
@@ -4802,6 +5073,9 @@ endif
 ; (DECODE)  ( c -- c' )
 ;
 ; Translate a key code using 'keyboard-table'.
+
+; XXX TODO -- Rewrite. This method is a waste of memory. A simple list is
+; better, as is being implemented is Solo Forth. 2015-08-13.
 
   _header _public,'(DECODE)'
 
@@ -4932,6 +5206,7 @@ emit_l:
   ld a,l
 emit_a:
   rst 0x10
+  ; XXX TODO use `iy+` instead, faster
   ld a,0xFF
   ld(sys_scr_ct),a ; no "scroll?" message
   ret
@@ -4946,11 +5221,6 @@ emit_:
 ; TYPE  ( ca u -- )
   _header _public,'TYPE'
 type_:
-
-  ; XXX INFORMER
-  ; ld a,2
-  ; out (254),a
-  ; jr $
 
   push bc ; save the Forth IP
   call rom_chan_s ; set print to screen
@@ -5121,6 +5391,83 @@ wordlist_find_.6:
   push hl
   jp paren_exit_
 
+if 0
+
+  ; 2015-05-16
+  ; Shorter version of DX-Forth's `wfind` (`wordlist-find` in DZX-Forth) done
+  ; after DX-Forth 4.11 was published. Sent by Ed.
+
+  ; XXX TODO adapt it
+
+; wfind  ( c-addr wid -- 0 | xt nfa -1 | xt nfa 1 )
+
+ hdr x,'WFIND',,1
+wfind: pop hl
+ ld a,l
+ or h
+ jp z,wfind2 ; wid=0
+wfind1: ld e,(hl)  ; get nfa
+ inc hl
+ ld d,(hl)
+ pop hl  ; string
+ push hl
+ ld a,e  ; end of list?
+ or d
+ ex de,hl
+ jp nz,wfind3
+wfind2: pop de  ; discard string
+ jp false  ; no match
+
+wfind3: push hl  ; save nfa
+ push bc  ; save IP
+ ld a,(hl)
+ ld b,a
+ and 1fh
+ ld c,a  ; dict name length
+ ld a,(de)  ; string length
+ xor b  ; check lengths/smudge bit
+ and 3fh
+ jp z,wfind5
+ inc hl
+wfind4: ld b,0  ; move to link
+ add hl,bc
+ pop bc  ; restore IP
+ pop de  ; discard nfa
+ jp wfind1
+
+wfind5: inc hl  ; check each char
+ inc de
+ ld a,(de)
+  if ucase
+ call upc
+  endif
+ ld b,a
+ ld a,(hl)
+  if ucase
+ call upc
+  endif
+ xor b
+ jp nz,wfind4 ; no match
+ dec c
+ jp nz,wfind5
+ inc hl  ; to link
+ inc hl  ; to cfa pointer
+ inc hl
+ ld e,(hl)  ; get xt
+ inc hl
+ ld d,(hl)
+ pop bc  ; restore IP
+ pop hl  ; nfa
+ pop af  ; discard string
+ push de  ; xt
+ push hl  ; nfa
+ ld a,(hl)
+ and 40h  ; immediate?
+ jp z,true
+ jp one
+
+endif
+
 ; (FIND)  ( ca -- ca 0 | xt -1 | xt 1 )
 ;
 ; searches CONTEXT CURRENT FORTH ; XXX ?
@@ -5219,6 +5566,45 @@ warning_question_.2:
 warning_question_.end:
   dw paren_exit_
 
+if 0
+
+    ; 2015-05-16
+    ;
+    ; XXX shorter version sent by Ed, not included in 4.11
+
+    ; XXX TODO adapt it?
+
+; warning?  ( -- 0|1 ) warning @ dup if 1 and dup if
+;    -1 else 1 then warning ! then
+
+ hdr x,'WARNING?',,1 ; get warning flag and apply mask
+qwarn: ld hl,warnn1
+ ld e,(hl)
+ inc hl
+ ld d,(hl)
+ ld a,e
+ or d
+ jp z,qwarn2
+ push bc
+ ld bc,1  ; disable system warning
+    ; enable redefinition warning
+ ld a,e  ; test bit 0, clear bit 15
+ and c
+ ld e,a
+ ld d,b
+ jp z,qwarn1
+ dec bc  ; enable all warnings
+ dec bc
+qwarn1: ld (hl),b
+ dec hl
+ ld (hl),c
+ pop bc
+qwarn2: push de
+ nextt
+
+endif
+
+
 endif
 
 ; IMMEDIATE  ( -- )
@@ -5315,8 +5701,87 @@ header_.1:
 header_.2:
   dw dup_,rot_,store_
   dw over_,last_,two_store_
-  dw swap_,cmove_
+  dw swap_,c_move_
   dw paren_exit_
+
+if 0
+
+  ; Fixed version of `HEADER` in DX-Forht 4.11.
+
+  ; From Ed, the author of DX-Forth:
+
+  ; A user found some issues with text
+  ; file loading and out of memory in
+  ; HEADER.  These were fixed in
+  ; v4.11.
+
+
+  ; XXX TODO -- adapt it
+
+; header  ( xt|0 "name" -- )
+;       warning? 2>r dph @ (esm) @ 64 - u>
+;       abort" no name space" bl-word dup c@
+;       32 1 within abort" invalid name" dup
+;       find nip r> and if dup count type
+;       ."  is redefined " then dup count tuck
+;       + get-current w>name over ! cell+ swap
+;       5 + dph @ over dph +! dup get-current !
+;       rot r> ?dup 0= if here then dup rot !
+;       over last 2! swap cmove
+
+  hdr x,'HEADER',,1
+headr:  call  docol
+   if wopt
+  dw  qwarn
+   else
+  dw  warnn,at
+   endif
+  dw  ttor
+  dw  dph,at
+  dw  lit,esm
+  dw  at
+  dw  clit
+  db  64
+  dw  subb,ugrea
+  dw  pabq
+  dcs 'no name space'
+  dw  blword
+  dw  dupp,cat
+  dw  clit
+  db  32
+  dw  one,within
+  dw  pabq
+  dcs 'invalid name'
+  dw  dupp,find,nip
+  dw  fromr,andd
+  dw  zbran,headr1
+  dw  dupp,count,typee
+  dw  pdotq
+  dcs ' is redefined '
+headr1: dw  dupp,count
+  dw  tuck
+  dw  plus
+  dw  getcur,wtnam
+  dw  over,store
+  dw  cellp,swap
+  dw  clit
+  db  5
+  dw  plus
+  dw  dph,at
+  dw  over,dph,pstor
+  dw  dupp
+  dw  getcur
+  dw  store   ; CP/M version
+  dw  rot
+  dw  fromr,qdup,zequ
+  dw  zbran,headr2
+  dw  here
+headr2: dw  dupp,rot,store
+  dw  over,last,tstor
+  dw  swap,cmove
+  dw  exit
+
+endif
 
 ; ,CALL ( a -- )  $CD c, ,
 
@@ -6118,7 +6583,7 @@ to_body_:
   ld de,3
   jp plus_de
 
-; BODY>  ( a -- xt )
+; BODY>  ( pfa -- xt )
 ;
 ; XXX -- this word was commented out in DX-Forth, why?
   _header _hidden,'BODY>'
@@ -6160,7 +6625,7 @@ wordlist_to_name_: equ fetch_
 ; XXX OLD moved to <src/dxforth.fs>
 ;  _header _public,'W>NAME',,fetch_
 ;w_to_name_: equ fetch_
-  
+
 
 ; -ALIAS  ( nfa -- nfa flag )
 ; false if alias
@@ -6232,7 +6697,7 @@ name_to_string_:
   and max_word_length ; mask (0x1F)
   ld l,a
   ld h,0
-  jp push_de_hl
+  jp push_hlde
 
 ; .ID  ( nfa | 0 -- )
 ;   ?dup if (name) type exit then
@@ -6405,13 +6870,6 @@ compile_comma_:  equ comma_
 
   _header _public,'COMPILE'
 compile_:
-  if  0;debug? ; XXX INFORMER
-    push af
-    ld a,2
-    out (254),a
-    pop af
-    ;jr $
-  endif
   call do_colon
   dw question_comp_
   dw from_r_
@@ -6618,14 +7076,6 @@ parse_:
   push hl
   jp paren_parse_
 
-if 0 and circular_string_buffer? ; XXX TMP
-
-; XXX TODO
-
-else
-
-; XXX -- original version
-
 ; (PARSE)  ( c f -- ca len )
 ;
 ;         2>r source >in @ /string
@@ -6634,13 +7084,15 @@ else
 ;         then
 ;         2dup r> scan nip tuck - dup rot 0<> -
 ;         >in +!
-; 
-; XXX TODO -- what f means?:
-; f = true, when called from 'word'
-; f = false, when called from 'parse'
-; XXX -- It seems the difference is where the string
-; will be stored; this distinction will not be needed
-; with a circular string buffer.
+;
+; d = delimiter
+; f = skip leading delimiters?
+;     (true when called from 'word', false when called from 'parse')
+
+; XXX -- It seems the difference is where the string will be
+; stored; this distinction will not be needed with a circular
+; string buffer. But this word should not use it, because
+; Forth-94 says it must return the address in the input buffer.
 
   _header _hidden,'(PARSE)'
 paren_parse_:
@@ -6676,8 +7128,6 @@ paren_parse_.1:
   dw in_,plus_store_
   dw paren_exit_
 
-endif
-
 ; +PSB  ( a1 n1 n2 -- n3 )
 ;
 ;   >r (parsed_string_buffer_size) r@ - umin r> 2dup + >r
@@ -6698,7 +7148,7 @@ plus_psb_:
   dw lit_,parsed_string_buffer
   dw plus_
   dw swap_
-  dw cmove_
+  dw c_move_
   dw from_r_
   dw paren_exit_
 
@@ -6713,7 +7163,7 @@ plus_psb_:
 ;         repeat then
 ;         2drop (parsed_string_buffer) r>
 
-; XXX TODO -- rewrite in Z80 
+; XXX TODO -- rewrite in Z80
 ; XXX TODO rename to 'parse-string'?
 
   _header _public,'PARSE$'
@@ -6807,7 +7257,7 @@ bl_word_:
 
 ; PARSE-NAME  ( "name" -- ca len )
 
-  ; XXX TODO write 'word' based on 'parse-name', not the other way
+  ; XXX TODO write 'word' based on 'parse-name', not the other way around
   ; XXX TODO or make 'word' and 'parse-name' independent and faster
   _header _public,'PARSE-NAME'
 parse_name_:
@@ -6819,7 +7269,7 @@ parse_name_:
 ;  _header _public,'TOKEN',,parse_name_
 ;token_: equ parse_name_
 
-; DEFINED  ( -- ca 0 | xt -1 | xt 1 )
+; DEFINED  ( "name" -- ca 0 | xt -1 | xt 1 )
 
   _header _hidden,'DEFINED'
 defined_:
@@ -6842,8 +7292,10 @@ tick_:
 ; [UNDEFINED]  ( -- flag )
 ;   defined nip 0= ; immediate
 
+  ; XXX TODO simplify, make `[undefined]` call `[defined]`
+
   _header _public,'[UNDEFINED]',_immediate
-budef_:
+bracket_undefined_:
   call do_colon
   dw defined_
   dw nip_
@@ -6853,10 +7305,12 @@ budef_:
 ; [DEFINED]  ( -- flag )
 ;   postpone [undefined] 0= ; immediate
 
+  ; XXX TODO simplify, make `[defined]` call `defined`
+
   _header _public,'[DEFINED]',_immediate
-bdef_:
+bracket_defined_:
   call do_colon
-  dw budef_,zero_equals_
+  dw bracket_undefined_,zero_equals_
   dw paren_exit_
 
 ; (  ( "ccc<delim>" ) [char] ) parse 2drop ; immediate
@@ -7228,7 +7682,7 @@ if false
 ; XXX OLD -- First version, converts only some control chars.
 
 ; (CONTROL>BL)  ( ca len -- ca len )
-; 
+;
 ; Change all end-of-word control chars (CR, LF, TAB)
 ; to spaces in the given text.
 
@@ -7262,7 +7716,7 @@ paren_control_to_bl_.repeat:
   jp paren_control_to_bl_.begin
 
 ; CONTROL>BL  ( ca len -- ca len )
-; 
+;
 ; Convert end-of-word control chars (CR, LF, TAB) to spaces.
 
   _header _public,'CONTROL>BL'
@@ -7303,7 +7757,7 @@ endif
 ; (EVALUATE)  ( ca len blk -- )
 ;
 ; does not restore block contents
-; 
+;
 ; XXX TODO -- write and use 'save-input' and 'restore-input'
 ;
 ;         blk @ >in @ 2>r
@@ -7485,10 +7939,25 @@ reset_forth_:
 ;;  dw lit,filedescriptorsize*maxopensourcefiles ;
 ;;  dw erase   ;
   ; XXX NEW
+if 1 ; original ; XXX TMP for debugging
   dw file_id_table_
   dw c_lit_
   db max_file_ids
   dw erase_
+else ; XXX OLD -- testing for debugging
+  dw file_id_table_
+  dw dup_ ; XXX TMP
+  dw lit_,cyan_color,border_ ; XXX INFORMER ok
+  dw dot_ ; XXX TMP
+  dw lit_,magenta_color,border_ ; XXX INFORMER not reached
+  dw key_,drop_ ; XXX TMP
+  dw c_lit_
+  db max_file_ids
+  dw dup_,dot_,key_,drop_ ; XXX TMP
+  dw erase_
+endif
+
+  ; XXX FIXME somehow the system bombs out here
 
   dw empty_buffers_   ; mark screen buffer as empty
   dw reset_interpreter_
@@ -7552,7 +8021,7 @@ system_stack_pointer: equ $+1
   db 0xFF      ; 0: "OK"
 
 if 0
-  ; XXX TODO -- Code from Benschop's SPECTRUM FORTH83:
+  ; XXX TODO -- Code from Benschop's Spectrum Forth-83:
   ld sp,(sys_err_sp)
   pop bc
   ld bc,0x1303
@@ -7709,7 +8178,7 @@ recurse_:
 ; -79 ; REPLACES
 
 ; Values in the range {-4095...-256} and their meanings are implementation defined.
-; 
+;
 ; XXX TODO search for a list used by a Forth system
 ;
 ; -256 ; compiling an interpret-only word ; XXX TMP
@@ -7861,12 +8330,12 @@ dot_error_.1:
 
 ; : ERROR  ( n -- )
 ;       -1 of (abort) then
-;       -2 of boot cell+ @ 0= if  .error  then
-;       space errmsg 2@ type (abort) then
-;       ."  exception = " . (abort)
-   ;
+;       -2 of 
+;             \ boot cell+ @ 0= if  .error  then \ XXX OLD
+;             space abort-message 2@ type (abort) then
+;       ."  exception = " . (abort)  ;
 
-  ; XXX -- used only by 'throw'; I don't understand it yet
+  ; XXX -- used only by 'throw'
 
   _header _public,'ERROR'
 error_:
@@ -7885,8 +8354,8 @@ error_.check_abort_quote:
 ;  dw zero_equals_
 ;  dw question_branch_,error_.2
 ;  dw dot_error_    ; skipped by applications
+;error_.2:
 
-error_.2:
   dw space_
   dw abort_message_,two_fetch_
   dw type_
@@ -7922,8 +8391,7 @@ latest_word_.value:
 catch_:
   call do_colon
   dw sp_fetch_,to_r_
-  dw fsp_,fetch_
-  dw to_r_
+  dw fsp_,fetch_,to_r_
   dw catcher_,fetch_,to_r_
   dw rp_fetch_,catcher_,store_
   dw execute_
@@ -7977,7 +8445,7 @@ abort_:
   jp throw_
 
 ; (ABORT")  ( n -- )
-;   r> count rot if  errmsg 2! -2 throw  then + >r ;
+;   r> count rot if  abort-message 2! -2 throw  then + >r ;
 
   _header _hidden,'(ABORT")'
 paren_abort_quote_:
@@ -8011,7 +8479,7 @@ boot_tasks:
   add hl,sp
   ; XXX TODO -- update hl to remove the last call?
   ld (system_stack_pointer),hl
-  
+
   ; Reset the number of lines in the lower part of the screen
   xor a
   ld (sys_df_sz),a
@@ -8145,7 +8613,7 @@ cold_:
   ex de,hl
   ld hl,init_user_variables  ; from
   ld bc,init_user_variables_size ; count
-  call move_block_upwards
+  call move_block_downwards
 
   ; patch 'pause' to do nothing
   ld hl,noop_
@@ -8187,7 +8655,8 @@ cold_.1:
   dw normal_
 
 ;;cold_.6:
-  dw page_,boot_message_
+  dw page_
+  dw boot_message_
 
 ;;cold_.7:
 ;;  dw parendotquote
@@ -8269,7 +8738,7 @@ freeze_:
   dw udp_,fetch_ ; from
   dw lit_,init_user_variables ; to
   dw lit_,init_user_variables_size ; count
-  dw cmove_
+  dw c_move_
   dw paren_exit_
 
 ; XXX OLD
@@ -8630,7 +9099,7 @@ char_question_:
   ld l,h
   jp zero_equals_hl
 
-; CHAR  ( -- c ) bl word 1+ c@
+; CHAR  ( "name" -- c ) bl word 1+ c@
 
   _header _public,'CHAR'
 char_:
@@ -8639,7 +9108,7 @@ char_:
   dw one_plus_,c_fetch_
   dw paren_exit_
 
-; [CHAR]  ( -- c ) char [compile] literal
+; [CHAR]  ( "name" -- c ) char [compile] literal
 
   _header _public,'[CHAR]',_immediate
 bracket_char_:
@@ -8728,7 +9197,7 @@ file_id_.begin:
   dw file_id_table_,plus_,dup_,c_fetch_
   dw branch_if_0_,file_id_.found
   dw drop_,one_minus_,dup_,zero_less_
-  ; XXX TODO use '0>=' when available, and save one branch 
+  ; XXX TODO use '0>=' when available, and save one branch
   dw branch_if_0_,file_id_.begin
   dw branch_,file_id_.begin
 file_id_.found:
@@ -8934,7 +9403,7 @@ filename_buffer.last: ds filename_buffer_size
 
 ; >IOR  ( err# -- ior )
 ;   dup if $fe00 or then
-; XXX OLD 
+; XXX OLD
 
   ; _header _public,'>IOR'
 ; to_ior_:
@@ -9071,9 +9540,9 @@ filetype_:
   dw paren_exit_
 
 ; +EXT  ( ca1 len1 ca2 len2 -- ca3 len3 )
-; 
+;
 ; Add the filetype ca2 len2 to the filename ca1 len1, if needed.
-; 
+;
 ; ca2 len2 = filetype without the dot
 ;
 ;        2over filetype nip if 2drop exit then
@@ -9946,7 +10415,7 @@ save_system_:
 ;;  dw erase_
 ;;  dw c_lit_
 ;;  db cold_.7-cold_.6
-;;  dw cmove_
+;;  dw c_move_
 ;;  dw lit,0x0100
 ;;  dw here_
 ;;  dw over_,minus_
@@ -10194,6 +10663,7 @@ blk_number_.variable:
 ; FILE?  ( -- flag )
 ;
 ; XXX TODO rename
+; XXX renamed `SCREEN?` in DX-Forth 4.11
 
   _header _public,'FILE?'
 file_question_:
@@ -10257,7 +10727,7 @@ update_:
 
 ; BLKERR  ( flag -- )
 ;   abort" block r/w error"
-; 
+;
 ; XXX TODO remove, use ior instead
 
   _header _hidden,'BLKERR'
@@ -10817,7 +11287,9 @@ endif ; end of block file words
   _header _public,'AT-XY'
 at_xy_:
 
-  if fast_emit?
+  if 0 ; fast_emit? ; XXX TMP
+
+    ; XXX TODO manage the last line
 
     ld a,at_char
     call emit_a
@@ -10831,9 +11303,29 @@ at_xy_:
 
     call do_colon
   at_xy_.0:
+    dw dup_
+    dw c_lit_
+    db 23 ; last line
+    dw not_equals_
+    dw branch_if_false_,at_xy_.last_line
     dw c_lit_
     db at_char
     dw emit_,emit_,emit_
+    dw paren_exit_
+  at_xy_.last_line:
+    ; This part is adapted from Lennart Benschop's Spectrum Forth-83.
+    dw one_minus_,dup_,emit_,emit_,zero_,emit_,cr_
+    ; Update system variable: the address in display file of print position.
+    dw dup_,lit_,sys_df_cc,plus_store_
+    ; Update system variable: 33 minus column number for print position.
+    dw c_lit_
+    db 33
+    dw swap_,minus_
+    dw one_,border_,key_,drop_ ; XXX INFORMER
+    ; XXX FIXME 2015-05-17: The system bombs out here, why?
+    ; The same code works in Afera.
+    dw sys_s_posn,c_store_
+    dw two_,border_,key_,drop_ ; XXX INFORMER
     dw paren_exit_
 
   endif
@@ -10877,12 +11369,6 @@ home_:
   _header _public,'PAGE'
 page_:
   ; XXX TODO adapt to printer too; check Forth-2012
-
-  ; XXX INFORMER
-;  ld a,2
-;  out (254),a
-;  jr $
-
   push bc
   call rom_cl_all
 ;  ld a,2
@@ -10932,7 +11418,7 @@ delete_line_:
 
   _header _public,'BORDER'
 border_:
-  ; Code based on Lennart Benschop's SPECTRUM FORTH83:
+  ; Code based on Lennart Benschop's Spectrum Forth-83:
   ;   : BORDER  ( n -- )
   ;     DUP DUP 4 < 7 AND SWAP 8 * + 23624 C! 254 P! ;
   ; This is my translation to Z80:
@@ -10961,7 +11447,7 @@ border_.a:
 ; Print control char c, char +n and update the permanent attributes.
 
 ; This word was inspired by the 'COLOR' defining word from Lennart Lennart
-; Benchsop's SPECTRUM FORTH83.
+; Benchsop's Spectrum Forth-83.
 
 ; XXX TODO don't print the codes, just change the variables...
 
@@ -11003,7 +11489,7 @@ flash_:
 ; OVERPRINT ( n -- )
   _header _public,'OVERPRINT'
 overprint_:
-  ; XXX TODO -- Benschop's SPECTRUM FORTH83 does this:
+  ; XXX TODO -- Benschop's Spectrum Forth-83 does this:
   ; 23697 DUP C@ 252 AND ROT 3 * OR SWAP C!
   pop hl
   jp next
@@ -11011,7 +11497,7 @@ overprint_:
 ; INVERSE  ( n -- )
   _header _public,'INVERSE'
 inverse_:
-  ; XXX TODO -- Benschop's SPECTRUM FORTH83 does this:
+  ; XXX TODO -- Benschop's Spectrum Forth-83 does this:
   ; 23697 DUP C@ 243 AND ROT 12 * OR SWAP C!
   pop hl
   jp next
@@ -11249,7 +11735,7 @@ svop:
   ld h,b
   ld e,c
   pop bc
-  jp push_de_hl
+  jp push_hlde
 
 ; str  store registers to accum
 
@@ -11291,20 +11777,20 @@ ovf:
   scf
   ret
 
-; chs  change sign of accumulator
+; Change sign of accumulator
 ; entry - none
 ; exit  - bcd (packed), a=exp, flags set
 
-chs:
+change_sign_of_accumulator:
   ld a,0x80
   jp fab.1
 
-; change sign of accumulator and again on result
+; Change sign of accumulator and again on result
 ; (when calling routine completes)
 
-chss:
-  call chs
-  ld hl,chs
+change_sign_of_accumulator_and_again:
+  call change_sign_of_accumulator
+  ld hl,change_sign_of_accumulator
   ex (sp),hl
   jp (hl)
 
@@ -12149,7 +12635,7 @@ flr.4:
 
 rnd:
   call tstr
-  call m,chss
+  call m,change_sign_of_accumulator_and_again
   cp 0x80+24
   ret  nc    ; no fraction
   ld hl,fp50    ; 0.5
@@ -12169,7 +12655,7 @@ f_abs_:
   _header _public,'FNEGATE'
 fneg_:
   call ldop
-  call chs
+  call change_sign_of_accumulator
   jp svop
 
 ; D>F  ( d -- r )
@@ -12195,7 +12681,7 @@ f_to_d_:
   ld l,b
   ld h,a
   pop bc
-  jp push_de_hl
+  jp push_hlde
 
 ; S>F  ( n -- r )
 ;   s>d d>f
@@ -12680,7 +13166,7 @@ represent_.5:
   dw two_from_r_
   dw rot_,min_
   dw one_,max_
-  dw cmove_
+  dw c_move_
   dw d_zero_equals_
   dw question_branch_,represent_.6
   dw one_,zero_  ; 0.0E fixup
@@ -13320,14 +13806,14 @@ sin:
   jp m,sin.1
   ld hl,fp50    ; 0.5
   call fsu
-  call p,chs
+  call p,change_sign_of_accumulator
 sin.1:
   ld hl,fp25    ; 0.25
   call fad
   ld e,a
   pop af
   ld a,e
-  call p,chs
+  call p,change_sign_of_accumulator
   ld hl,sin.7
   jp polx
 
@@ -13352,7 +13838,7 @@ fp25:
 
 atan:
   call tstr
-  call m,chss    ; make positive
+  call m,change_sign_of_accumulator_and_again    ; make positive
   cp 0x81
   jp c,atan.1    ; < 1
   ld hl,atan.3
@@ -13385,7 +13871,7 @@ atan.2:
 atan.3:
   ld hl,fpi.2
   call fsu
-  jp chs
+  jp change_sign_of_accumulator
 
 atan.4:
   ld hl,atan.10

@@ -1,0 +1,3534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 1.5.4">
+<meta name="author" content="Marcos Cruz (programandala.net)">
+<title>DZX-Forth Glossary</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700">
+<style>
+/* Asciidoctor default stylesheet | MIT License | http://asciidoctor.org */
+/* Remove comment around @import statement below when using as a custom stylesheet */
+/*@import "https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";*/
+article,aside,details,figcaption,figure,footer,header,hgroup,main,nav,section,summary{display:block}
+audio,canvas,video{display:inline-block}
+audio:not([controls]){display:none;height:0}
+[hidden],template{display:none}
+script{display:none!important}
+html{font-family:sans-serif;-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}
+body{margin:0}
+a{background:transparent}
+a:focus{outline:thin dotted}
+a:active,a:hover{outline:0}
+h1{font-size:2em;margin:.67em 0}
+abbr[title]{border-bottom:1px dotted}
+b,strong{font-weight:bold}
+dfn{font-style:italic}
+hr{-moz-box-sizing:content-box;box-sizing:content-box;height:0}
+mark{background:#ff0;color:#000}
+code,kbd,pre,samp{font-family:monospace;font-size:1em}
+pre{white-space:pre-wrap}
+q{quotes:"\201C" "\201D" "\2018" "\2019"}
+small{font-size:80%}
+sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}
+sup{top:-.5em}
+sub{bottom:-.25em}
+img{border:0}
+svg:not(:root){overflow:hidden}
+figure{margin:0}
+fieldset{border:1px solid silver;margin:0 2px;padding:.35em .625em .75em}
+legend{border:0;padding:0}
+button,input,select,textarea{font-family:inherit;font-size:100%;margin:0}
+button,input{line-height:normal}
+button,select{text-transform:none}
+button,html input[type="button"],input[type="reset"],input[type="submit"]{-webkit-appearance:button;cursor:pointer}
+button[disabled],html input[disabled]{cursor:default}
+input[type="checkbox"],input[type="radio"]{box-sizing:border-box;padding:0}
+input[type="search"]{-webkit-appearance:textfield;-moz-box-sizing:content-box;-webkit-box-sizing:content-box;box-sizing:content-box}
+input[type="search"]::-webkit-search-cancel-button,input[type="search"]::-webkit-search-decoration{-webkit-appearance:none}
+button::-moz-focus-inner,input::-moz-focus-inner{border:0;padding:0}
+textarea{overflow:auto;vertical-align:top}
+table{border-collapse:collapse;border-spacing:0}
+*,*:before,*:after{-moz-box-sizing:border-box;-webkit-box-sizing:border-box;box-sizing:border-box}
+html,body{font-size:100%}
+body{background:#fff;color:rgba(0,0,0,.8);padding:0;margin:0;font-family:"Noto Serif","DejaVu Serif",serif;font-weight:400;font-style:normal;line-height:1;position:relative;cursor:auto}
+a:hover{cursor:pointer}
+img,object,embed{max-width:100%;height:auto}
+object,embed{height:100%}
+img{-ms-interpolation-mode:bicubic}
+.left{float:left!important}
+.right{float:right!important}
+.text-left{text-align:left!important}
+.text-right{text-align:right!important}
+.text-center{text-align:center!important}
+.text-justify{text-align:justify!important}
+.hide{display:none}
+body{-webkit-font-smoothing:antialiased}
+img,object,svg{display:inline-block;vertical-align:middle}
+textarea{height:auto;min-height:50px}
+select{width:100%}
+.center{margin-left:auto;margin-right:auto}
+.spread{width:100%}
+p.lead,.paragraph.lead>p,#preamble>.sectionbody>.paragraph:first-of-type p{font-size:1.21875em;line-height:1.6}
+.subheader,.admonitionblock td.content>.title,.audioblock>.title,.exampleblock>.title,.imageblock>.title,.listingblock>.title,.literalblock>.title,.stemblock>.title,.openblock>.title,.paragraph>.title,.quoteblock>.title,table.tableblock>.title,.verseblock>.title,.videoblock>.title,.dlist>.title,.olist>.title,.ulist>.title,.qlist>.title,.hdlist>.title{line-height:1.45;color:#7a2518;font-weight:400;margin-top:0;margin-bottom:.25em}
+div,dl,dt,dd,ul,ol,li,h1,h2,h3,#toctitle,.sidebarblock>.content>.title,h4,h5,h6,pre,form,p,blockquote,th,td{margin:0;padding:0;direction:ltr}
+a{color:#2156a5;text-decoration:underline;line-height:inherit}
+a:hover,a:focus{color:#1d4b8f}
+a img{border:none}
+p{font-family:inherit;font-weight:400;font-size:1em;line-height:1.6;margin-bottom:1.25em;text-rendering:optimizeLegibility}
+p aside{font-size:.875em;line-height:1.35;font-style:italic}
+h1,h2,h3,#toctitle,.sidebarblock>.content>.title,h4,h5,h6{font-family:"Open Sans","DejaVu Sans",sans-serif;font-weight:300;font-style:normal;color:#ba3925;text-rendering:optimizeLegibility;margin-top:1em;margin-bottom:.5em;line-height:1.0125em}
+h1 small,h2 small,h3 small,#toctitle small,.sidebarblock>.content>.title small,h4 small,h5 small,h6 small{font-size:60%;color:#e99b8f;line-height:0}
+h1{font-size:2.125em}
+h2{font-size:1.6875em}
+h3,#toctitle,.sidebarblock>.content>.title{font-size:1.375em}
+h4,h5{font-size:1.125em}
+h6{font-size:1em}
+hr{border:solid #ddddd8;border-width:1px 0 0;clear:both;margin:1.25em 0 1.1875em;height:0}
+em,i{font-style:italic;line-height:inherit}
+strong,b{font-weight:bold;line-height:inherit}
+small{font-size:60%;line-height:inherit}
+code{font-family:"Droid Sans Mono","DejaVu Sans Mono",monospace;font-weight:400;color:rgba(0,0,0,.9)}
+ul,ol,dl{font-size:1em;line-height:1.6;margin-bottom:1.25em;list-style-position:outside;font-family:inherit}
+ul,ol,ul.no-bullet,ol.no-bullet{margin-left:1.5em}
+ul li ul,ul li ol{margin-left:1.25em;margin-bottom:0;font-size:1em}
+ul.square li ul,ul.circle li ul,ul.disc li ul{list-style:inherit}
+ul.square{list-style-type:square}
+ul.circle{list-style-type:circle}
+ul.disc{list-style-type:disc}
+ul.no-bullet{list-style:none}
+ol li ul,ol li ol{margin-left:1.25em;margin-bottom:0}
+dl dt{margin-bottom:.3125em;font-weight:bold}
+dl dd{margin-bottom:1.25em}
+abbr,acronym{text-transform:uppercase;font-size:90%;color:rgba(0,0,0,.8);border-bottom:1px dotted #ddd;cursor:help}
+abbr{text-transform:none}
+blockquote{margin:0 0 1.25em;padding:.5625em 1.25em 0 1.1875em;border-left:1px solid #ddd}
+blockquote cite{display:block;font-size:.9375em;color:rgba(0,0,0,.6)}
+blockquote cite:before{content:"\2014 \0020"}
+blockquote cite a,blockquote cite a:visited{color:rgba(0,0,0,.6)}
+blockquote,blockquote p{line-height:1.6;color:rgba(0,0,0,.85)}
+@media only screen and (min-width:768px){h1,h2,h3,#toctitle,.sidebarblock>.content>.title,h4,h5,h6{line-height:1.2}
+h1{font-size:2.75em}
+h2{font-size:2.3125em}
+h3,#toctitle,.sidebarblock>.content>.title{font-size:1.6875em}
+h4{font-size:1.4375em}}
+table{background:#fff;margin-bottom:1.25em;border:solid 1px #dedede}
+table thead,table tfoot{background:#f7f8f7;font-weight:bold}
+table thead tr th,table thead tr td,table tfoot tr th,table tfoot tr td{padding:.5em .625em .625em;font-size:inherit;color:rgba(0,0,0,.8);text-align:left}
+table tr th,table tr td{padding:.5625em .625em;font-size:inherit;color:rgba(0,0,0,.8)}
+table tr.even,table tr.alt,table tr:nth-of-type(even){background:#f8f8f7}
+table thead tr th,table tfoot tr th,table tbody tr td,table tr td,table tfoot tr td{display:table-cell;line-height:1.6}
+body{tab-size:4}
+h1,h2,h3,#toctitle,.sidebarblock>.content>.title,h4,h5,h6{line-height:1.2;word-spacing:-.05em}
+h1 strong,h2 strong,h3 strong,#toctitle strong,.sidebarblock>.content>.title strong,h4 strong,h5 strong,h6 strong{font-weight:400}
+.clearfix:before,.clearfix:after,.float-group:before,.float-group:after{content:" ";display:table}
+.clearfix:after,.float-group:after{clear:both}
+*:not(pre)>code{font-size:.9375em;font-style:normal!important;letter-spacing:0;padding:.1em .5ex;word-spacing:-.15em;background-color:#f7f7f8;-webkit-border-radius:4px;border-radius:4px;line-height:1.45;text-rendering:optimizeSpeed}
+pre,pre>code{line-height:1.45;color:rgba(0,0,0,.9);font-family:"Droid Sans Mono","DejaVu Sans Mono",monospace;font-weight:400;text-rendering:optimizeSpeed}
+.keyseq{color:rgba(51,51,51,.8)}
+kbd{font-family:"Droid Sans Mono","DejaVu Sans Mono",monospace;display:inline-block;color:rgba(0,0,0,.8);font-size:.65em;line-height:1.45;background-color:#f7f7f7;border:1px solid #ccc;-webkit-border-radius:3px;border-radius:3px;-webkit-box-shadow:0 1px 0 rgba(0,0,0,.2),0 0 0 .1em white inset;box-shadow:0 1px 0 rgba(0,0,0,.2),0 0 0 .1em #fff inset;margin:0 .15em;padding:.2em .5em;vertical-align:middle;position:relative;top:-.1em;white-space:nowrap}
+.keyseq kbd:first-child{margin-left:0}
+.keyseq kbd:last-child{margin-right:0}
+.menuseq,.menu{color:rgba(0,0,0,.8)}
+b.button:before,b.button:after{position:relative;top:-1px;font-weight:400}
+b.button:before{content:"[";padding:0 3px 0 2px}
+b.button:after{content:"]";padding:0 2px 0 3px}
+p a>code:hover{color:rgba(0,0,0,.9)}
+#header,#content,#footnotes,#footer{width:100%;margin-left:auto;margin-right:auto;margin-top:0;margin-bottom:0;max-width:62.5em;*zoom:1;position:relative;padding-left:.9375em;padding-right:.9375em}
+#header:before,#header:after,#content:before,#content:after,#footnotes:before,#footnotes:after,#footer:before,#footer:after{content:" ";display:table}
+#header:after,#content:after,#footnotes:after,#footer:after{clear:both}
+#content{margin-top:1.25em}
+#content:before{content:none}
+#header>h1:first-child{color:rgba(0,0,0,.85);margin-top:2.25rem;margin-bottom:0}
+#header>h1:first-child+#toc{margin-top:8px;border-top:1px solid #ddddd8}
+#header>h1:only-child,body.toc2 #header>h1:nth-last-child(2){border-bottom:1px solid #ddddd8;padding-bottom:8px}
+#header .details{border-bottom:1px solid #ddddd8;line-height:1.45;padding-top:.25em;padding-bottom:.25em;padding-left:.25em;color:rgba(0,0,0,.6);display:-ms-flexbox;display:-webkit-flex;display:flex;-ms-flex-flow:row wrap;-webkit-flex-flow:row wrap;flex-flow:row wrap}
+#header .details span:first-child{margin-left:-.125em}
+#header .details span.email a{color:rgba(0,0,0,.85)}
+#header .details br{display:none}
+#header .details br+span:before{content:"\00a0\2013\00a0"}
+#header .details br+span.author:before{content:"\00a0\22c5\00a0";color:rgba(0,0,0,.85)}
+#header .details br+span#revremark:before{content:"\00a0|\00a0"}
+#header #revnumber{text-transform:capitalize}
+#header #revnumber:after{content:"\00a0"}
+#content>h1:first-child:not([class]){color:rgba(0,0,0,.85);border-bottom:1px solid #ddddd8;padding-bottom:8px;margin-top:0;padding-top:1rem;margin-bottom:1.25rem}
+#toc{border-bottom:1px solid #efefed;padding-bottom:.5em}
+#toc>ul{margin-left:.125em}
+#toc ul.sectlevel0>li>a{font-style:italic}
+#toc ul.sectlevel0 ul.sectlevel1{margin:.5em 0}
+#toc ul{font-family:"Open Sans","DejaVu Sans",sans-serif;list-style-type:none}
+#toc li{line-height:1.3334;margin-top:.3334em}
+#toc a{text-decoration:none}
+#toc a:active{text-decoration:underline}
+#toctitle{color:#7a2518;font-size:1.2em}
+@media only screen and (min-width:768px){#toctitle{font-size:1.375em}
+body.toc2{padding-left:15em;padding-right:0}
+#toc.toc2{margin-top:0!important;background-color:#f8f8f7;position:fixed;width:15em;left:0;top:0;border-right:1px solid #efefed;border-top-width:0!important;border-bottom-width:0!important;z-index:1000;padding:1.25em 1em;height:100%;overflow:auto}
+#toc.toc2 #toctitle{margin-top:0;margin-bottom:.8rem;font-size:1.2em}
+#toc.toc2>ul{font-size:.9em;margin-bottom:0}
+#toc.toc2 ul ul{margin-left:0;padding-left:1em}
+#toc.toc2 ul.sectlevel0 ul.sectlevel1{padding-left:0;margin-top:.5em;margin-bottom:.5em}
+body.toc2.toc-right{padding-left:0;padding-right:15em}
+body.toc2.toc-right #toc.toc2{border-right-width:0;border-left:1px solid #efefed;left:auto;right:0}}
+@media only screen and (min-width:1280px){body.toc2{padding-left:20em;padding-right:0}
+#toc.toc2{width:20em}
+#toc.toc2 #toctitle{font-size:1.375em}
+#toc.toc2>ul{font-size:.95em}
+#toc.toc2 ul ul{padding-left:1.25em}
+body.toc2.toc-right{padding-left:0;padding-right:20em}}
+#content #toc{border-style:solid;border-width:1px;border-color:#e0e0dc;margin-bottom:1.25em;padding:1.25em;background:#f8f8f7;-webkit-border-radius:4px;border-radius:4px}
+#content #toc>:first-child{margin-top:0}
+#content #toc>:last-child{margin-bottom:0}
+#footer{max-width:100%;background-color:rgba(0,0,0,.8);padding:1.25em}
+#footer-text{color:rgba(255,255,255,.8);line-height:1.44}
+.sect1{padding-bottom:.625em}
+@media only screen and (min-width:768px){.sect1{padding-bottom:1.25em}}
+.sect1+.sect1{border-top:1px solid #efefed}
+#content h1>a.anchor,h2>a.anchor,h3>a.anchor,#toctitle>a.anchor,.sidebarblock>.content>.title>a.anchor,h4>a.anchor,h5>a.anchor,h6>a.anchor{position:absolute;z-index:1001;width:1.5ex;margin-left:-1.5ex;display:block;text-decoration:none!important;visibility:hidden;text-align:center;font-weight:400}
+#content h1>a.anchor:before,h2>a.anchor:before,h3>a.anchor:before,#toctitle>a.anchor:before,.sidebarblock>.content>.title>a.anchor:before,h4>a.anchor:before,h5>a.anchor:before,h6>a.anchor:before{content:"\00A7";font-size:.85em;display:block;padding-top:.1em}
+#content h1:hover>a.anchor,#content h1>a.anchor:hover,h2:hover>a.anchor,h2>a.anchor:hover,h3:hover>a.anchor,#toctitle:hover>a.anchor,.sidebarblock>.content>.title:hover>a.anchor,h3>a.anchor:hover,#toctitle>a.anchor:hover,.sidebarblock>.content>.title>a.anchor:hover,h4:hover>a.anchor,h4>a.anchor:hover,h5:hover>a.anchor,h5>a.anchor:hover,h6:hover>a.anchor,h6>a.anchor:hover{visibility:visible}
+#content h1>a.link,h2>a.link,h3>a.link,#toctitle>a.link,.sidebarblock>.content>.title>a.link,h4>a.link,h5>a.link,h6>a.link{color:#ba3925;text-decoration:none}
+#content h1>a.link:hover,h2>a.link:hover,h3>a.link:hover,#toctitle>a.link:hover,.sidebarblock>.content>.title>a.link:hover,h4>a.link:hover,h5>a.link:hover,h6>a.link:hover{color:#a53221}
+.audioblock,.imageblock,.literalblock,.listingblock,.stemblock,.videoblock{margin-bottom:1.25em}
+.admonitionblock td.content>.title,.audioblock>.title,.exampleblock>.title,.imageblock>.title,.listingblock>.title,.literalblock>.title,.stemblock>.title,.openblock>.title,.paragraph>.title,.quoteblock>.title,table.tableblock>.title,.verseblock>.title,.videoblock>.title,.dlist>.title,.olist>.title,.ulist>.title,.qlist>.title,.hdlist>.title{text-rendering:optimizeLegibility;text-align:left;font-family:"Noto Serif","DejaVu Serif",serif;font-size:1rem;font-style:italic}
+table.tableblock>caption.title{white-space:nowrap;overflow:visible;max-width:0}
+.paragraph.lead>p,#preamble>.sectionbody>.paragraph:first-of-type p{color:rgba(0,0,0,.85)}
+table.tableblock #preamble>.sectionbody>.paragraph:first-of-type p{font-size:inherit}
+.admonitionblock>table{border-collapse:separate;border:0;background:none;width:100%}
+.admonitionblock>table td.icon{text-align:center;width:80px}
+.admonitionblock>table td.icon img{max-width:none}
+.admonitionblock>table td.icon .title{font-weight:bold;font-family:"Open Sans","DejaVu Sans",sans-serif;text-transform:uppercase}
+.admonitionblock>table td.content{padding-left:1.125em;padding-right:1.25em;border-left:1px solid #ddddd8;color:rgba(0,0,0,.6)}
+.admonitionblock>table td.content>:last-child>:last-child{margin-bottom:0}
+.exampleblock>.content{border-style:solid;border-width:1px;border-color:#e6e6e6;margin-bottom:1.25em;padding:1.25em;background:#fff;-webkit-border-radius:4px;border-radius:4px}
+.exampleblock>.content>:first-child{margin-top:0}
+.exampleblock>.content>:last-child{margin-bottom:0}
+.sidebarblock{border-style:solid;border-width:1px;border-color:#e0e0dc;margin-bottom:1.25em;padding:1.25em;background:#f8f8f7;-webkit-border-radius:4px;border-radius:4px}
+.sidebarblock>:first-child{margin-top:0}
+.sidebarblock>:last-child{margin-bottom:0}
+.sidebarblock>.content>.title{color:#7a2518;margin-top:0;text-align:center}
+.exampleblock>.content>:last-child>:last-child,.exampleblock>.content .olist>ol>li:last-child>:last-child,.exampleblock>.content .ulist>ul>li:last-child>:last-child,.exampleblock>.content .qlist>ol>li:last-child>:last-child,.sidebarblock>.content>:last-child>:last-child,.sidebarblock>.content .olist>ol>li:last-child>:last-child,.sidebarblock>.content .ulist>ul>li:last-child>:last-child,.sidebarblock>.content .qlist>ol>li:last-child>:last-child{margin-bottom:0}
+.literalblock pre,.listingblock pre:not(.highlight),.listingblock pre[class="highlight"],.listingblock pre[class^="highlight "],.listingblock pre.CodeRay,.listingblock pre.prettyprint{background:#f7f7f8}
+.sidebarblock .literalblock pre,.sidebarblock .listingblock pre:not(.highlight),.sidebarblock .listingblock pre[class="highlight"],.sidebarblock .listingblock pre[class^="highlight "],.sidebarblock .listingblock pre.CodeRay,.sidebarblock .listingblock pre.prettyprint{background:#f2f1f1}
+.literalblock pre,.literalblock pre[class],.listingblock pre,.listingblock pre[class]{-webkit-border-radius:4px;border-radius:4px;word-wrap:break-word;padding:1em;font-size:.8125em}
+.literalblock pre.nowrap,.literalblock pre[class].nowrap,.listingblock pre.nowrap,.listingblock pre[class].nowrap{overflow-x:auto;white-space:pre;word-wrap:normal}
+@media only screen and (min-width:768px){.literalblock pre,.literalblock pre[class],.listingblock pre,.listingblock pre[class]{font-size:.90625em}}
+@media only screen and (min-width:1280px){.literalblock pre,.literalblock pre[class],.listingblock pre,.listingblock pre[class]{font-size:1em}}
+.literalblock.output pre{color:#f7f7f8;background-color:rgba(0,0,0,.9)}
+.listingblock pre.highlightjs{padding:0}
+.listingblock pre.highlightjs>code{padding:1em;-webkit-border-radius:4px;border-radius:4px}
+.listingblock pre.prettyprint{border-width:0}
+.listingblock>.content{position:relative}
+.listingblock code[data-lang]:before{display:none;content:attr(data-lang);position:absolute;font-size:.75em;top:.425rem;right:.5rem;line-height:1;text-transform:uppercase;color:#999}
+.listingblock:hover code[data-lang]:before{display:block}
+.listingblock.terminal pre .command:before{content:attr(data-prompt);padding-right:.5em;color:#999}
+.listingblock.terminal pre .command:not([data-prompt]):before{content:"$"}
+table.pyhltable{border-collapse:separate;border:0;margin-bottom:0;background:none}
+table.pyhltable td{vertical-align:top;padding-top:0;padding-bottom:0;line-height:1.45}
+table.pyhltable td.code{padding-left:.75em;padding-right:0}
+pre.pygments .lineno,table.pyhltable td:not(.code){color:#999;padding-left:0;padding-right:.5em;border-right:1px solid #ddddd8}
+pre.pygments .lineno{display:inline-block;margin-right:.25em}
+table.pyhltable .linenodiv{background:none!important;padding-right:0!important}
+.quoteblock{margin:0 1em 1.25em 1.5em;display:table}
+.quoteblock>.title{margin-left:-1.5em;margin-bottom:.75em}
+.quoteblock blockquote,.quoteblock blockquote p{color:rgba(0,0,0,.85);font-size:1.15rem;line-height:1.75;word-spacing:.1em;letter-spacing:0;font-style:italic;text-align:justify}
+.quoteblock blockquote{margin:0;padding:0;border:0}
+.quoteblock blockquote:before{content:"\201c";float:left;font-size:2.75em;font-weight:bold;line-height:.6em;margin-left:-.6em;color:#7a2518;text-shadow:0 1px 2px rgba(0,0,0,.1)}
+.quoteblock blockquote>.paragraph:last-child p{margin-bottom:0}
+.quoteblock .attribution{margin-top:.5em;margin-right:.5ex;text-align:right}
+.quoteblock .quoteblock{margin-left:0;margin-right:0;padding:.5em 0;border-left:3px solid rgba(0,0,0,.6)}
+.quoteblock .quoteblock blockquote{padding:0 0 0 .75em}
+.quoteblock .quoteblock blockquote:before{display:none}
+.verseblock{margin:0 1em 1.25em 1em}
+.verseblock pre{font-family:"Open Sans","DejaVu Sans",sans;font-size:1.15rem;color:rgba(0,0,0,.85);font-weight:300;text-rendering:optimizeLegibility}
+.verseblock pre strong{font-weight:400}
+.verseblock .attribution{margin-top:1.25rem;margin-left:.5ex}
+.quoteblock .attribution,.verseblock .attribution{font-size:.9375em;line-height:1.45;font-style:italic}
+.quoteblock .attribution br,.verseblock .attribution br{display:none}
+.quoteblock .attribution cite,.verseblock .attribution cite{display:block;letter-spacing:-.025em;color:rgba(0,0,0,.6)}
+.quoteblock.abstract{margin:0 0 1.25em 0;display:block}
+.quoteblock.abstract blockquote,.quoteblock.abstract blockquote p{text-align:left;word-spacing:0}
+.quoteblock.abstract blockquote:before,.quoteblock.abstract blockquote p:first-of-type:before{display:none}
+table.tableblock{max-width:100%;border-collapse:separate}
+table.tableblock td>.paragraph:last-child p>p:last-child,table.tableblock th>p:last-child,table.tableblock td>p:last-child{margin-bottom:0}
+table.tableblock,th.tableblock,td.tableblock{border:0 solid #dedede}
+table.grid-all th.tableblock,table.grid-all td.tableblock{border-width:0 1px 1px 0}
+table.grid-all tfoot>tr>th.tableblock,table.grid-all tfoot>tr>td.tableblock{border-width:1px 1px 0 0}
+table.grid-cols th.tableblock,table.grid-cols td.tableblock{border-width:0 1px 0 0}
+table.grid-all *>tr>.tableblock:last-child,table.grid-cols *>tr>.tableblock:last-child{border-right-width:0}
+table.grid-rows th.tableblock,table.grid-rows td.tableblock{border-width:0 0 1px 0}
+table.grid-all tbody>tr:last-child>th.tableblock,table.grid-all tbody>tr:last-child>td.tableblock,table.grid-all thead:last-child>tr>th.tableblock,table.grid-rows tbody>tr:last-child>th.tableblock,table.grid-rows tbody>tr:last-child>td.tableblock,table.grid-rows thead:last-child>tr>th.tableblock{border-bottom-width:0}
+table.grid-rows tfoot>tr>th.tableblock,table.grid-rows tfoot>tr>td.tableblock{border-width:1px 0 0 0}
+table.frame-all{border-width:1px}
+table.frame-sides{border-width:0 1px}
+table.frame-topbot{border-width:1px 0}
+th.halign-left,td.halign-left{text-align:left}
+th.halign-right,td.halign-right{text-align:right}
+th.halign-center,td.halign-center{text-align:center}
+th.valign-top,td.valign-top{vertical-align:top}
+th.valign-bottom,td.valign-bottom{vertical-align:bottom}
+th.valign-middle,td.valign-middle{vertical-align:middle}
+table thead th,table tfoot th{font-weight:bold}
+tbody tr th{display:table-cell;line-height:1.6;background:#f7f8f7}
+tbody tr th,tbody tr th p,tfoot tr th,tfoot tr th p{color:rgba(0,0,0,.8);font-weight:bold}
+p.tableblock>code:only-child{background:none;padding:0}
+p.tableblock{font-size:1em}
+td>div.verse{white-space:pre}
+ol{margin-left:1.75em}
+ul li ol{margin-left:1.5em}
+dl dd{margin-left:1.125em}
+dl dd:last-child,dl dd:last-child>:last-child{margin-bottom:0}
+ol>li p,ul>li p,ul dd,ol dd,.olist .olist,.ulist .ulist,.ulist .olist,.olist .ulist{margin-bottom:.625em}
+ul.unstyled,ol.unnumbered,ul.checklist,ul.none{list-style-type:none}
+ul.unstyled,ol.unnumbered,ul.checklist{margin-left:.625em}
+ul.checklist li>p:first-child>.fa-square-o:first-child,ul.checklist li>p:first-child>.fa-check-square-o:first-child{width:1em;font-size:.85em}
+ul.checklist li>p:first-child>input[type="checkbox"]:first-child{width:1em;position:relative;top:1px}
+ul.inline{margin:0 auto .625em auto;margin-left:-1.375em;margin-right:0;padding:0;list-style:none;overflow:hidden}
+ul.inline>li{list-style:none;float:left;margin-left:1.375em;display:block}
+ul.inline>li>*{display:block}
+.unstyled dl dt{font-weight:400;font-style:normal}
+ol.arabic{list-style-type:decimal}
+ol.decimal{list-style-type:decimal-leading-zero}
+ol.loweralpha{list-style-type:lower-alpha}
+ol.upperalpha{list-style-type:upper-alpha}
+ol.lowerroman{list-style-type:lower-roman}
+ol.upperroman{list-style-type:upper-roman}
+ol.lowergreek{list-style-type:lower-greek}
+.hdlist>table,.colist>table{border:0;background:none}
+.hdlist>table>tbody>tr,.colist>table>tbody>tr{background:none}
+td.hdlist1,td.hdlist2{vertical-align:top;padding:0 .625em}
+td.hdlist1{font-weight:bold;padding-bottom:1.25em}
+.literalblock+.colist,.listingblock+.colist{margin-top:-.5em}
+.colist>table tr>td:first-of-type{padding:0 .75em;line-height:1}
+.colist>table tr>td:last-of-type{padding:.25em 0}
+.thumb,.th{line-height:0;display:inline-block;border:solid 4px #fff;-webkit-box-shadow:0 0 0 1px #ddd;box-shadow:0 0 0 1px #ddd}
+.imageblock.left,.imageblock[style*="float: left"]{margin:.25em .625em 1.25em 0}
+.imageblock.right,.imageblock[style*="float: right"]{margin:.25em 0 1.25em .625em}
+.imageblock>.title{margin-bottom:0}
+.imageblock.thumb,.imageblock.th{border-width:6px}
+.imageblock.thumb>.title,.imageblock.th>.title{padding:0 .125em}
+.image.left,.image.right{margin-top:.25em;margin-bottom:.25em;display:inline-block;line-height:0}
+.image.left{margin-right:.625em}
+.image.right{margin-left:.625em}
+a.image{text-decoration:none;display:inline-block}
+a.image object{pointer-events:none}
+sup.footnote,sup.footnoteref{font-size:.875em;position:static;vertical-align:super}
+sup.footnote a,sup.footnoteref a{text-decoration:none}
+sup.footnote a:active,sup.footnoteref a:active{text-decoration:underline}
+#footnotes{padding-top:.75em;padding-bottom:.75em;margin-bottom:.625em}
+#footnotes hr{width:20%;min-width:6.25em;margin:-.25em 0 .75em 0;border-width:1px 0 0 0}
+#footnotes .footnote{padding:0 .375em 0 .225em;line-height:1.3334;font-size:.875em;margin-left:1.2em;text-indent:-1.05em;margin-bottom:.2em}
+#footnotes .footnote a:first-of-type{font-weight:bold;text-decoration:none}
+#footnotes .footnote:last-of-type{margin-bottom:0}
+#content #footnotes{margin-top:-.625em;margin-bottom:0;padding:.75em 0}
+.gist .file-data>table{border:0;background:#fff;width:100%;margin-bottom:0}
+.gist .file-data>table td.line-data{width:99%}
+div.unbreakable{page-break-inside:avoid}
+.big{font-size:larger}
+.small{font-size:smaller}
+.underline{text-decoration:underline}
+.overline{text-decoration:overline}
+.line-through{text-decoration:line-through}
+.aqua{color:#00bfbf}
+.aqua-background{background-color:#00fafa}
+.black{color:#000}
+.black-background{background-color:#000}
+.blue{color:#0000bf}
+.blue-background{background-color:#0000fa}
+.fuchsia{color:#bf00bf}
+.fuchsia-background{background-color:#fa00fa}
+.gray{color:#606060}
+.gray-background{background-color:#7d7d7d}
+.green{color:#006000}
+.green-background{background-color:#007d00}
+.lime{color:#00bf00}
+.lime-background{background-color:#00fa00}
+.maroon{color:#600000}
+.maroon-background{background-color:#7d0000}
+.navy{color:#000060}
+.navy-background{background-color:#00007d}
+.olive{color:#606000}
+.olive-background{background-color:#7d7d00}
+.purple{color:#600060}
+.purple-background{background-color:#7d007d}
+.red{color:#bf0000}
+.red-background{background-color:#fa0000}
+.silver{color:#909090}
+.silver-background{background-color:#bcbcbc}
+.teal{color:#006060}
+.teal-background{background-color:#007d7d}
+.white{color:#bfbfbf}
+.white-background{background-color:#fafafa}
+.yellow{color:#bfbf00}
+.yellow-background{background-color:#fafa00}
+span.icon>.fa{cursor:default}
+.admonitionblock td.icon [class^="fa icon-"]{font-size:2.5em;text-shadow:1px 1px 2px rgba(0,0,0,.5);cursor:default}
+.admonitionblock td.icon .icon-note:before{content:"\f05a";color:#19407c}
+.admonitionblock td.icon .icon-tip:before{content:"\f0eb";text-shadow:1px 1px 2px rgba(155,155,0,.8);color:#111}
+.admonitionblock td.icon .icon-warning:before{content:"\f071";color:#bf6900}
+.admonitionblock td.icon .icon-caution:before{content:"\f06d";color:#bf3400}
+.admonitionblock td.icon .icon-important:before{content:"\f06a";color:#bf0000}
+.conum[data-value]{display:inline-block;color:#fff!important;background-color:rgba(0,0,0,.8);-webkit-border-radius:100px;border-radius:100px;text-align:center;font-size:.75em;width:1.67em;height:1.67em;line-height:1.67em;font-family:"Open Sans","DejaVu Sans",sans-serif;font-style:normal;font-weight:bold}
+.conum[data-value] *{color:#fff!important}
+.conum[data-value]+b{display:none}
+.conum[data-value]:after{content:attr(data-value)}
+pre .conum[data-value]{position:relative;top:-.125em}
+b.conum *{color:inherit!important}
+.conum:not([data-value]):empty{display:none}
+dt,th.tableblock,td.content,div.footnote{text-rendering:optimizeLegibility}
+h1,h2,p,td.content,span.alt{letter-spacing:-.01em}
+p strong,td.content strong,div.footnote strong{letter-spacing:-.005em}
+p,blockquote,dt,td.content,span.alt{font-size:1.0625rem}
+p{margin-bottom:1.25rem}
+.sidebarblock p,.sidebarblock dt,.sidebarblock td.content,p.tableblock{font-size:1em}
+.exampleblock>.content{background-color:#fffef7;border-color:#e0e0dc;-webkit-box-shadow:0 1px 4px #e0e0dc;box-shadow:0 1px 4px #e0e0dc}
+.print-only{display:none!important}
+@media print{@page{margin:1.25cm .75cm}
+*{-webkit-box-shadow:none!important;box-shadow:none!important;text-shadow:none!important}
+a{color:inherit!important;text-decoration:underline!important}
+a.bare,a[href^="#"],a[href^="mailto:"]{text-decoration:none!important}
+a[href^="http:"]:not(.bare):after,a[href^="https:"]:not(.bare):after{content:"(" attr(href) ")";display:inline-block;font-size:.875em;padding-left:.25em}
+abbr[title]:after{content:" (" attr(title) ")"}
+pre,blockquote,tr,img,object,svg{page-break-inside:avoid}
+thead{display:table-header-group}
+svg{max-width:100%}
+p,blockquote,dt,td.content{font-size:1em;orphans:3;widows:3}
+h2,h3,#toctitle,.sidebarblock>.content>.title{page-break-after:avoid}
+#toc,.sidebarblock,.exampleblock>.content{background:none!important}
+#toc{border-bottom:1px solid #ddddd8!important;padding-bottom:0!important}
+.sect1{padding-bottom:0!important}
+.sect1+.sect1{border:0!important}
+#header>h1:first-child{margin-top:1.25rem}
+body.book #header{text-align:center}
+body.book #header>h1:first-child{border:0!important;margin:2.5em 0 1em 0}
+body.book #header .details{border:0!important;display:block;padding:0!important}
+body.book #header .details span:first-child{margin-left:0!important}
+body.book #header .details br{display:block}
+body.book #header .details br+span:before{content:none!important}
+body.book #toc{border:0!important;text-align:left!important;padding:0!important;margin:0!important}
+body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-break-before:always}
+.listingblock code[data-lang]:before{display:block}
+#footer{background:none!important;padding:0 .9375em}
+#footer-text{color:rgba(0,0,0,.6)!important;font-size:.9em}
+.hide-on-print{display:none!important}
+.print-only{display:block!important}
+.hide-for-print{display:none!important}
+.show-for-print{display:inherit!important}}
+</style>
+</head>
+<body class="article">
+<div id="header">
+<h1>DZX-Forth Glossary</h1>
+<div class="details">
+<span id="author" class="author">Marcos Cruz (programandala.net)</span><br>
+<span id="revdate">2015-02-01</span>
+</div>
+</div>
+<div id="content">
+<div id="preamble">
+<div class="sectionbody">
+<div id="toc" class="toc">
+<div id="toctitle" class="title">Table of Contents</div>
+<ul class="sectlevel1">
+<li><a href="#_stack_notation">1. Stack notation</a></li>
+<li><a href="#_attributes">2. Attributes</a></li>
+<li><a href="#_disk_file_interface">3. Disk File Interface</a></li>
+<li><a href="#_screen_files">4. Screen Files</a></li>
+<li><a href="#_tools">5. Tools</a></li>
+<li><a href="#_dos_interface">6. DOS Interface</a></li>
+<li><a href="#_input_output">7. Input/Output</a></li>
+<li><a href="#_arithmetic_and_stack">8. Arithmetic and Stack</a></li>
+<li><a href="#_conversion">9. Conversion</a></li>
+<li><a href="#_strings_and_memory">10. Strings and Memory</a></li>
+<li><a href="#_dictionary">11. Dictionary</a></li>
+<li><a href="#_facility">12. Facility</a></li>
+<li><a href="#_miscellaneous">13. Miscellaneous</a></li>
+<li><a href="#_floating_point">14. Floating Point</a></li>
+<li><a href="#_compiler_security">15. Compiler Security</a></li>
+<li><a href="#_control_flow_stack">16. Control Flow Stack</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_stack_notation">1. Stack notation</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all spread">
+<caption class="title">Table 1. Numbers</caption>
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 25%;">
+<col style="width: 25%;">
+<col style="width: 25%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Number</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Cells</th>
+<th class="tableblock halign-left valign-top">Range</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">a</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">address</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">aa</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">aligned address</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ca</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">character-aligned address</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">fa</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">float-aligned address</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">pa</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">CPU port address</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..255</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">true</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">boolean true -1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">-1</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">false</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">boolean false 0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">flag</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">boolean true or false</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">-1 or 0</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ior</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">input/output result</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..255</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">n</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">signed number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">-32768..32767</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">+n</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">positive number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..32767</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">u</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">unsigned number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">len</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">unsigned number, a zone length</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">x</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">unspecified number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">-32768..65535</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">d</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">signed double number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">-2147483648..2147483647</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">+d</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">positive double number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..2147483647</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ud</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">unsigned double number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..4294697295</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">xd</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">unspecified double number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">-2147483648..4294697295</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">r</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">real number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">+-5E-39..1E38</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">c</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">character or byte</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0..255</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+As DZX-Forth does not executes on an architecture requiring
+address alignment, all address types may be used interchangeably.
+</td>
+</tr>
+</table>
+</div>
+<div class="dlist">
+<div class="title">Input stream</div>
+<dl>
+<dt class="hdlist1">ccc </dt>
+<dd>
+<p>any arbitrary blank-delimited character string or word name
+parsed from the input stream</p>
+</dd>
+<dt class="hdlist1">"ccc"</dt>
+<dd>
+<p>same as for ccc; typically shown within a stack comment but
+represents characters parsed from the input stream.</p>
+</dd>
+</dl>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_attributes">2. Attributes</h2>
+<div class="sectionbody">
+<div class="hdlist">
+<table>
+<tr>
+<td class="hdlist1">
+I       
+</td>
+<td class="hdlist2">
+<p>Words that are immediate</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+SS      
+</td>
+<td class="hdlist2">
+<p>Words that are state-smart</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+79      
+</td>
+<td class="hdlist2">
+<p>Words defined in the Forth-79 Standard</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+83      
+</td>
+<td class="hdlist2">
+<p>Words defined in the Forth-83 Standard</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+94      
+</td>
+<td class="hdlist2">
+<p>Words defined in the Forth-94 Standard (also known as ANS Forth or ISO Forth)</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+Gforth  
+</td>
+<td class="hdlist2">
+<p>Words defined in Gforth</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+FIG     
+</td>
+<td class="hdlist2">
+<p>Words defined in the fig-Forth model</p>
+</td>
+</tr>
+<tr>
+<td class="hdlist1">
+ZX      
+</td>
+<td class="hdlist2">
+<p>Words specific to the ZX Spectrum</p>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_disk_file_interface">3. Disk File Interface</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Note: When a file function returns a non-zero ior then an error has
+occurred.  Refer to DXFORTH.TXT for a list of ior values and their
+corresponding DOS error.</p>
+</div>
+<div class="paragraph">
+<p><code>#FCB  (&#8201;&#8212;&#8201;u )</code></p>
+</div>
+<div class="paragraph">
+<p>A VALUE indicating the maximum number of file handles available.
+The default is 10.  #FCB represents the maximum number of files
+that may be open at any one.  If more (or less) handles are
+required the number may be changed as follows e.g.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>20 TO #FCB  COLD</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The above would change the maximum number of handles to 20.</p>
+</div>
+<div class="paragraph">
+<p><code>+EXT  ( ca1 len1 ca2 len2&#8201;&#8212;&#8201;ca3 len3 )</code></p>
+</div>
+<div class="paragraph">
+<p>Conditionally append the file extension ca2 len2 to the filename
+string ca1 len1 to produce ca3 len3.  If ca1 len1 does not
+already contain an extension (the '.' character is not present)
+then trailing blanks are removed and ca2 len2 is appended.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p>See: &gt;FNAME</p>
+</div>
+<div class="paragraph">
+<p><code>-EXT  ( ca len1&#8201;&#8212;&#8201;ca len2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Delete any extension from the filename string ca len1.  The
+resulting string is ca len2.</p>
+</div>
+<div class="paragraph">
+<p><code>-PATH  ( ca len1&#8201;&#8212;&#8201;ca len2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Delete any path from the filename string ca len1.  The resulting
+string is ca len2.</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;DRIVE  ( n1&#8201;&#8212;&#8201;n2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert logical drive number (0=default, 1=A, 2=B, etc) to absolute
+drive number (0=A, 1=B, 2=C, etc).</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;FCB  ( ca1 len1&#8201;&#8212;&#8201;ca2 len2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Parse the filename string ca1 len1 into a temporary 36-byte file
+control block.  A maximum of two such FCB&#8217;s can exist in the buffer
+at one time.  a2 is the address of the FCB and u2 is the parsed
+user number.</p>
+</div>
+<div class="paragraph">
+<p>Note: The temporary file control block resides in a transient
+region and may be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p>DZX-Forth functions that use &gt;FCB include: DELETE-FILE RENAME-FILE</p>
+</div>
+<div class="paragraph">
+<p>See: &gt;FNAME SETFCB</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;FNAME  ( ca1 u&#8201;&#8212;&#8201;ca2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the string ca1 u to a 0xFF-terminated counted string
+ca2 in the filename buffer.  A maximum of two filenames can
+exist in the buffer at one time.  ca2 returns the counted
+string, whereas ca2 + 1 returns the zero-terminated string.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;IOR  ( n&#8201;&#8212;&#8201;ior )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert a +3DOS error code n to a DZX-Forth I/O result code by
+replacing the high-byte of n with $FE.  If n was zero then no error
+is assumed and ior is zero.</p>
+</div>
+<div class="paragraph">
+<p><code>BIN  ( fam1&#8201;&#8212;&#8201;fam2 )</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Modify the file access method fam1 to additionally select a binary
+- i.e. not line oriented - file access method, giving access method
+fam2.  BIN has no effect under +3DOS.</p>
+</div>
+<div class="paragraph">
+<p><code>CLOSE-FILE  ( fid&#8201;&#8212;&#8201;ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>If open, close the disk file associated with the current file-
+handle.  If the file could not be closed, ior is non-zero.</p>
+</div>
+<div class="paragraph">
+<p><code>CREATE-FILE  ( ca len fam&#8201;&#8212;&#8201;fid ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Create and open a disk file specified by the filename ca len
+using file access method fam.  Valid fam are R/W (read/write)
+R/O (read-only) and W/O (write-only).</p>
+</div>
+<div class="paragraph">
+<p>If a file with the same name already exists it will be erased.
+The file-pointer is set to the start of the file.  If the file
+could not be created, ior is non-zero.</p>
+</div>
+<div class="paragraph">
+<p><code>DELETE-FILE  ( ca len&#8201;&#8212;&#8201;ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Delete the disk file specified by the string ca len.  If the
+file could not be deleted, ior is non-zero.</p>
+</div>
+<div class="paragraph">
+<p>Note: DELETE-FILE must not be performed on an open file.</p>
+</div>
+<div class="paragraph">
+<p><code>FILE-POSITION  ( fid&#8201;&#8212;&#8201;ud ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return the current position the file-pointer of the disk file
+associated with the handle fid.  If an error occurs ior is
+non-zero and ud is undefined.</p>
+</div>
+<div class="paragraph">
+<p><code>FILE-SIZE  ( fid&#8201;&#8212;&#8201;ud ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return the current size in bytes of the disk file associated
+with handle fid.  For CP/M this number will be a multiple of
+128.  If an error occurs ior is non-zero and ud is undefined.</p>
+</div>
+<div class="paragraph">
+<p><code>GET-USER  (&#8201;&#8212;&#8201;u )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the current CP/M disk user number.</p>
+</div>
+<div class="paragraph">
+<p><code>OPEN-FILE  ( ca len fam&#8201;&#8212;&#8201;fid ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Open the existing disk file specified by the filename ca len
+using file access method fam.  Valid fam are R/W (read/write)
+R/O (read-only) and W/O (write-only).  If the file could not be
+opened, ior is non-zero.</p>
+</div>
+<div class="paragraph">
+<p><code>PATH  ( u1&#8201;&#8212;&#8201;ca len2 ior )</code></p>
+</div>
+<div class="paragraph">
+<p>Get the full directory path for disk drive u1.  If an error occurs,
+ior is non-zero.  The returned string ca len2 includes the drive
+letter, current user number and trailing colon.  For the currently
+selected drive u1 = 0, otherwise u1 = 1 for drive A, 2 for drive B
+etc.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p><code>READ-FILE  ( ca len1 fid&#8201;&#8212;&#8201;u2 ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Read u1 bytes from the disk file associated with the current file-
+handle into memory starting at ca.  If ior is zero, u2 is the
+number of bytes received.  If end of file is reached before any
+bytes are read u2 is zero.</p>
+</div>
+<div class="paragraph">
+<p><code>READ-LINE  ( ca len1 fid&#8201;&#8212;&#8201;u2 flag ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Read a line of text from the disk file associated with file-handle
+fid into memory starting at address ca.  At most u1 characters
+are read.  If ior is zero and flag is true, u2 is the number
+characters received not including the line terminator.  If u2 = u1
+then a line terminator was not yet received.  If an end-of-text
+character (1A hex) is read or the end of the file is reached
+before any other character is read then flag is false.  The line
+terminator may be CRLF (CP/M) or LF (UNIX).</p>
+</div>
+<div class="paragraph">
+<p><code>REPOSITION-FILE  ( ud fid&#8201;&#8212;&#8201;ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Reposition the file-pointer of the disk file associated with the
+file-handle fid to position ud.  If the file is positioned outside
+the file boundaries or an error occured, ior is non-zero.  If
+ud = 0 the file-pointer is positioned at the start of the file.</p>
+</div>
+<div class="paragraph">
+<p><code>RENAME-FILE  ( ca1 len1 ca2 len2&#8201;&#8212;&#8201;ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Rename the disk file specified by ca1 len1 to the new name
+ca2 len2.  If the file cannot be found or the new name already
+exists then ior is non-zero.  Any drive/user prefix attached to
+the new name is ignored and is assumed to be the same as the old
+name.</p>
+</div>
+<div class="paragraph">
+<p>Note: RENAME-FILE must not be performed on an open file.</p>
+</div>
+<div class="paragraph">
+<p><code>RESTORE-USER  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Restore the disk user number previously saved by SET-USER.</p>
+</div>
+<div class="paragraph">
+<p>See: SET-USER</p>
+</div>
+<div class="paragraph">
+<p><code>SET-FCB  ( ca1 len1 a2&#8201;&#8212;&#8201;u2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Parse the filename string specified by ca1 len1 in the form</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>[d:]filename[.typ]</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>into the File Control Block at addr2.  Leading spaces are skipped.
+The filename may optionally contain a drive letter (A..P).
+If a drive/user
+is not specified, the current drive/user will be assumed.  The
+following characters are treated as delimiters:</p>
+</div>
+<div class="paragraph">
+<p>space tab . , : ; &lt; = &gt; _ control-characters</p>
+</div>
+<div class="paragraph">
+<p>Note: Only the first 33 bytes of the File Control Block at a2
+are initialized.  The parsed user number is not acted upon but
+returned as u2.</p>
+</div>
+<div class="paragraph">
+<p><code>SET-USER  ( u&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Set the current CP/M disk user number to u (0-15 for CP/M, 0-31
+for Z-System).  The previous user number is saved.</p>
+</div>
+<div class="paragraph">
+<p>See: RESTORE-USER</p>
+</div>
+<div class="paragraph">
+<p><code>WRITE-FILE  ( ca len fid&#8201;&#8212;&#8201;ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Write u bytes from memory starting at ca to the disk file
+associated with the current file-handle.  If the disk was full
+or an error occured, ior is non-zero.</p>
+</div>
+<div class="paragraph">
+<p><code>WRITE-LINE  ( ca len fid&#8201;&#8212;&#8201;ior )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Write a line of text ca len followed by the CP/M line terminator
+(CRLF) to the disk file associated with file-handle fid.  If the
+disk was full or an error occured, ior is non-zero.</p>
+</div>
+<div class="paragraph">
+<p><code>PARSE-FILENAME  ( "filename"&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Parse a filename string from the input stream returning ca len.
+An exception occurs if the string is empty.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_screen_files">4. Screen Files</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In DZX-Forth several screenfiles (default is 6) may be open at any one
+time.  The most recently opened file is termed the "current" file.  All
+screen/block words operate on the current file.</p>
+</div>
+<div class="paragraph">
+<p>Screen/block numbers are valid only in the range 0 to 8191.  Only one
+block buffer is allocated in memory, thus BLOCK and BUFFER always return
+the same physical address.</p>
+</div>
+<div class="paragraph">
+<p>DZX-Forth also supports text source files.  See the section 'Tools' for
+details.</p>
+</div>
+<div class="paragraph">
+<p><code>#SCREENS  (&#8201;&#8212;&#8201;+n )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the number of screens (blocks) in the current screenfile.</p>
+</div>
+<div class="paragraph">
+<p><code>?BLOCK  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>If the contents of BLK is non-zero reload the current block.</p>
+</div>
+<div class="paragraph">
+<p><code>B/BUF  (&#8201;&#8212;&#8201;u )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A VALUE returning the number of bytes per block buffer.  Default
+is 1024.</p>
+</div>
+<div class="paragraph">
+<p>Note: Must be a multiple of 128 and a maximum of 1280.</p>
+</div>
+<div class="paragraph">
+<p><code>C/L  (&#8201;&#8212;&#8201;u )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A VALUE returning the number of characters per line in a screen
+block.  Default is 64.</p>
+</div>
+<div class="paragraph">
+<p><code>CLOSE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Flush and close the current screenfile.  No errors are reported
+with this function.</p>
+</div>
+<div class="paragraph">
+<p><code>CLOSE-ALL  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Perform CLOSE on all open source files beginning with the current
+screenfile.  Any open text files are also closed with this
+function.</p>
+</div>
+<div class="paragraph">
+<p><code>FILE?  (&#8201;&#8212;&#8201;flag )</code></p>
+</div>
+<div class="paragraph">
+<p>Return true if the current screenfile is open otherwise return
+false.</p>
+</div>
+<div class="paragraph">
+<p><code>RESIZE-BLOCK-FILE  ( +n&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Resize the current screenfile to +n blocks.  If n is less than the
+current size, the screenfile is truncated otherwise the file is
+extended and the new blocks are filled with blanks.</p>
+</div>
+<div class="paragraph">
+<p><code>LOAD-FILE  ( +n "filename[.FB]"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Save the current screenfile specification then open the specified
+file and load block +n.  At completion of the load, close the file
+and restore the previous file.  If the filename does not include
+an extension then .FB is assumed.  Screenfiles may be nested.</p>
+</div>
+<div class="paragraph">
+<p>Note: Read-only files cannot be opened with this function.</p>
+</div>
+<div class="paragraph">
+<p><code>LOADED  ( +n1 +n2 ca len&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Save the current screenfile specification then open the file
+specified by ca len and load blocks +n1 thru +n2.  At completion
+close the file and restore the previous.  If the filename does not
+include an extension then .FB is assumed.  Screenfiles may be
+nested.</p>
+</div>
+<div class="paragraph">
+<p>Note: Read-only files cannot be opened with this function.</p>
+</div>
+<div class="paragraph">
+<p><code>CURRENT-BLOCK-FILE  (&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Return a string containing the name of the current sourcefile.
+If no sourcefile is open or the input source is the console,
+ca len is ambiguous.</p>
+</div>
+<div class="paragraph">
+<p>See: FILE?</p>
+</div>
+<div class="paragraph">
+<p><code>LOADLINE  (&#8201;&#8212;&#8201;u )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the current line number of the text file being INCLUDEd.
+Starting line number is 1.</p>
+</div>
+<div class="paragraph">
+<p><code>OPEN-BLOCK-FILE  ( ca len fam&#8201;&#8212;&#8201;ior )</code></p>
+</div>
+<div class="paragraph">
+<p>Open the specified disk file according to file access method fam
+as the current screenfile.  If an error occurs, ior is non-zero.
+If the filename does not include an extension then .FB is
+assumed.</p>
+</div>
+<div class="paragraph">
+<p>Note: The programmer is responsible for closing or maintaining the
+previous current screenfile.</p>
+</div>
+<div class="paragraph">
+<p>See: SWAP-FILE CLOSE CLOSE-ALL</p>
+</div>
+<div class="paragraph">
+<p><code>SWAP-FILE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Switch the current and 'swap' screenfiles.  SCR is preserved
+across swaps.</p>
+</div>
+<div class="paragraph">
+<p>Note: SWAP-FILE causes the current block buffer to be unassigned.
+The contents of the buffer, however, are not affected.</p>
+</div>
+<div class="paragraph">
+<p>See: FYI</p>
+</div>
+<div class="paragraph">
+<p><code>USING  ( "filename[.FB]"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Close the current screenfile.  Open or conditionally create the
+specified disk file for read/write as the current screenfile.  If
+the filename does not include an extension then .FB is assumed.
+If the file cannot be opened/created then ABORT is performed.
+SCR is set to 0.</p>
+</div>
+<div class="paragraph">
+<p>Note: Read-only files cannot be opened with this function.
+The programmer is responsible for closing or maintaining the
+previous current screenfile.</p>
+</div>
+<div class="paragraph">
+<p>See: SWAP-FILE CLOSE CLOSE-ALL</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_tools">5. Tools</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Note: These words are available only after the file TOOLS.FB has been
+loaded.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>`(*  ( "ccc" -- )`  I</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Begin a block comment.  Parse and discard text delimited by the
+token *) .  If the parse area is exhausted before the delimiter
+is found refill the input buffer and resume the process.</p>
+</div>
+<div class="paragraph">
+<p>An ambiguous condition exists if the delimiter is not found and
+the parse area cannot be refilled.</p>
+</div>
+<div class="paragraph">
+<p>Note: (* is primarily intended for text files.  May be relocated
+to the kernel if/when it gains greater popularity.</p>
+</div>
+<div class="paragraph">
+<p><code>-TOOLS  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A MARKER word used for deleting the tools utilities with FORGET.</p>
+</div>
+<div class="paragraph">
+<p>Note: MARKER differs from the Forth-94 specification.</p>
+</div>
+<div class="paragraph">
+<p><code>.S  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display the values on the data and floating-point stacks.</p>
+</div>
+<div class="paragraph">
+<p><code>?  ( aa&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display the single-cell value stored at aa.  Display as signed
+number if base is decimal or unsigned otherwise.</p>
+</div>
+<div class="paragraph">
+<p><code>B  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Decrement variable SCR and list the screen.</p>
+</div>
+<div class="paragraph">
+<p>See: L N</p>
+</div>
+<div class="paragraph">
+<p><code>DELETE  ( "filename"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Erase the specified file from disk.  DELETE must not be performed
+on an open file.</p>
+</div>
+<div class="paragraph">
+<p><code>DIR  ( "filename"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>List the current disk directory.  Filename if specified may
+include path and wildcards.</p>
+</div>
+<div class="paragraph">
+<p><code>DUMP  ( a u&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Dump u bytes of memory starting at the address addr.</p>
+</div>
+<div class="paragraph">
+<p><code>EDIT  ( | scr&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Performs the same function as EDIT in the screenfile editor.  If
+the editor is not resident then EDITOR.FB is first loaded.  If
+scr is not given then editing begins at the position where the
+last error occured.</p>
+</div>
+<div class="paragraph">
+<p><code>FYI  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>"For Your Information".  Display information about the current
+Forth environment including dictionary size, vocabularies, logged
+drive and open screenfiles.</p>
+</div>
+<div class="paragraph">
+<p><code>ICLOSE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Close the current text file.</p>
+</div>
+<div class="paragraph">
+<p>INCLUDEd text files are automatically closed after loading.  If
+an error occurs or loading is interrupted (e.g. QUIT was executed),
+nested text files may remain open preventing external editing or
+cause difficulty loading ("too many files" error message).  Should
+this occur use ICLOSE or CLOSE-ALL to restore proper operation.</p>
+</div>
+<div class="paragraph">
+<p>Note: Performing ICLOSE without a preceding INCLUDE or INCLUDED
+may result in the current screenfile being closed without
+flushing.</p>
+</div>
+<div class="paragraph">
+<p>See: INCLUDE INCLUDED CLOSE-ALL</p>
+</div>
+<div class="paragraph">
+<p><code>INCLUDE  ( "filename[.FS]"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Compile the ascii text source file specified by the filename.
+If a filename extension is not included then .FS is assumed.
+Text files may be nested.</p>
+</div>
+<div class="paragraph">
+<p>Note: Uses the default DTA buffer at address $80.</p>
+</div>
+<div class="paragraph">
+<p>See: ICLOSE</p>
+</div>
+<div class="paragraph">
+<p><code>INCLUDED  ( ca len&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Compile the ascii text source file specified by the filename
+given by ca len.  Text files may be nested.</p>
+</div>
+<div class="paragraph">
+<p>Note: Uses the default DTA buffer at address $80.</p>
+</div>
+<div class="paragraph">
+<p>See: ICLOSE</p>
+</div>
+<div class="paragraph">
+<p><code>INDEX  ( +n1 +n2&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>List line 0 of screens +n1 thru +n2 from the screenfile.  Line 0
+typically contains a comment indicating the contents of the screen.</p>
+</div>
+<div class="paragraph">
+<p>See: QX</p>
+</div>
+<div class="paragraph">
+<p><code>L  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>List the screen specified by variable SCR.</p>
+</div>
+<div class="paragraph">
+<p>See: N B</p>
+</div>
+<div class="paragraph">
+<p><code>N  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Increment variable SCR and list the screen.</p>
+</div>
+<div class="paragraph">
+<p>See: L B</p>
+</div>
+<div class="paragraph">
+<p><code>QX  ( +n&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Quick index.  Starting with screen +n, list line 0 of 60 sequential
+screens from the screenfile.  Line 0 typically contains a comment
+indicating the contents of the screen.</p>
+</div>
+<div class="paragraph">
+<p>See: INDEX</p>
+</div>
+<div class="paragraph">
+<p><code>RENAME  ( "oldfile" "newfile"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Rename the specified disk file with a new name.  RENAME must not
+be performed on an open file.</p>
+</div>
+<div class="paragraph">
+<p><code>SHOW  ( +n1 +n2&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>List screens +n1 through +n2 from the screenfile to the printer,
+formatted 3 screens to the page.  A form-feed character (0C hex) is
+output at the end of each page.</p>
+</div>
+<div class="paragraph">
+<p><code>VOCS  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>List all vocabularies beginning with the most recent.</p>
+</div>
+<div class="paragraph">
+<p><code>WORDS  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Lists the names of Forth words in the first search wordlist
+beginning with the most recent.  Immediate words are preceded with
+a '#' character and system words with a '|' character.  fig-Forth
+equivalent is VLIST.</p>
+</div>
+<div class="paragraph">
+<p><code>WORDS-LIKE  ( "pattern"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>As for WORDS but takes a blank delimited string from the input
+stream.  Only word names that include the specified string are
+listed.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_dos_interface">6. DOS Interface</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>CMDTAIL  (&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the string representing the command tail entered at the DOS
+prompt when the program was first initiated.  Leading and trailing
+blanks are stripped.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p><code>BDOS  ( DE u&#8201;&#8212;&#8201;A )</code></p>
+</div>
+<div class="paragraph">
+<p>Perform CP/M BDOS call number u.  DE is the value passed to the
+DE register.  Return the contents of the A register.</p>
+</div>
+<div class="paragraph">
+<p>See: FDOS</p>
+</div>
+<div class="paragraph">
+<p><code>BIOS  ( BC u&#8201;&#8212;&#8201;A )</code></p>
+</div>
+<div class="paragraph">
+<p>Perform CP/M BIOS call number u.  BC is the value passed to the
+BC register.  Return the contents of the A register.</p>
+</div>
+<div class="paragraph">
+<p>Note: CP/M 3 compatible.</p>
+</div>
+<div class="paragraph">
+<p><code>BIOSHL  ( DE BC u&#8201;&#8212;&#8201;HL )</code></p>
+</div>
+<div class="paragraph">
+<p>Perform CP/M BIOS call number u.  DE and BC are the values passed
+to the DE and BC registers respectively.  Return the contents of
+the HL register.</p>
+</div>
+<div class="paragraph">
+<p>Note: CP/M 3 compatible.</p>
+</div>
+<div class="paragraph">
+<p><code>DOSVER  (&#8201;&#8212;&#8201;H L )</code></p>
+</div>
+<div class="paragraph">
+<p>Return DOS version number.  H = 00h for CP/M, L = BDOS version
+number in hexadecimal.</p>
+</div>
+<div class="paragraph">
+<p><code>FDOS  ( DE u&#8201;&#8212;&#8201;HL A )</code></p>
+</div>
+<div class="paragraph">
+<p>Perform CP/M BDOS call number u.  DE is the value passed to the
+DE register.  Return the contents of the HL and A registers.</p>
+</div>
+<div class="paragraph">
+<p>See: BDOS</p>
+</div>
+<div class="paragraph">
+<p><code>PC@  ( pa&#8201;&#8212;&#8201;u )</code></p>
+</div>
+<div class="paragraph">
+<p>Perform the 8080 IN instruction on port address pa and return
+the value u.  The upper 8 bits of u is set to zero.  Fig-Forth
+equivalent is P@.</p>
+</div>
+<div class="paragraph">
+<p><code>PC!  ( u pa&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Perform the 8080 OUT instruction sending the lower 8 bits of u to
+port address p-addr.  Fig-Forth equivalent is P!</p>
+</div>
+<div class="paragraph">
+<p><code>ZENV  (&#8201;&#8212;&#8201;a | false )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the Z-System external Environment Descriptor address.
+If Z-System is not present return false.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_input_output">7. Input/Output</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>(D.)  ( d&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the signed double number d to a string ca len.
+Primitive for D.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p><code>.  ( x&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Remove single number x from the stack.  If BASE is decimal display
+x as a signed number, or unsigned otherwise.</p>
+</div>
+<div class="paragraph">
+<p><code>CONSOLE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Redirect EMIT to the console screen.</p>
+</div>
+<div class="paragraph">
+<p><code>KEY  (&#8201;&#8212;&#8201;char )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Receive the next character from the console.</p>
+</div>
+<div class="paragraph">
+<p><code>KEY?  (&#8201;&#8212;&#8201;flag )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return true if a console key has been pressed.  KEY is subsequently
+used to retrieve the character.  fig-Forth equivalent is ?TERMINAL.</p>
+</div>
+<div class="paragraph">
+<p><code>PRINTER  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Redirect EMIT to the printer.</p>
+</div>
+<div class="paragraph">
+<p><code>OUT  (&#8201;&#8212;&#8201;aa )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A USER variable that contains the number of characters output by
+EMIT or TYPE since the last CR.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_arithmetic_and_stack">8. Arithmetic and Stack</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>-ROLL  ( xu &#8230;&#8203; x1 x0 u&#8201;&#8212;&#8201;x0 xu &#8230;&#8203; x1 )</code></p>
+</div>
+<div class="paragraph">
+<p>Remove u.  Rotate xu &#8230;&#8203; x1 to the top of the stack pushing x0 to
+the position vacated by xu.  The reverse of ROLL.</p>
+</div>
+<div class="paragraph">
+<p><code>-ROT  ( x1 x2 x3&#8201;&#8212;&#8201;x3 x1 x2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Rotate the top stack item to the third position.  The reverse of
+ROT.</p>
+</div>
+<div class="paragraph">
+<p><code>2+  ( x1&#8201;&#8212;&#8201;x2 )</code>  FIG 83</p>
+</div>
+<div class="paragraph">
+<p>Add two (2) to n1|u1 giving the sum n2|u2.</p>
+</div>
+<div class="paragraph">
+<p><code>2-  ( x1&#8201;&#8212;&#8201;x2 )</code>  83</p>
+</div>
+<div class="paragraph">
+<p>Subtract two (2) to n1|u1 giving the sum n2|u2.</p>
+</div>
+<div class="paragraph">
+<p><code>2NIP  ( x1 x2 x3 x4&#8201;&#8212;&#8201;x3 x4 )</code></p>
+</div>
+<div class="paragraph">
+<p>Drop cell pair x1 x2 from the stack leaving x3 x4.</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;&lt;  ( x1&#8201;&#8212;&#8201;x2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Swap the high order byte (bits 8-15) with the low order byte
+(bits 0-7) of x1.</p>
+</div>
+<div class="paragraph">
+<p><code>FM/MOD  ( d n1&#8201;&#8212;&#8201;n2 n3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Divide double number d by single n1, giving the floored quotient
+n3 and the remainder n2.</p>
+</div>
+<div class="paragraph">
+<p><code>LOHI  ( x&#8201;&#8212;&#8201;lo hi )</code></p>
+</div>
+<div class="paragraph">
+<p>Split a 16-bit number.  Lo is the low byte of x.  Hi is the high
+byte of x.</p>
+</div>
+<div class="paragraph">
+<p><code>LO|HI  ( lo hi&#8201;&#8212;&#8201;x )</code></p>
+</div>
+<div class="paragraph">
+<p>Form a 16-bit number.  Lo is the low byte of x.  Hi is the high
+byte of x.</p>
+</div>
+<div class="paragraph">
+<p><code>LSHIFT  ( x1 u&#8201;&#8212;&#8201;x2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Perform a logical left shift of u bit-places on x1 giving x2.
+Put zero into the least significant bits vacated by the shift.</p>
+</div>
+<div class="paragraph">
+<p><code>M*  ( n1 n2&#8201;&#8212;&#8201;d )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Multiply n1 by n2 giving the double result d.</p>
+</div>
+<div class="paragraph">
+<p><code>M*/  ( d1 n1 +n2&#8201;&#8212;&#8201;d2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Multiply double number d1 by single n1 producing the triple
+length intermediate result t.  Divide t by +n2 giving the
+double quotient d2.</p>
+</div>
+<div class="paragraph">
+<p><code>M+  ( d1 n&#8201;&#8212;&#8201;d2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Add single length number n to double d1, giving the sum d2.</p>
+</div>
+<div class="paragraph">
+<p><code>NIP  ( x1 x2&#8201;&#8212;&#8201;x2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Drop the first item below the top of stack.</p>
+</div>
+<div class="paragraph">
+<p><code>NOT  ( x&#8201;&#8212;&#8201;flag )</code>   79</p>
+</div>
+<div class="paragraph">
+<p>Reverse the boolean value of x.  Functionally equivalent to: 0= .</p>
+</div>
+<div class="paragraph">
+<p>Note: Do not confuse this function with FORTH-83 NOT which behaved
+as INVERT.</p>
+</div>
+<div class="paragraph">
+<p><code>RSHIFT  ( x1 u&#8201;&#8212;&#8201;x2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Perform a logical right shift of u bit-places on x1 giving x2.
+Put zero into the most significant bits vacated by the shift.</p>
+</div>
+<div class="paragraph">
+<p><code>SM/REM  ( d n1&#8201;&#8212;&#8201;n2 n3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Divide d by n1, giving the single-cell remainder n2 and the single-
+cell symmetric quotient n3.  An ambiguous condition exists if n1 is
+zero.</p>
+</div>
+<div class="paragraph">
+<p><code>TUCK  ( x1 x2&#8201;&#8212;&#8201;x2 x1 x2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Copy the first (top) stack item below the second stack item.</p>
+</div>
+<div class="paragraph">
+<p><code>U2/  ( x1&#8201;&#8212;&#8201;x2 )</code></p>
+</div>
+<div class="paragraph">
+<p>x2 is the result of shifting x1 one bit toward the least-significant
+bit, leaving the most-significant bit zero.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>1 RSHIFT</code></p>
+</div>
+<div class="paragraph">
+<p><code>UMAX  ( u1 u2&#8201;&#8212;&#8201;u1 | u2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the greater of two unsigned numbers.</p>
+</div>
+<div class="paragraph">
+<p><code>UMIN  ( u1 u2&#8201;&#8212;&#8201;u1 | u2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the lesser of two unsigned numbers.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_conversion">9. Conversion</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>DPL  (&#8201;&#8212;&#8201;aa )</code>  83</p>
+</div>
+<div class="paragraph">
+<p>A USER variable containing the number of places to the right of
+the decimal point following number input conversion.</p>
+</div>
+<div class="paragraph">
+<p>In DZX-Forth DPL is incremented for each character successfully
+converted by &gt;NUMBER.  Applications may use this feature to create
+custom number conversion routines.</p>
+</div>
+<div class="paragraph">
+<p>See: NUMBER?</p>
+</div>
+<div class="paragraph">
+<p><code>NUMBER?  ( ca len&#8201;&#8212;&#8201;d true | false )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the case-insensitive string ca len to a double number
+according to the current base.  If successful, return double
+number d and a true flag.  A leading '-' character signifies a
+negative number.  If a punctuation character '.' occurs at the
+end of the string then DPL is 0 otherwise it is -1.  If conversion
+is unsuccessful or the string was empty or contained blanks then a
+false flag is returned and DPL is meaningless.</p>
+</div>
+<div class="paragraph">
+<p>See: DPL</p>
+</div>
+<div class="paragraph">
+<p><code>TOUPPER  ( c1&#8201;&#8212;&#8201;c2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the character c1 to its uppercase equivalent c2.</p>
+</div>
+<div class="paragraph">
+<p><code>TOLOWER  ( c1&#8201;&#8212;&#8201;c2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the character c1 to its uppercase equivalent c2.</p>
+</div>
+<div class="paragraph">
+<p><code>UPPER  ( ca len&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the character string ca len to uppercase.</p>
+</div>
+<div class="paragraph">
+<p><code>LOWER  ( ca len&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the character string ca len to uppercase.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_strings_and_memory">10. Strings and Memory</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>+STRING  ( ca1 len1 ca2 len2&#8201;&#8212;&#8201;ca2 len3 )</code></p>
+</div>
+<div class="paragraph">
+<p>Append the string ca1 len1 to the end of string ca2 len2
+returning the resulting string ca2 len3.  It is the programmer&#8217;s
+responsibility to ensure sufficient room is available at ca2
+to hold both strings.</p>
+</div>
+<div class="paragraph">
+<p><code>,"  ( "ccc&lt;"&gt;"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Parse the character string delimited by '"' and compile as a
+counted string at HERE.  The delimiter character may be included
+in the string by entering it twice.</p>
+</div>
+<div class="paragraph">
+<p>See: PARSE$</p>
+</div>
+<div class="paragraph">
+<p><code>/STRING  ( ca1 len1 n&#8201;&#8212;&#8201;ca2 len2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Truncate the string ca1 len1 by n characters.  The resulting
+string ca2 len2 begins at ca1+n and has a length u1-n.
+n may be negative.</p>
+</div>
+<div class="paragraph">
+<p><code>CAPS  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Causes the next occurrence of COMPARE or SEARCH to be performed as
+if all characters in the source and destination strings were
+uppercase.  Used in the form:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>( ca1 len1 ca2 len2 ) CAPS COMPARE
+( ca1 len1 ca2 len2 ) CAPS SEARCH</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Note: The effect of CAPS is temporary.  It is automatically reset
+by COMPARE SEARCH COLD, or when an error occurs and QUIT is
+executed.</p>
+</div>
+<div class="paragraph">
+<p><code>CELL-  ( aa1&#8201;&#8212;&#8201;aa2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Subtract the size in address units of a cell to aa1, giving
+aa2.</p>
+</div>
+<div class="paragraph">
+<p><code>COMPARE  ( ca1 len1 ca2 len2&#8201;&#8212;&#8201;-1 | 0 | 1 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Compare string ca1 len1 with string ca2 len2.  Return 0 if
+match, -1 if ca1 len1 is less than ca2 len2 or 1 if greater.</p>
+</div>
+<div class="paragraph">
+<p>See: CAPS</p>
+</div>
+<div class="paragraph">
+<p><code>CTOGGLE  ( x ca&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Exclusive-or the byte stored at ca with x.</p>
+</div>
+<div class="paragraph">
+<p><code>MOVE  ( aa1 aa2 u&#8201;&#8212;&#8201;)</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Move u bytes from aa1 to aa2 without overlap.</p>
+</div>
+<div class="paragraph">
+<p><code>OFF  ( aa&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Clear all bits of the cell at aa.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>0 aa !</code></p>
+</div>
+<div class="paragraph">
+<p><code>ON  ( aa&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Set all bits of the cell at aa.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>TRUE aa !</code></p>
+</div>
+<div class="paragraph">
+<p><code>PACKED  ( ca1 u ca2&#8201;&#8212;&#8201;ca2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Store the string ca1 u as a counted string at ca2 leaving
+the destination address on the stack.  The source and destination
+strings are permitted to overlap.  An ambiguous condition exists
+if u is greater than 255 or the buffer at ca2 is less than u+1
+characters.</p>
+</div>
+<div class="paragraph">
+<p>See: PLACE</p>
+</div>
+<div class="paragraph">
+<p><code>PAD  (&#8201;&#8212;&#8201;ca )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the address of a transient region that can be used to hold
+data for intermediate processing.  PAD is at least 84 characters.</p>
+</div>
+<div class="paragraph">
+<p><code>PARSE$  ( c "ccc&lt;c&gt;"&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Parse ccc delimited by c and store the string (255 characters
+maximum) in a temporary buffer.  The delimiter character may be
+included in the string by entering it twice.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p>PARSE$ is used by S" .( and ," .  PARSE$ and WORD share the same
+buffer by default.  Simultaneous use is permitted provided the
+combined length of the strings does not exceed 255+31 chars.  As
+the buffer returned by WORD builds downwards, its length is limited
+to that of the returned string plus the count and trailing space
+characters.</p>
+</div>
+<div class="paragraph">
+<p><code>PLACE  ( ca1 u ca2&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Store the string ca1 u as a counted string at ca2.  The
+source and destination strings are permitted to overlap.  An
+ambiguous condition exists if u is greater than 255 or the buffer
+at ca2 is less than u+1 characters.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>PACKED DROP</code></p>
+</div>
+<div class="paragraph">
+<p>See: PACKED</p>
+</div>
+<div class="paragraph">
+<p><code>S"  ( compilation: "ccc&lt;"&gt;"&#8201;&#8212;&#8201;) ( run-time:&#8201;&#8212;&#8201;ca len )</code>  I SS 94</p>
+</div>
+<div class="paragraph">
+<p>Parse a string (255 characters maximum) from the input stream
+delimited by '"' and compile into the current definition.  The
+delimiter character may be included in the string by entering it
+twice.  At runtime, leave the string address and count on the
+stack.</p>
+</div>
+<div class="paragraph">
+<p>When interpreting, the string is placed in a transient region
+which may be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p>See: PARSE$</p>
+</div>
+<div class="paragraph">
+<p><code>S,  ( ca +n&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Compile string ca +n (255 characters maximum) as a counted
+string at HERE.</p>
+</div>
+<div class="paragraph">
+<p>Named STRING, $, in some Forth implementations.</p>
+</div>
+<div class="paragraph">
+<p><code>S.R  ( ca len n&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display string ca len right-aligned in a field n characters
+wide.  If the number of characters required to display the string
+is greater than n, all characters are displayed with no leading
+spaces in a field as wide as necessary.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>OVER - SPACES TYPE</code></p>
+</div>
+<div class="paragraph">
+<p><code>SCAN  ( ca1 len1 c&#8201;&#8212;&#8201;ca2 len2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Scan the string ca1 len1 for the character c.  Leave match
+address ca2 and length remaining len2.  If no match occurred
+then len2 is zero and ca2 is ca1 + len1.</p>
+</div>
+<div class="paragraph">
+<p><code>SEARCH  ( ca1 len1 ca2 len2&#8201;&#8212;&#8201;ca3 len3 -1 | ca1 len1 0 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Search string ca1 len1 for the occurence of string ca2
+u2.  If found, return -1 and the match address ca3 with
+u3 characters remaining.</p>
+</div>
+<div class="paragraph">
+<p>See: CAPS</p>
+</div>
+<div class="paragraph">
+<p><code>SKIP  ( ca1 len1 char&#8201;&#8212;&#8201;ca2 len2 )</code></p>
+</div>
+<div class="paragraph">
+<p>Skip leading occurences of the character c in the string ca1 len1.
+Leave the address of the first non-matching character ca2 and length
+remaining len2.  If no characters were skipped leave ca1 len1.</p>
+</div>
+<div class="paragraph">
+<p><code>SLITERAL  ( compilation: ca1 len&#8201;&#8212;&#8201;) ( run-time:&#8201;&#8212;&#8201;ca2 len )</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Compile the string ca1 len (255 characters maximum) into the
+dictionary.  When later executed ca2 len is left on the stack.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_dictionary">11. Dictionary</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>NAME&gt;STRING  ( nfa&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the string ca len representing the name of the Forth word
+whose name field address is nfa.</p>
+</div>
+<div class="paragraph">
+<p>Note: The returned string resides in a transient region which may
+be overwritten by subsequent operations.</p>
+</div>
+<div class="paragraph">
+<p><code>-?  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Suppress redefinition and system compilation warnings for the next
+definition only.</p>
+</div>
+<div class="paragraph">
+<p>See: WARNING</p>
+</div>
+<div class="paragraph">
+<p><code>.ID  ( nfa&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display the name of the Forth word whose name field address is
+nfa.  If the word is nameless (nfa is zero) then "[noname]" is
+displayed.  fig-FORTH equivalent is ID.</p>
+</div>
+<div class="paragraph">
+<p><code>.NAME  ( xt&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display the name of the Forth word whose execution token address
+is xt.  If the word is nameless or xt invalid then "[noname]" is
+displayed.  If the word is an alias then the primary name is
+displayed.</p>
+</div>
+<div class="paragraph">
+<p><code>.VOC  ( wid&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display the name associated with wordlist wid.  Wordlists may be
+nameless in which case "[noname]" will be displayed.</p>
+</div>
+<div class="paragraph">
+<p>See: VOCABULARY W&gt;NAME</p>
+</div>
+<div class="paragraph">
+<p><code>APPLICATION  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Place subsequent definitions into the Application dictionary.  The
+application dictionary holds words that may be executed by turnkey
+programs.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>FALSE SYS !</code></p>
+</div>
+<div class="paragraph">
+<p>Note: APPLICATION is the default mode on boot-up or COLD.</p>
+</div>
+<div class="paragraph">
+<p>See: SYS SYSTEM</p>
+</div>
+<div class="paragraph">
+<p><code>BEHEAD  ( "name1" "name2"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Search the first wordlist in the search order and make invisible
+the words between name1 and name2 inclusively.  Beheaded words
+will not be found in a wordlist search or displayed by WORDS.  The
+behaviour of beheaded words is not affected.  An error message is
+issued if the names reside in protected dictionary.</p>
+</div>
+<div class="paragraph">
+<p>See: CHECKING</p>
+</div>
+<div class="paragraph">
+<p><code>CHAIN  ( "name"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Append vocabulary "name" to the base of the CURRENT wordlist.  An
+error message is issued if "name" is not a vocabulary, is the same
+as, is already chained, or was created later than, the CURRENT
+vocabulary.</p>
+</div>
+<div class="paragraph">
+<p><code>CONTEXT  (&#8201;&#8212;&#8201;aa )</code>  83</p>
+</div>
+<div class="paragraph">
+<p>A variable which determines the dictionary search order.  CONTEXT @
+returns the wid of the first wordlist in the current search order.</p>
+</div>
+<div class="paragraph">
+<p><code>DP  (&#8201;&#8212;&#8201;aa )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A double USER variable containing pointers to the next free
+address in the application and system dictionaries.  e.g.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>DP @   ( -- appDP )
+DP 2@  ( -- sysDP appDP )</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>EMPTY  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Delete all definitions created since the last execution of COLD
+or FREEZE.  Wordlist is set to FORTH.</p>
+</div>
+<div class="paragraph">
+<p><code>FORGET  ( "name"&#8201;&#8212;&#8201;)</code>  FIG 83</p>
+</div>
+<div class="paragraph">
+<p>If word "name" is found in the compilation wordlist, delete it
+and all words added to the dictionary after "name" was defined,
+regardless of their wordlist.  An error message is issued if
+"name" is an alias or the word is located in the protected
+dictionary.</p>
+</div>
+<div class="paragraph">
+<p>See: CHECKING</p>
+</div>
+<div class="paragraph">
+<p><code>FREEZE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Protect the current state of the dictionary.  Existing definitions
+will no longer be able to be erased.</p>
+</div>
+<div class="paragraph">
+<p>See: CHECKING</p>
+</div>
+<div class="paragraph">
+<p><code>LIMIT  (&#8201;&#8212;&#8201;a )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A CONSTANT that returns the upper limit address of the application
+dictionary and the start of the System dictionary.</p>
+</div>
+<div class="paragraph">
+<p>LIMIT for TURNKEY applications will be the upper memory limit
+currently used by the Forth compiler (usually BDOS base) unless set
+to a user-specified value with SET-LIMIT.</p>
+</div>
+<div class="paragraph">
+<p>See: SET-LIMIT</p>
+</div>
+<div class="paragraph">
+<p><code>LINK,  ( aa&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Add a node to linked list aa.  The node is created at HERE
+and consists initially of one cell containing the address of the
+previous node.</p>
+</div>
+<div class="paragraph">
+<p>Equivalent to: <code>HERE OVER @ , SWAP !</code></p>
+</div>
+<div class="paragraph">
+<p><code>MARKER  ( "name"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>A defining word used in the form:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>MARKER name</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Typically used to mark the beginning of an application which may
+later be removed by executing FORGET name.  "name" is placed in
+the System dictionary.</p>
+</div>
+<div class="paragraph">
+<p>Note: MARKER differs from the Forth-94 specification.</p>
+</div>
+<div class="paragraph">
+<p><code>N&gt;NAME  ( nfa1&#8201;&#8212;&#8201;nfa2 | 0 )</code></p>
+</div>
+<div class="paragraph">
+<p>Given the name field address of a word, return the nfa of the
+previous word in the wordlist.  If the end of the wordlist is
+reached then 0 is returned.</p>
+</div>
+<div class="paragraph">
+<p><code>VOC-LINK  (&#8201;&#8212;&#8201;aa )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A USER variable containing a pointer to the most recently defined
+wordlist.</p>
+</div>
+<div class="paragraph">
+<p><code>VOCABULARY  ( "name"&#8201;&#8212;&#8201;)</code>  83</p>
+</div>
+<div class="paragraph">
+<p>Create a new empty wordlist.  When "name" is later executed replace
+the first wordlist in the search order with the wordlist associated
+with "name".  a "name" @ returns the wordlist identifier wid.</p>
+</div>
+<div class="paragraph">
+<p><code>W&gt;NAME  ( wid&#8201;&#8212;&#8201;nfa | 0 )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the name field address of the most recently defined word in
+wordlist wid.  If the wordlist is empty then zero is returned.</p>
+</div>
+<div class="paragraph">
+<p><code>WARNING  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A VARIABLE that controls warning messages.  When set to zero, word
+redefinition and System compilation warnings are disabled.  Users
+may set WARNING to TRUE or FALSE (e.g. using ON or OFF ) - other
+values must not be used.</p>
+</div>
+<div class="paragraph">
+<p>See: -?</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_facility">12. Facility</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>AT-XY  ( x y&#8201;&#8212;&#8201;)</code>   94</p>
+</div>
+<div class="paragraph">
+<p>Move the cursor to the specified coordinates relative to the
+current text window.</p>
+</div>
+<div class="paragraph">
+<p><code>BEEP  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Generate a bell sound.</p>
+</div>
+<div class="paragraph">
+<p><code>CLEAR-LINE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Delete all characters from the current cursor position to the end
+of the line.  The cursor position remains unchanged.</p>
+</div>
+<div class="paragraph">
+<p><code>DELETE-LINE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Delete the line at the current cursor position.  All subsequent
+lines are moved up one position.  An empty line appears at the
+bottom of the screen.</p>
+</div>
+<div class="paragraph">
+<p><code>INSERT-LINE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Insert an empty line at the current cursor position.  All
+subsequent lines in the text window are moved down one position.
+The bottom line is lost.</p>
+</div>
+<div class="paragraph">
+<p><code>MS  ( u&#8201;&#8212;&#8201;)</code>   94</p>
+</div>
+<div class="paragraph">
+<p>Delay u milliseconds.</p>
+</div>
+<div class="paragraph">
+<p>Note: The accuracy of this function is determined by the 16-bit
+value at memory location 292 ($0124).  The default value is 4
+which assumes a 4MHz Z80 CPU.  Change the value by manually
+patching the memory location, or using INSTALL.COM.  With the
+correct value installed the following should produce a 10 second
+delay:  BEEP 10000 MS BEEP</p>
+</div>
+<div class="paragraph">
+<p><code>NORMAL  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Set the default colors. The screen is not cleared.</p>
+</div>
+<div class="paragraph">
+<p><code>PAGE  (&#8201;&#8212;&#8201;)</code>   94</p>
+</div>
+<div class="paragraph">
+<p>For the console, clear the text screen window and place the cursor
+at the upper left; otherwise output a formfeed character (0C hex).
+In DZX-Forth, PAGE is equivalent to: <code>12 EMIT</code>.</p>
+</div>
+<div class="paragraph">
+<p>See CONSOLE PRINTER.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_miscellaneous">13. Miscellaneous</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>'NEXT  (&#8201;&#8212;&#8201;a )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the address of the centralized NEXT routine - the Forth
+"address interpreter".</p>
+</div>
+<div class="paragraph">
+<p><code>'SOURCE  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A double variable containing the current parameters for SOURCE.
+'SOURCE 2@ is the equivalent of SOURCE.</p>
+</div>
+<div class="paragraph">
+<p><code>(EXIT)  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Run-time prodecure compiled by EXIT.  Exit the current colon
+definition and return control to the calling definition.</p>
+</div>
+<div class="paragraph">
+<p><code>-&#8594;  (&#8201;&#8212;&#8201;)</code>  I FIG 83</p>
+</div>
+<div class="paragraph">
+<p>Continue interpretation on the next sequential block.  May be
+used within a colon definition that crosses a block boundary.</p>
+</div>
+<div class="paragraph">
+<p><code>@?EXECUTE  ( i*x aa&#8201;&#8212;&#8201;i*y )</code></p>
+</div>
+<div class="paragraph">
+<p>Execute xt located at address aa.  If xt is zero then no
+action is performed.  Other stack effects are due to the word
+executed.</p>
+</div>
+<div class="paragraph">
+<p>See: @EXECUTE</p>
+</div>
+<div class="paragraph">
+<p><code>@EXECUTE  ( i*x aa&#8201;&#8212;&#8201;i*y )</code></p>
+</div>
+<div class="paragraph">
+<p>Execute xt located at address aa.  Other stack effects are due to the
+word executed.</p>
+</div>
+<div class="paragraph">
+<p>Named PERFORM in some Forth implementations.</p>
+</div>
+<div class="paragraph">
+<p>See: @?EXECUTE</p>
+</div>
+<div class="paragraph">
+<p><code>ADDR  ( "name"&#8201;&#8212;&#8201;aa )</code>  I SS</p>
+</div>
+<div class="paragraph">
+<p>"address of".  Return the data field address of the word "name".</p>
+</div>
+<div class="paragraph">
+<p>An ambiguous condition exists if "name" was not created by VALUE
+DEFER CREATE VARIABLE 2VARIABLE CONSTANT 2CONSTANT VOCABULARY and
+other functions as may be specified.</p>
+</div>
+<div class="paragraph">
+<p>Named &amp;OF or &amp; in some Forth implementations.</p>
+</div>
+<div class="paragraph">
+<p><code>SYNONYM  ( "oldname" "newname"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>"Also Known As".  Create an alias name "newname" for existing word
+"oldname".  If oldname was immediate then newname will be
+immediate.</p>
+</div>
+<div class="paragraph">
+<p>Note: In DZX-Forth aliases consume only header space, and the xt of
+an alias is the same as the xt of the original word.  The function
+appears in other Forth implementations albeit with different names
+and usage e.g. SYNONYM ALIAS .</p>
+</div>
+<div class="paragraph">
+<p><code>BETWEEN  ( n1|u1 n2|u2 n3|u3&#8201;&#8212;&#8201;flag )</code></p>
+</div>
+<div class="paragraph">
+<p>Perform a comparison of a test value n1|u1 with a lower limit
+n2|u2 and an upper limit n3|u3, returning true if either (n2|u2
+&#8656; n3|u3 and (n2|u2 &#8656; n1|u1 and n1|u1 &#8656; n3|u3)) or (n2|u2 &gt;
+n3|u3 and (n2|u2 &lt; n1|u1 or n1|u1 &lt; n3|u3)) is true, returning
+false otherwise.  An ambiguous condition exists if n1|u1, n2|u2,
+and n3|u3 are not all the same type.</p>
+</div>
+<div class="paragraph">
+<p>This is similar to WITHIN with the exception that the limits are
+inclusive.</p>
+</div>
+<div class="paragraph">
+<p><code>BUILD  ( xt "name"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Skip leading space delimiters.  Parse name delimited by a space.
+Create a definition for name with the execution semantics specified
+by xt.  If the data-space pointer is not aligned, reserve enough
+data space to align it.  The new data-space pointer defines name&#8217;s
+data field.  BUILD does not allocate data space in name&#8217;s data
+field.  When name is executed name&#8217;s data field address is placed
+on the data stack and execution proceeds according to the semantics
+given by xt.</p>
+</div>
+<div class="paragraph">
+<p>BUILD provides an alternative to CREATE &#8230;&#8203; DOES&gt; .  Typical use:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>SYSTEM
+: CONSTANT  ['] @  BUILD , ;
+APPLICATION</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>BUILD may be used outside a definition e.g.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>\ adapted from a posting by "Bee" on comp.lang.forth.</pre>
+</div>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>:NONAME ( aa -- )
+  BASE @ &gt;R C@ BASE ! U. R&gt; BASE ! ; ( xt)</pre>
+</div>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>( xt) DUP BUILD B. ( u -- )  2 C,
+      DUP BUILD O. ( u -- )  8 C,
+          BUILD H. ( u -- ) 16 C,</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><code>BYE  (&#8201;&#8212;&#8201;)</code>  FIG 94</p>
+</div>
+<div class="paragraph">
+<p>Perform CLOSE-ALL and EXIT-VIDEO then exit to the operation system
+with 0 RETURN.</p>
+</div>
+<div class="paragraph">
+<p><code>CASE  (&#8201;&#8212;&#8201;)</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Mark the start of a CASE construct.  Used in the form:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>CASE  x1
+  x2  OF ... ENDOF
+  x3  OF ... ENDOF
+  ( x1)
+ENDCASE</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In DZX-Forth CASE is a synonym for COND .</p>
+</div>
+<div class="paragraph">
+<p><code>CATCHER  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A USER variable containing the last exception handler.  If the
+contents is zero no more exception frames (installed by CATCH)
+are present.</p>
+</div>
+<div class="paragraph">
+<p><code>CHAR  (&#8201;&#8212;&#8201;c )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Parse the next word in the input stream and return the ASCII
+value of the first character.</p>
+</div>
+<div class="paragraph">
+<p><code>COLD  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Cold restart the Forth environment or turnkey application.</p>
+</div>
+<div class="paragraph">
+<p><code>COMPILE  (&#8201;&#8212;&#8201;)</code>  83</p>
+</div>
+<div class="paragraph">
+<p>COMPILE is obsolete and should not be used directly in
+applications.  COMPILE is a factor of POSTPONE and is present in
+the dictionary as a named word for error handling purposes.</p>
+</div>
+<div class="paragraph">
+<p><code>COND  ( C:&#8201;&#8212;&#8201;mark )</code>  I</p>
+</div>
+<div class="paragraph">
+<p>Mark the start of a COND construct.  Used in the form:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>COND  x1
+  x2  OF ... ELSE
+  x3  OF ... ELSE
+  ( x1)
+THENS</pre>
+</div>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>COND  x1
+  x2 EQUAL  x3 x4 RANGE  WHEN ... ELSE
+  ( x1)</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>See: THENS &lt;misers_case.fs&gt;</p>
+</div>
+<div class="paragraph">
+<p><code>DEFER  ( "name"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Creates a deferred word whose action word may be subsequently
+altered using the sequence: ' ccc IS name</p>
+</div>
+<div class="paragraph">
+<p>Deferred words are used to create forward references that will be
+resolved later.  A run-time error occurs if an attempt is made to
+execute an uninitiated deferred word.</p>
+</div>
+<div class="paragraph">
+<p>Note: The current action of a deferred word may be obtained
+using</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>' &gt;BODY @  ( "name" -- xt )  or
+a @     ( "name" -- xt )</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>See: IS</p>
+</div>
+<div class="paragraph">
+<p><code>DZX-FORTH  (&#8201;&#8212;&#8201;minor major )</code></p>
+</div>
+<div class="paragraph">
+<p>Return the DZX-Forth version number.</p>
+</div>
+<div class="paragraph">
+<p><code>ENDCASE  ( x&#8201;&#8212;&#8201;)</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Mark the end of a CASE construct.  Discard x.</p>
+</div>
+<div class="paragraph">
+<p>See CASE OF ENDOF THENS.</p>
+</div>
+<div class="paragraph">
+<p><code>ENDOF  (&#8201;&#8212;&#8201;)</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Mark the end of an OF ENDOF pair.  In DZX-Forth ENDOF is a synonym
+for ELSE .</p>
+</div>
+<div class="paragraph">
+<p>See CASE OF ENDCASE.</p>
+</div>
+<div class="paragraph">
+<p><code>EVALUATE  ( ca len&#8201;&#8212;&#8201;)</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Save the current input source specification.  Make the string
+described by ca len both the input source and input buffer,
+set &gt;IN to zero, and interpret.  When the parse area is empty,
+restore the prior input source specification.</p>
+</div>
+<div class="paragraph">
+<p><code>FDB  (&#8201;&#8212;&#8201;a )</code></p>
+</div>
+<div class="paragraph">
+<p>Get the address of the next free file descriptor block.  If no more
+free descriptors exist the function aborts with a "too many files"
+error message.</p>
+</div>
+<div class="paragraph">
+<p><code>INTERPRET  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Successively interpret Forth text from the input stream until
+exhausted, compiling or executing depending upon STATE.  If an
+exception occurs the process aborts with an error message.</p>
+</div>
+<div class="paragraph">
+<p><code>IS  ( xt "name"&#8201;&#8212;&#8201;)</code>  I</p>
+</div>
+<div class="paragraph">
+<p>Used in the form:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>' ccc IS name</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>where "name" is a deferred word and ccc defines the new behaviour.</p>
+</div>
+<div class="paragraph">
+<p>See: DEFER</p>
+</div>
+<div class="paragraph">
+<p><code>NHOLD  ( n char&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Perform HOLD n times.  An ambiguous condition exists if n &lt; 0.</p>
+</div>
+<div class="paragraph">
+<p><code>NOOP  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>No operation.  Typically used to set a null action e.g.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>' NOOP IS X</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>where X is a DEFERed word.</p>
+</div>
+<div class="paragraph">
+<p><code>OF  ( x1 x2&#8201;&#8212;&#8201;)</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>If x1 = x2, discard both values and perform the sequence between OF
+and ENDOF/ELSE.  Execution then continues after ENDCASE/THENS .  If
+x1 &lt;&gt; x2, discard x2 and continue after the corresponding ENDOF/ELSE.</p>
+</div>
+<div class="paragraph">
+<p>See CASE ENDOF ENDCASE COND THENS.</p>
+</div>
+<div class="paragraph">
+<p><code>PARSE-NAME  ( "name"&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Parse a blank-delimited string from the input stream.  Equivalent
+to: BL WORD COUNT .</p>
+</div>
+<div class="paragraph">
+<p><code>PAUSE  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Provides support for multitasking applications.  When the
+multitasker is loaded and enabled, PAUSE passes control to the next
+task.  Refer to the multitasking documentation for further details.</p>
+</div>
+<div class="paragraph">
+<p>Note: PAUSE is automatically executed by KEY? KEY EMIT .</p>
+</div>
+<div class="paragraph">
+<p><code>R0  (&#8201;&#8212;&#8201;aa )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A USER variable that contains the address of the top of the return
+stack.</p>
+</div>
+<div class="paragraph">
+<p><code>RETURN  ( x&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Restore the initial drive path and video mode.  Return to DOS with
+exit code x.  Open files are not closed.</p>
+</div>
+<div class="paragraph">
+<p>See: BYE</p>
+</div>
+<div class="paragraph">
+<p><code>RP!  ( a&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Set the return stack pointer to addr.</p>
+</div>
+<div class="paragraph">
+<p><code>RP@  (&#8201;&#8212;&#8201;a )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Return the address of the current return stack pointer.</p>
+</div>
+<div class="paragraph">
+<p><code>S0  (&#8201;&#8212;&#8201;aa )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A USER variable that contains the address of the top of the
+data stack.</p>
+</div>
+<div class="paragraph">
+<p><code>SAVE-SYSTEM  ( "filename[.COM]"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Save the current Forth system image to disk including any new
+definitions created.</p>
+</div>
+<div class="paragraph">
+<p>See: TURNKEY TURNKEY-SYSTEM</p>
+</div>
+<div class="paragraph">
+<p><code>SHOLD  ( ca len&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Add string ca len to the beginning of the pictured numeric
+output string.</p>
+</div>
+<div class="paragraph">
+<p><code>SP!  ( a&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Set the data stack pointer to addr.</p>
+</div>
+<div class="paragraph">
+<p><code>SP@  (&#8201;&#8212;&#8201;a )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Return the address of the current data stack pointer.</p>
+</div>
+<div class="paragraph">
+<p><code>THENS  ( C: mark&#8201;&#8212;&#8201;)</code>  I</p>
+</div>
+<div class="paragraph">
+<p>Resolve a COND/CASE construct.</p>
+</div>
+<div class="paragraph">
+<p>Similar to ENDCASE but does not expect the case selector to be on
+the stack.  Named END-CASE in some Forth implementations.</p>
+</div>
+<div class="paragraph">
+<p>See: COND "Miser&#8217;s CASE"</p>
+</div>
+<div class="paragraph">
+<p><code>TURNKEY  ( "bootword" "filename[.EXE]"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Save a standalone application to disk using the specified filename.
+When the application is subsequently run, execution begins with
+bootword and ends with  0 RETURN  if successful, or  1 RETURN  if
+ABORT , ABORT" or an uncaught exception was encountered.</p>
+</div>
+<div class="paragraph">
+<p>Note: The System dictionary and word headers are not saved and are
+therefore unavailable to the application.</p>
+</div>
+<div class="paragraph">
+<p>See: SAVE-SYSTEM TURNKEY-SYSTEM</p>
+</div>
+<div class="paragraph">
+<p><code>TURNKEY-SYSTEM  ( "bootword" "filename[.EXE]"&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Save a standalone application including the System dictionary to
+disk using the specified filename.  When the application is
+subsequently run, execution begins with bootword and ends with
+0 RETURN  if successful, or  1 RETURN  if ABORT , ABORT" or an
+uncaught exception was encountered.</p>
+</div>
+<div class="paragraph">
+<p>TURNKEY-SYSTEM is provided for applications that require access
+to words in the System dictionary.</p>
+</div>
+<div class="paragraph">
+<p>See: SAVE-SYSTEM TURNKEY</p>
+</div>
+<div class="paragraph">
+<p><code>UNNEST  (&#8201;&#8212;&#8201;) ( R: nest-sys&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Discard the calling definition specified by nest-sys.  Before
+exiting the current definition, a program shall remove any
+parameters the calling definition had placed on the return stack.
+An ambiguous condition exists if the current or calling definition
+uses locals.</p>
+</div>
+<div class="paragraph">
+<p><code>UNUSED  (&#8201;&#8212;&#8201;u )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return the amount of space in bytes remaining in the region
+addressed by HERE.</p>
+</div>
+<div class="paragraph">
+<p>Note: The calculation includes a 255 byte safety margin.
+Applications should take into account the regions used by the
+pictured numeric string buffer and PAD.</p>
+</div>
+<div class="paragraph">
+<p><code>UDP  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A VARIABLE that contains the base address of the current USER
+area.</p>
+</div>
+<div class="paragraph">
+<p><code>USER  ( +n "name"&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A defining word used in the form:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>+n USER name</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>which creates a USER variable "name".  +n is the offset within
+the user area where the value for "name" is stored.  Executing
+"name" leaves the address of the variable in the user area.</p>
+</div>
+<div class="paragraph">
+<p>USER variables with offsets 44 decimal and higher are available
+for use by applications.</p>
+</div>
+<div class="paragraph">
+<p>Note: Offsets numbers are subject to change.  When an offset
+is required by an application, it should be determined at
+compile-time e.g.  <code>[ BASE UDP @ - ] LITERAL</code>  will return the
+offset for <code>BASE</code>.</p>
+</div>
+<div class="paragraph">
+<p><code>WITHIN  ( x1 x2 x3&#8201;&#8212;&#8201;flag )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return true if x3 lies within the range x1 to x2-1, otherwise
+return false.  x may be signed or unsigned.</p>
+</div>
+<div class="paragraph">
+<p><code>Y/N  (&#8201;&#8212;&#8201;flag )</code></p>
+</div>
+<div class="paragraph">
+<p>Display '(y/n) N' and wait for a single console key.  Return
+true if the 'Y' or 'y' key was pressed or false otherwise.</p>
+</div>
+<div class="paragraph">
+<p><code>[CHAR]  (&#8201;&#8212;&#8201;c )</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Parse the next word in the input stream and compile the ASCII
+value of the first character as a literal.</p>
+</div>
+<div class="paragraph">
+<p><code>[DEFINED]  ( "name"&#8201;&#8212;&#8201;flag )</code>  I</p>
+</div>
+<div class="paragraph">
+<p>Parse the next word in the input stream.  Return a true flag if
+word was defined in the dictionary.</p>
+</div>
+<div class="paragraph">
+<p><code>[IF]  [ELSE]  [THEN]</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>These are the equivalents of IF ELSE THEN but may be used outside
+a definition.</p>
+</div>
+<div class="paragraph">
+<p><code>[UNDEFINED]  ( "name"&#8201;&#8212;&#8201;flag )</code>  I</p>
+</div>
+<div class="paragraph">
+<p>Parse the next word in the input stream.  Return a true flag if
+word was not defined in the dictionary.</p>
+</div>
+<div class="paragraph">
+<p><code>\  (&#8201;&#8212;&#8201;)</code>  I 94</p>
+</div>
+<div class="paragraph">
+<p>Skip the rest of the line and resume interpretation at the
+beginning of the next line.</p>
+</div>
+<div class="paragraph">
+<p><code>\\  (&#8201;&#8212;&#8201;)</code>  I</p>
+</div>
+<div class="paragraph">
+<p>Parse and discard the remainder of the parse area.  If the source
+is a text file the remainder of the file is discarded.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_floating_point">14. Floating Point</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>By default DZX-Forth uses single precision software floating point.
+A real number occupies two cells (4 bytes) with a maximum precision
+of 7 digits and a dynamic range of 5E-39 to 1E38.</p>
+</div>
+<div class="paragraph">
+<p>The Forth interpreter recognizes a number as floating point if it is
+in decimal mode and contains an exponent identifier 'E' e.g.  1.0E
+3.141952E  1e-12</p>
+</div>
+<div class="paragraph">
+<p>DZX-Forth uses the data stack for floating point operations (aka common stack
+model).</p>
+</div>
+<div class="paragraph">
+<p>Notes:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>In the common stack model, variables FS0 and FSP are dummies.  Their
+contents are initialized as for S0 but are otherwise unused.</p>
+</li>
+<li>
+<p>Floating point display words and their primitives use the pictured
+numeric string buffer.</p>
+</li>
+<li>
+<p>Display words that specify the number of places after the decimal
+point may use the value -1 to force compact display mode.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p><code>(F.)  ( r n&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert real number r to string ca len in fixed-point notation
+with n places to the right of the decimal point.  Primitive used
+by F. F.R</p>
+</div>
+<div class="paragraph">
+<p><code>(FE.)  ( r n&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert real number r to string ca len in engineering notation
+with n places right of the decimal point.  Primitive used by FE.
+FE.R</p>
+</div>
+<div class="paragraph">
+<p><code>(FS.)  ( r n&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert real number r to string ca len in scientific notation
+with n places right of the decimal point.  Primitive used by FS.
+FS.R</p>
+</div>
+<div class="paragraph">
+<p><code>(G.)  ( r n&#8201;&#8212;&#8201;ca len )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert real number r to string ca len with n places right of the
+decimal point.  Fixed-point is used if the exponent is in the range
+-4 to 5 otherwise use scientific notation.  Primitive used by G.R
+G.</p>
+</div>
+<div class="paragraph">
+<p><code>-FP  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A MARKER word used to delete the floating-point with FORGET.</p>
+</div>
+<div class="paragraph">
+<p>Note: MARKER differs from the Forth-94 specification.</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;FLOAT  ( ca len&#8201;&#8212;&#8201;r true | false )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Convert the string ca len to a real number.  If successful,
+return the real number r and true or false otherwise.</p>
+</div>
+<div class="paragraph">
+<p>Note: A zero length string or a string with leading blanks will
+return the real number 0.0E and true.</p>
+</div>
+<div class="paragraph">
+<p><code>D&gt;F  ( d&#8201;&#8212;&#8201;r )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Convert the double number to its real number equivalent.</p>
+</div>
+<div class="paragraph">
+<p><code>F!  ( r fa&#8201;&#8212;&#8201; )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Store r at f-addr.</p>
+</div>
+<div class="paragraph">
+<p><code>F*  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Multiply r1 by r2, giving the product r3.</p>
+</div>
+<div class="paragraph">
+<p><code>F**  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Raise r1 to the power r2.</p>
+</div>
+<div class="paragraph">
+<p><code>F+  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Add r1 to r2, giving the sum r3.</p>
+</div>
+<div class="paragraph">
+<p><code>F,  ( r&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Reserve one floating-point cell of data space and store r in the
+cell.</p>
+</div>
+<div class="paragraph">
+<p><code>F-  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Subtract r2 from r1, giving the difference r3.</p>
+</div>
+<div class="paragraph">
+<p><code>F.  ( r&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display r in floating-point notation followed by a space.  Non-
+essential zeros and signs are removed.</p>
+</div>
+<div class="paragraph">
+<p><code>F.R  ( n u&#8201;&#8212;&#8201;) or ( r n u&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display r in fixed-point notation right-justified in a field width
+u with n places right of the decimal point.</p>
+</div>
+<div class="paragraph">
+<p><code>F/  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Divide r1 by r2, giving the quotient r3.</p>
+</div>
+<div class="paragraph">
+<p><code>F0&lt;  ( r&#8201;&#8212;&#8201;flag )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return true if r is less than zero, or false otherwise.</p>
+</div>
+<div class="paragraph">
+<p><code>F0=  ( r&#8201;&#8212;&#8201;flag )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return true if r is equal to zero, or false otherwise.</p>
+</div>
+<div class="paragraph">
+<p><code>F0&gt;  ( r&#8201;&#8212;&#8201;flag )</code></p>
+</div>
+<div class="paragraph">
+<p>Flag is true if r is greater than zero.</p>
+</div>
+<div class="paragraph">
+<p><code>F&lt;  ( r1 r2&#8201;&#8212;&#8201;flag )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return true if r1 is less than r2, or false otherwise.</p>
+</div>
+<div class="paragraph">
+<p><code>F&gt;  ( r1 r2&#8201;&#8212;&#8201;flag )</code></p>
+</div>
+<div class="paragraph">
+<p>Flag is true if r1 is greater than r2.</p>
+</div>
+<div class="paragraph">
+<p><code>F&gt;D  ( r&#8201;&#8212;&#8201;d )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Convert the integer part of r to its double number equivalent.</p>
+</div>
+<div class="paragraph">
+<p><code>F&gt;S  ( r&#8201;&#8212;&#8201;n )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the integer part of r to its single number equivalent.</p>
+</div>
+<div class="paragraph">
+<p><code>F@  ( fa&#8201;&#8212;&#8201;r )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return the value of the real number stored at f-addr.</p>
+</div>
+<div class="paragraph">
+<p><code>FABS  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return the absolute value of r1.</p>
+</div>
+<div class="paragraph">
+<p><code>FATAN  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r2 is the principal radian angle whose tangent is r1.</p>
+</div>
+<div class="paragraph">
+<p><code>FCONSTANT  ( r "name"&#8201;&#8212;&#8201;)</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Define a floating point constant having the value r.</p>
+</div>
+<div class="paragraph">
+<p><code>FCOS  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r2 is the cosine of the radian angle r1.</p>
+</div>
+<div class="paragraph">
+<p><code>FDP  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A VARIABLE that controls floating decimal point display.  If zero
+then trailing decimal points are not shown; if non-zero a decimal
+point is always shown.  Default is FDP ON.</p>
+</div>
+<div class="paragraph">
+<p><code>FDROP  ( r&#8201;&#8212;&#8201; )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Remove r from the stack.</p>
+</div>
+<div class="paragraph">
+<p><code>FDUP  ( r&#8201;&#8212;&#8201;r r )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Duplicate r.</p>
+</div>
+<div class="paragraph">
+<p><code>FE.  ( r&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display r in engineering notation followed by a space.  Non-
+essential zeros and signs are removed.</p>
+</div>
+<div class="paragraph">
+<p><code>FE.R  ( r n u&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display r in engineering notation right-justified in a field width
+u with n places to the right of the decimal point.</p>
+</div>
+<div class="paragraph">
+<p><code>FEXP  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Raise e to the power r1, giving r2.</p>
+</div>
+<div class="paragraph">
+<p><code>FLITERAL  ( compilation: r&#8201;&#8212;&#8201;) ( runtime:&#8201;&#8212;&#8201;r )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Compile r into the dictionary.  When later executed r is left on
+the stack.</p>
+</div>
+<div class="paragraph">
+<p><code>FLN  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r2 is the natural logarithm of r1.</p>
+</div>
+<div class="paragraph">
+<p><code>FLOOR  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Round r1 to an integral value using the "round toward negative
+infinity" rule, giving r2.</p>
+</div>
+<div class="paragraph">
+<p><code>FMAX  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r3 is the maximum of r1 and r2.</p>
+</div>
+<div class="paragraph">
+<p><code>FMIN  ( r1 r2&#8201;&#8212;&#8201;r3 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r3 is the minimum of r1 and r2.</p>
+</div>
+<div class="paragraph">
+<p><code>FNEGATE  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Negate r1, giving r2.</p>
+</div>
+<div class="paragraph">
+<p><code>FOVER  ( r1 r2&#8201;&#8212;&#8201;r1 r2 r1 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Place a copy of r1 on top of the stack.</p>
+</div>
+<div class="paragraph">
+<p><code>FPICK  ( ru &#8230;&#8203; r0 u&#8201;&#8212;&#8201;ru &#8230;&#8203; r0 ru )</code></p>
+</div>
+<div class="paragraph">
+<p>Remove u.  Copy ru to the top of the stack.</p>
+</div>
+<div class="paragraph">
+<p><code>FRANDOM  ( r1&#8201;&#8212;&#8201;r2 )</code></p>
+</div>
+<div class="paragraph">
+<p>If r1 is a positive non-zero number, return a psuedo-random number
+r2 uniformly distributed in the range 0.0E to (but not including)
+1.0E.  If r1 is zero, return the last random number generated.  If
+r1 is negative, r1 is used to re-seed the random number generator.</p>
+</div>
+<div class="paragraph">
+<p><code>FROT  ( r1 r2 r3&#8201;&#8212;&#8201;r2 r3 r1 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Rotate r1 to the top of the stack.</p>
+</div>
+<div class="paragraph">
+<p><code>FROUND  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Round r1 to an integral value using the "round to nearest" rule,
+giving r2.</p>
+</div>
+<div class="paragraph">
+<p><code>FS.  ( r&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display r in scientific notation followed by a space.  Non-
+essential zeros and signs are removed.</p>
+</div>
+<div class="paragraph">
+<p><code>FS.R  ( r n u&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display r in scientific notation right-justified in a field width
+u with n places to the right of the decimal point.</p>
+</div>
+<div class="paragraph">
+<p><code>FS0  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A USER variable that contains the address of the top of the
+separate floating point stack.</p>
+</div>
+<div class="paragraph">
+<p>Note: Has no function in the common stack floating point model</p>
+</div>
+<div class="paragraph">
+<p><code>FSIN  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r2 is the sine of the radian angle r1.</p>
+</div>
+<div class="paragraph">
+<p><code>FSP  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A VARIABLE that returns the address of the current separate
+floating point stack pointer.</p>
+</div>
+<div class="paragraph">
+<p>Note: Has no function in the common stack model</p>
+</div>
+<div class="paragraph">
+<p><code>FSQRT  ( r1&#8201;&#8212;&#8201;r2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>r2 is the square root of r1.</p>
+</div>
+<div class="paragraph">
+<p><code>FSWAP  ( r1 r2&#8201;&#8212;&#8201;r2 r1 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Exchange the top two floating point numbers.</p>
+</div>
+<div class="paragraph">
+<p><code>FVARIABLE  ( compilation:&#8201;&#8212;&#8201;) ( run-time:&#8201;&#8212;&#8201;fa )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Define a floating point variable.</p>
+</div>
+<div class="paragraph">
+<p><code>G.  ( r&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display real number r in floating point notation followed by a
+space.  If the exponent is outside the range -4 to 5 then
+scientific notation is used.  Non-essential zeros and signs are
+removed.</p>
+</div>
+<div class="paragraph">
+<p><code>G.R  ( r n u&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Display real number r followed by a space.  Floating-point is used
+if the exponent is in the range -4 to 5 otherwise use scientific
+notation.  Non-essential zeros and signs are removed.</p>
+</div>
+<div class="paragraph">
+<p><code>MAX-PRECISION  (&#8201;&#8212;&#8201;u )</code></p>
+</div>
+<div class="paragraph">
+<p>A CONSTANT returning the implementation-defined maximum PRECISION.</p>
+</div>
+<div class="paragraph">
+<p>See: SET-PRECISION</p>
+</div>
+<div class="paragraph">
+<p><code>PI  (&#8201;&#8212;&#8201;r )</code></p>
+</div>
+<div class="paragraph">
+<p>An FCONSTANT that returns the value for "pi" (3.141593..)</p>
+</div>
+<div class="paragraph">
+<p><code>PRECISION  (&#8201;&#8212;&#8201;u )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Return the number of significant digits currently used by F. F.R
+FS. FS.R</p>
+</div>
+<div class="paragraph">
+<p><code>REPRESENT  ( r ca n1&#8201;&#8212;&#8201;n2 flag1 flag2 )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>DZX-Forth uses an enhanced REPRESENT.  It follows the Forth-94
+definition with the following extensions:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>if n1 is zero the entire significand of r is rounded to one or
+zero following the system&#8217;s rounding rule; if n1 is negative
+then r is rounded to zero.</p>
+</li>
+<li>
+<p>the buffer size allocated at ca shall be the greater of n1
+or MAX-PRECISION.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>See:
+<a href="ftp://ftp.taygeta.com/pub/Forth/Applications/ANS/Represent_30.txt" class="bare">ftp://ftp.taygeta.com/pub/Forth/Applications/ANS/Represent_30.txt</a></p>
+</div>
+<div class="paragraph">
+<p><code>S&gt;F  ( n&#8201;&#8212;&#8201;r )</code></p>
+</div>
+<div class="paragraph">
+<p>Convert the single number to its real number equivalent.</p>
+</div>
+<div class="paragraph">
+<p><code>SET-PRECISION  ( u&#8201;&#8212;&#8201;)</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Set the number of significant digits currently used by F. F.R FS.
+FS.R.  In DZX-Forth, the number of significant digits is limited
+to MAX-PRECISION.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_compiler_security">15. Compiler Security</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><code>!CSP  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Save the current data stack position.</p>
+</div>
+<div class="paragraph">
+<p>See: ?CSP</p>
+</div>
+<div class="paragraph">
+<p><code>+BAL  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Increment the current control structure balance level.</p>
+</div>
+<div class="paragraph">
+<p><code>-BAL  (&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Decrement the current control structure balance level.</p>
+</div>
+<div class="paragraph">
+<p><code>?BAL  ( flag&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Issue an error message 'definition unbalanced' and abort if flag
+and CHECKING are not zero.</p>
+</div>
+<div class="paragraph">
+<p>See: CHECKING</p>
+</div>
+<div class="paragraph">
+<p><code>?CSP  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Issue an error message 'definition unbalanced' and abort if the
+current data stack position does not match the value saved by !CSP
+and CHECKING is not zero.</p>
+</div>
+<div class="paragraph">
+<p>See: CHECKING</p>
+</div>
+<div class="paragraph">
+<p><code>?COMP  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Issue an error message 'compilation only' and abort if not
+compiling.</p>
+</div>
+<div class="paragraph">
+<p><code>?EXEC  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Issue an error message 'execution only' and abort if not
+executing.</p>
+</div>
+<div class="paragraph">
+<p><code>?STACK  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Issue an error message and abort if a stack underflow or overflow
+occurs.  Data, return and floating point stack (if present) are
+tested.</p>
+</div>
+<div class="paragraph">
+<p>Note: A non-System version of ?STACK is provided in MISC.FB for
+turnkey applications requiring run-time stack checking.</p>
+</div>
+<div class="paragraph">
+<p><code>CHECKING  (&#8201;&#8212;&#8201;aa )</code></p>
+</div>
+<div class="paragraph">
+<p>A VARIABLE that controls compiler security — including control
+structure balance, data stack level and protected dictionary.
+If the contents are zero, checking is disabled.  Default is
+CHECKING ON.</p>
+</div>
+<div class="paragraph">
+<p>See: ?BAL ?CSP BEHEAD FORGET</p>
+</div>
+<div class="paragraph">
+<p><code>CSP  (&#8201;&#8212;&#8201;aa )</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>A VARIABLE containing the current data stack position saved by
+!CSP .</p>
+</div>
+<div class="paragraph">
+<p><code>SMUDGE  (&#8201;&#8212;&#8201;)</code>  FIG</p>
+</div>
+<div class="paragraph">
+<p>Toggle the 'smudge' bit in the header of the last defined word.
+If the smudge bit is set, the definition will not be found during
+a dictionary search.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_control_flow_stack">16. Control Flow Stack</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In DZX-Forth the control-flow stack is implemented on the data stack.
+CS-DROP CS-PUSH CS-POP CS-MARK CS-TEST are available when the 'cfs'
+equate in the kernel source is enabled.  See MISER.FB for example of
+use.</p>
+</div>
+<div class="paragraph">
+<p><code>&lt;MARK  ( C:&#8201;&#8212;&#8201;dest )</code>  83</p>
+</div>
+<div class="paragraph">
+<p>This function is not provided.  In DZX-Forth use  POSTPONE BEGIN
+instead.</p>
+</div>
+<div class="paragraph">
+<p><code>&lt;RESOLVE  ( C: dest&#8201;&#8212;&#8201;)</code>  83</p>
+</div>
+<div class="paragraph">
+<p>Compile a backward branch address in the dictionary using the
+location left by BEGIN .</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;MARK  ( C:&#8201;&#8212;&#8201;orig )</code>  83</p>
+</div>
+<div class="paragraph">
+<p>Reserve space in the dictionary for a forward branch address
+to be later resolved by THEN .</p>
+</div>
+<div class="paragraph">
+<p><code>&gt;RESOLVE  ( C: orig&#8201;&#8212;&#8201;)</code>  83</p>
+</div>
+<div class="paragraph">
+<p>This function is not provided.  In DZX-Forth use  <code>POSTPONE THEN</code>
+instead.</p>
+</div>
+<div class="paragraph">
+<p><code>AHEAD  ( C:&#8201;&#8212;&#8201;orig )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Put the location of a new unresolved forward reference orig
+onto the control flow stack.  Similar to IF but compiles an
+unconditional forward branch.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-PICK  ( C: xu..x0&#8201;&#8212;&#8201;xu..x0 xu ) ( S: u&#8201;&#8212;&#8201;)</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Remove u.  Place a copy of item xu on top of the control-flow
+stack.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-ROLL  ( C: xu..x0&#8201;&#8212;&#8201;xu-1..x0 xu ) ( S: u&#8201;&#8212;&#8201; )</code>  94</p>
+</div>
+<div class="paragraph">
+<p>Remove u.  Rotate item xu to the top of the control-flow stack.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-DROP  ( C: x&#8201;&#8212;&#8201;)</code></p>
+</div>
+<div class="paragraph">
+<p>Remove the top item from the control-flow stack.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-PUSH  ( C: xu..x1 x0&#8201;&#8212;&#8201;x0 xu..x1 )</code></p>
+</div>
+<div class="paragraph">
+<p>Rotate items on the control-flow stack such that the top item
+becomes the bottom.  An ambiguous condition exists if the control-
+flow stack is empty before CS-PUSH is executed.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-POP  ( C: xu xu-1..x0&#8201;&#8212;&#8201;xu-1..x0 xu )</code></p>
+</div>
+<div class="paragraph">
+<p>Rotate items on the control-flow stack such that the bottom item
+becomes the top.  An ambiguous condition exists if the control-
+flow stack is empty before CS-POP is executed.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-MARK  ( C:&#8201;&#8212;&#8201;x )</code></p>
+</div>
+<div class="paragraph">
+<p>Place a marker on the control-flow stack.  A marker occupies the
+same width as an orig|dest but is distinguishable using CS-TEST.</p>
+</div>
+<div class="paragraph">
+<p><code>CS-TEST  ( C: x&#8201;&#8212;&#8201;x ) ( S:&#8201;&#8212;&#8201;flag )</code></p>
+</div>
+<div class="paragraph">
+<p>Return a true flag if x is an orig|dest, or false if a marker.
+x is not altered or removed.</p>
+</div>
+<div class="paragraph">
+<p>If the control-flow stack is implemented using the data stack,
+flag shall be the topmost item on the data stack.</p>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Last updated 2015-09-16 12:21:19 CEST
+</div>
+</div>
+</body>
+</html>

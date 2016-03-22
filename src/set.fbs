@@ -1,0 +1,32 @@
+( SET from lina )                                              
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+( @+ SET !SET SET? SET+! .SET set_utility) \ AvdH 2K2may15     
+'$@ ALIAS @+    ( Obsoleted by bags)                           
+( Build a set "x" with X items. )                              
+: SET   CREATE HERE CELL+ , CELLS ALLOT DOES> ;                
+: !SET   DUP CELL+ SWAP ! ;   ( Make the SET empty )           
+: SET?   @+ = 0= ;   ( For the SET : it IS non-empty )         
+: SET+!   DUP >R @ ! 0 CELL+ R> +! ;   ( Add ITEM to the SET ) 
+: .SET   @+ SWAP ?DO I ? 0 CELL+ +LOOP ;   ( Print SET )       
+( Retract from SET in same order. Leave ITEM. Use after !SET ) 
+: SET+@   DUP >R @ @ 0 CELL+ R> +! ;                           
+( Remove entry at ADDRESS from SET. )                          
+: SET-REMOVE   >R   DUP CELL+ SWAP  R@ @ OVER -   MOVE         
+    -1 CELLS R> +! ;                                           
+( For VALUE and SET : value IS present in set.)                
+: IN-SET? $@ SWAP ?DO                                          
+   DUP I @ = IF DROP -1 UNLOOP EXIT THEN 0 CELL+ +LOOP DROP 0 ;

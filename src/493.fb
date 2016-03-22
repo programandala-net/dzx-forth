@@ -1,0 +1,22 @@
+\ UNIXLIKE.FB (unixlike.fsb in the host system)
+\
+\ This file is part of DZX-Forth
+\ http://programandala.net/en.programa.dzx-forth.html
+\
+\ This file contains some words that simulate the behaviour of
+\ Unix shell commands.
+\
+\ 2015-02-14: Code extracted from <files.fsb>.
+
+( Unix-like commands )
+
+: rm ( "filename" -- )
+  \ Delete a file.
+  parse-filename delete-file
+  ;
+: mv ( "currentfilename" "newfilename" -- )
+  \ Rename a file.
+  parse-filename parse-filename 2swap rename-file
+  ;
+
+

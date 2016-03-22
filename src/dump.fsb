@@ -1,0 +1,34 @@
+\ DUMP for DZX-Forth
+\ 2015-04-14
+\ Adapted from Lennart Benschop's Spectrum Forth-83 (1988)
+
+( BS STYPE )
+
+: BS  ( -- )  8 emit  ;
+
+: STYPE  ( ca len -- )
+  \ Press the given string; the highest bit of characters
+  \ is ignored, and control characters are printed as a point.
+  bounds ?do
+    i c@ %01111111 and dup bl < if  drop [char] .  then  emit
+  loop  ;
+
+: HEXA.  ( x  -- )
+  \ Print a number as an unsigned 16-bit number in hex.
+  base @ swap hex s>d <# # # # # #> type space base ! ;
+
+-->
+
+( DUMP )
+
+: DUMP  ( a len  -- )
+  7 + %1111111111111000 and 8 / 0 ?do
+    cr dup hexa.
+    8 0 do
+      i over + @ >< hexa.
+    2 +loop
+    dup bs 8 stype
+    ?terminal if leave then
+    8 +
+  loop drop ;
+

@@ -1,0 +1,6 @@
+   10 REM DZX-Forth
+   20 REM Copyright (c) 2014,2015 Marcos Cruz (programandala.net)
+   30 CLEAR VAL"25000-1"
+   40 LOAD "DZXFORTH.B" CODE VAL"25000"
+   50 RANDOMIZE USR VAL "25000":REM cold
+   60 RANDOMIZE USR VAL "25000+3":REM warm

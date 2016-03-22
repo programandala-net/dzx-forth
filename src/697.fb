@@ -32,28 +32,3 @@ forth definitions  decimal  warning on
   r/o headed open-file throw
   dup file-size throw d.
   close-file throw  ;
-( .sys )
-: .sys  ( -- )
-  \ Show host system details.
-  ." DOS version: " dos-version swap . '.' emit . cr
-  ." IDEDOS present?:"
-  idedos? 3 and s" no yes" drop + 3 type cr
-  ;
-( test )
-: size  ( ca1 len1 ca2 len2 -- )
-  +string file-size throw d.
-  ;
-: headed-size  ( ca len -- )
-  s" A:" +string .hsize
-  ;
-: unheaded-size  ( ca len -- )
-  s" B:" +string .size
-  ;
-: data-size  ( ca len -- )
-  -ext dup 8 swap - spaces type ;
-: sizes  ( ca len -- )
-  \ Show the file sizes of two identical files,
-  \ with and without +3DOS header.
-  \ ca len = filename (without drive)
-  2dup data-size 2dup headed-size unheaded-size
-  ;

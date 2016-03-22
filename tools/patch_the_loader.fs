@@ -31,6 +31,7 @@ require galope/unslurp-file.fs
 \ ==============================================================
 \ Constants
 
+\ XXX FIXME -- make the path relative:
 s" ~/zx_spectrum/dzx-forth/src/"      2constant dir
 
 dir s" dzx-forth_symbols.z80s" s+     2constant symbols-file
