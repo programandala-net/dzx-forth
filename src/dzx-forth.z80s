@@ -1,38 +1,41 @@
-; DZX-Forth {{{
-
-  version.major:                equ 'A'         ; = alpha state
-  version.minor:                equ 3           ; branch
-
-_version: macro
-  db version.major,'-0',version.minor+'0','-'
-  db '20151009'  ; release
-  endm
+; DZX-Forth
 
 ; A direct-threaded Forth for ZX Spectrum +3e
+; http://programandala.net/en.program.dzx-forth.html
 ;
-; (Project under development)
+; Project under development
 
-; DZX-Forth is a fork of CP/M DX-Forth v4.09 (2014-12)
+; }}} ==========================================================
+; Author and License {{{
 
-; Copyright (C) 2014,2015 Marcos Cruz (programandala.net)
+; Author: Marcos Cruz (programandala.net), 2014,2015,2016.
 ;
-; DZX-Forth is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free
-; Software Foundation; either version 3 of the License, or (at your option)
-; any later version.
-;
-; DZX-Forth is distributed in the hope that it will be useful, but WITHOUT ANY
-; WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
-;
-; You should have received a copy of the GNU General Public License along with
-; DZX-Forth; if not, see <http://gnu.org/licenses>.
+; Credit: Forked from CP/M DX-Forth 4.00 and 4.09 (by Ed, public domain).
 
-; Version history: see the file <VERSIONS.md>.
-; TO-DO list: see the file <TO-DO.md>.
+; You may do whatever you want with this work, so long as you: 1) retain the
+; copyright/authorship/credit notices and this license in all redistributed
+; copies, modified versions and derived works; 2) include all of the original
+; files; and 3) include the sources of your modified version or derived work.
+; There is no warranty.
 
-; }}} **********************************************************
+; }}} ==========================================================
+; Version {{{
+
+; XXX TODO --
+
+  version.major:                equ 0
+  version.minor:                equ 4
+  version.patch:                equ 0
+
+_version: macro
+  db version.major+'0','.'
+  db version.minor+'0','.'
+  db version.patch+'0'
+  db '-rc.0'
+  db '+20160322'  ; release
+  endm
+
+; }}} ==========================================================
 ; Boot {{{
 
 start: equ 25000 ; start of DZX-Forth in memory
@@ -42,7 +45,7 @@ start: equ 25000 ; start of DZX-Forth in memory
   jp cold_boot
   jp warm_boot
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Labels {{{
 
 ; ------------------------------
@@ -63,9 +66,7 @@ start: equ 25000 ; start of DZX-Forth in memory
 
 ; Other labels have no affix.
 
-; ------------------------------
-
-; }}} **********************************************************
+; }}} ==========================================================
 ; System configuration {{{
 
 debug?: equ no ; debugging messages?
@@ -122,7 +123,7 @@ filename_size:          equ 16 ; "uud:nnnnnnnn.eee"
 filename_buffer_size:   equ filename_size+1 ; for trailing 0xFF
 ;file_handle_size:       equ 6+36  ; (keep even) ; XXX OLD
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; User configuration {{{
 
 ; XXX TODO -- organize and documentate, in order to move this section to its
@@ -243,7 +244,7 @@ return_stack_size:                    equ 256
 tib_size:                             equ 80    ; Terminal Input Buffer
 
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Description {{{
 
 ; ------------------------------
@@ -344,7 +345,7 @@ tib_size:                             equ 80    ; Terminal Input Buffer
 ; ROM
 ; <----- 0x0000, bottom of memory
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Macros {{{
 
 ; ------------------------------
@@ -577,7 +578,7 @@ _debug_variable: macro message,address
 
   endm
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Data zones {{{
 
 tib_address:
@@ -685,7 +686,7 @@ init_user_variables_size: equ $-init_user_variables
 ;;  ds 2   ; spare
 
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Misc. subroutines {{{
 
 ; ------------------------------
@@ -849,7 +850,7 @@ move_block_upwards:
 ;   pop bc
 ;   ret
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Virtual machine {{{
 
 ; XXX TODO -- add headers?
@@ -1011,7 +1012,7 @@ two_lit_:
   inc bc
   jp push_hlde
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Stack pointers manipulation {{{
 
 ; SP@  ( -- a )
@@ -1045,7 +1046,7 @@ rp_store_:
   ld (return_stack_pointer),hl
   jp next
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Return stack {{{
 
 ; >R  ( x -- )
@@ -1130,7 +1131,7 @@ rdrop_:
   ld (hl),d
   jp next
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Data stack {{{
 
 ; DROP  ( x -- )
@@ -1464,7 +1465,7 @@ dump_.end:
   dw from_r_,base_,store_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Memory operations {{{
 
 ; @  ( aa -- x )
@@ -1732,7 +1733,7 @@ align_: equ next
 aligned_: equ next
 
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Circular string buffer {{{
 
 if circular_string_buffer?
@@ -1795,7 +1796,7 @@ save_counted_string_:
 
 endif
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Arithmetic and logical {{{
 
 ; ><  ( x1 -- x2 )
@@ -2542,7 +2543,7 @@ rshift_.1:
   call sra_hl.1
   jp rshift_.1
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Comparison {{{
 
 ; 0=  ( x -- flag )
@@ -2840,7 +2841,7 @@ d_max_:
   dw d_less_
   dw branch_,d_min_.1
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Numeric conversion {{{
 
 ; DECIMAL  ( -- )
@@ -3123,7 +3124,7 @@ decimal_question_:
   dw equals_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Strings {{{
 
 ; CMOVE  ( ca1 ca2 len -- )
@@ -3785,7 +3786,7 @@ tolower_.a:
   xor 0x20
   ret
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Control structures {{{
 
 ; (OF)  ( n1 n2 -- n1 | )
@@ -4523,7 +4524,7 @@ bracket_if_:
   _header _public,'[THEN]',_immediate,noop_
 bracket_then_: equ next
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Numeric output {{{
 
 ; (D.)  ( d -- ca u )
@@ -4639,7 +4640,7 @@ hex_dot_:
   dw base_,store_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; DOS {{{
 
 back_from_dos:
@@ -4982,7 +4983,7 @@ lstout_:
 ;;  ld hl,(z3eadr)
 ;;  jp pushhl
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Facility {{{
 
 ; (MS)  ( ms -- )
@@ -5020,7 +5021,7 @@ ms_:
   call fetch_execute_
   dw paren_ms_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Sound {{{
 
 ; SOUND  ( freq ms -- )
@@ -5045,7 +5046,7 @@ beep_:
   call fetch_execute_
   dw paren_beep_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Keyboard input {{{
 
 ; KEY?  ( -- flag )
@@ -5188,7 +5189,7 @@ key_:
   call fetch_execute_
   dw paren_key_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Basic screen and printer output {{{
 
 ; (EMIT)  ( c -- )
@@ -5307,7 +5308,7 @@ printer_:
 ;;  ld (vemit),hl
   jp next
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Compiler {{{
 
 ; WORDLIST-FIND  ( ca wid -- 0 | xt nfa -1 | xt nfa 1 )
@@ -6155,7 +6156,7 @@ synonym_.alias:
 synonym_.end:
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Constants {{{
 
 ; TRUE  ( -- true )
@@ -6244,7 +6245,7 @@ tick_next_:
 tick_next_.variable:
   dw next
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Variables {{{
 
 ; UDP  ( -- a )
@@ -6404,7 +6405,7 @@ set_current_:
   ld hl,current.variable
   jp store_.into_hl_pointer
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; User variables {{{
 
 ; user variables 0, 2, 4 are reserved for multitasking
@@ -6503,7 +6504,7 @@ case_sensitive_search_user_variable: equ 44
 
 ; User area bytes 46 onwards are available for user applications
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Forth system {{{
 
 ; SYS?  ( -- flag )
@@ -8087,7 +8088,7 @@ recurse_:
   push hl
   jp compile_comma_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Errors {{{
 
 ; ------------------------------
@@ -8467,7 +8468,7 @@ abort_quote_:
   dw compile_,paren_abort_quote_,comma_quote_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Boot {{{
 
 boot_tasks:
@@ -8696,16 +8697,11 @@ paren_boot_message_:
 
   dw paren_dot_quote_
   db paren_boot_message_.end-$-1  ; length
-  db "DZX-Forth ",cr_char
-  db "Version "
+  db "DZX-Forth v"
   _version
   db cr_char
-  db copy_char," 2014,2015 Marcos Cruz",cr_char
+  db copy_char," 2014,2015,2016 Marcos Cruz",cr_char
   db "(programandala.net)",cr_char
-  ; XXX TMP
-;  db "DZX-Forth comes with",cr_char
-;  db "ABSOLUTELY NO WARRANTY;",cr_char
-;  db "for details see the license",cr_char
 paren_boot_message_.end
 
   if floating_point?
@@ -8726,7 +8722,7 @@ boot_message_:
   call fetch_execute_
   dw paren_boot_message_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Dictionary support {{{
 
 ; FREEZE  ( -- )
@@ -8986,7 +8982,7 @@ marker_:
   dw sys_,store_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Strings {{{
 
 ; S,  ( ca len -- )
@@ -9117,7 +9113,7 @@ bracket_char_:
   dw literal_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Misc {{{
 
 ; PAUSE  ( -- )
@@ -9163,7 +9159,7 @@ dzx_forth_:
   ld de,version.major shl 8 + version.minor
   jp push_version
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Files control XXX NEW {{{
 
 ; MAX-FILE-ID  ( -- u )
@@ -9285,7 +9281,7 @@ filename_buffers_.last:
 filename_buffer.next: ds filename_buffer_size
 filename_buffer.last: ds filename_buffer_size
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Files control XXX OLD {{{
 
 ; HBUF  ( -- a )
@@ -9432,7 +9428,7 @@ filename_buffer.last: ds filename_buffer_size
   ; dw set_fcb_
   ; dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Files {{{
 
 ; XXX Note on +3DOS filenames:
@@ -10374,7 +10370,7 @@ flush_file_:
   pop hl
   jp false_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Save system {{{
 
 ; SAVE-SYSTEM  ( "filename[.COM]" -- )
@@ -10458,7 +10454,7 @@ turnkey_system_:
 ;;  dw zero
 ;;  dw branch,turnkey_.1
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Source files {{{
 
 ; XXX TODO
@@ -10477,7 +10473,7 @@ turnkey_system_:
 
 
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Block files {{{
 
 if block_files?
@@ -11276,7 +11272,7 @@ question_block_.end:
 
 endif ; end of block file words
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Screen and graphics {{{
 
 ; AT-XY  ( u1 u2 -- )
@@ -11515,7 +11511,7 @@ normal_:
   dw zero_,overprint_
   dw paren_exit_
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; Floating point {{{
 
   if floating_point?
@@ -14051,7 +14047,7 @@ f_number_.4:
 
   endif ; floating_point?
 
-; }}} **********************************************************
+; }}} ==========================================================
 ; End {{{
 
 ; XXX TODO it seems these 'last' labels could be renamed

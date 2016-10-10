@@ -68,7 +68,7 @@ all : dsk1 dsk2
 dsk1:
 	@make dzx-forth.dsk
 
-# Disk 2 
+# Disk 2
 .PHONY : dsk2
 dsk2:
 	@make dzx-forth_block_files.dsk

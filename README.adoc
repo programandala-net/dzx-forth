@@ -36,7 +36,7 @@ http://www.worldofspectrum.org/residos/[ResiDOS] is planned.
 
 == Status
 
-DZX-Forth is a sleeping project. It was developed from 2014-12-30 to
+DZX-Forth is a sleeping project. It was developed from 2014-11-03 to
 2015-05-20.  It's not finished but it's usable.
 
 Two development problems put the project on stand-by for a while:

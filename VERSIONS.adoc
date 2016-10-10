@@ -1,0 +1,102 @@
+= DZX-Forth versions
+:author: Marcos Cruz (programandala.net)
+:revdate: 2016-03-22
+
+// This file is part of DZX-Forth
+// http://programandala.net/en.program.dzx-forth.html
+
+== Version A-00-20150112
+
+First usable version. Keyboard input and screen output work.
+
+- Fixed: `emit`.
+- Added: `border`.
+- Added: `toupper`, `tolower`, `lower`.
+- Fixed: `bye`.
+- Fixed: `return`.
+- Fixed: `key`, `key?`.
+- Fixed: `type`.
+- Added: `boot-message`.
+- Fixed: `quit`, `accept`, `interpret`.
+- Added: `alias`.
+- Added: "%" number prefix.
+- Added: `binary`.
+- Removed: `not`.
+- Fixed: `page`.
+- Modified: `@execute`.
+- Added: `@?execute`.
+
+== Version A-01-20150114
+
+Main improvement: Keyboard translation table: any typed
+character can be converted to any code.  In the future, it will
+be a conditional compilation option, with some additional
+configuration options.
+
+- Added: `get-user`, `set-user`, `restore-user`.
+- Added: `tib`, `#tib`.
+- Fixed: `dos-version`.
+- Added: `unused-disk`.
+- Added: `get-drive`, `set-drive`.
+- Added: Single-quoted chars as a number format.
+- Added: Keyboard translation table.
+
+== Version A-02-20150214
+
+Main improvements: Most of the basic file words are implemented
+(only `read-line` still waits); source block files work: the
+system boots from disk, not from tape; circular string buffer.
+
+- Added: `defer!`, `defer@`.
+- Added: `alias`.
+- Added: `hex.`.
+- Added: `file-position`.
+- Added: `paper`, `ink`, `bright`, `flash`, `normal`.
+- Added: `create-file`, `close-file`.
+- Added: `cell`, `4`, `float`.
+- Added: `delete-file`.
+- Modified: Now block files support is optional, by conditional compilation.
+- Added: `write-file`.
+- Added: `rdrop`.
+- Added: `write-line`, `read-file`, `open-file`.
+- Modified: `token` renamed to `parse-name`, after Gforth and Forth 2012.
+- Added: `file-id`.
+- Added: `reposition-file`, `abandon-file`, `headed`, `file-size`.
+- Added: `read-byte`, `write-byte`.
+- Removed: `filetype?`.
+- Added: `filetype`.
+- Modified: `zbuf` renamed to `filename-buffers`.
+- Modified: `lastfile` renamed to `last-filename`.
+- Removed: `.lastfile`.
+- Modified: `>fname`renamed to `>filename-buffer`.
+- Added: `rename-file`.
+- Modified: Faster `+string`.
+- Added: `control>bl`.
+- Added: Block files can be opened and loaded.
+- Added: Circular string buffer.
+- Modified: No TAP file required anymore: now the system boots from disk.
+
+== Version A-03-20150219
+
+Main improvement: `read-line`.
+
+- Modified: `(name)` and `n>count` converted to `name>string` (after Gforth and Forth-2012).
+- Removed: `>ior`.
+- Modified: `(read-file)` renamed to `page-read-file`.
+- Modified: `(write-file)` renamed to `page-write-file`.
+- Fixed: +3DOS errors are changed to negative (range -1000..-1036, with additions from -1100).
+- Added: `read-line`.
+
+== Version 0.4.0 (under development)
+
+- Added: `char-`
+- Modified: `>filename-buffer` is substituted by `>filename`, which returns
+  the string ready to be used by +3DOS and uses the circular string
+  buffer when available.
+- Added: `?exit`, after Gforth.
+- Fixed: Faster and simpler `control>bl`: all control characters are
+  converted to spaces.
+- Added: `eof?`, needed to make `file-read` standard.
+- Added: `flush-drive`
+- Added: `basic-file-header`
+- Added: `idedos?`

@@ -1,6 +1,14 @@
 = DZX-Forth TO-DO list
 :author: Marcos Cruz (programandala.net)
-:revdate: 2016-03-17
+:revdate: 2016-03-22
+
+// This file is part of DZX-Forth
+// http://programandala.net/en.program.dzx-forth.html
+
+== Urgent -- before commiting
+
+- License
+- Version number
 
 == To fix
 
@@ -13,8 +21,6 @@ should it be?
 2015-01-12: use `throw` with Forth-94 codes instead of `(abort")`
 
 2015-02-15:
-
-Fix:
 
 block r/w error happens because of `#screens` is 1 greater.  No matter the
 tool the DSK file is created by, `tap2dsk` or `mkp3fs`.  But `tap2dsk`
@@ -35,34 +41,36 @@ the 128-bound rounding?
 
 Then `init-scr` calculates the number of blocks in the file this way:
 
+----
 file-size drop b/buf um/mod nip blks ! ; XXX FIXME fails with +3DOS headers
+----
 
 What returns 3, correct.  But it returns 4 when the file is loaded after
-<words.fs>, that has 4 blocks.
-
+<words.fs>, which has 4 blocks.
 
 Note: The content of BLKS somehow is restored between two `open-block file`
 even after `close-all`. 
 
-Pero `blks` apunta a una ficha de file_descriptor_blocks. Puede que la ficha
-no se borre. Pero ¿por qué el nuevo valor es igual que el antiguo cuando el
-segundo fichero de bloques que se abre es menor?
+But `blks` points to a record in `file_descriptor_blocks`.  Maybe the
+record is not erased. But why the new value is identical to the old
+one, if the second blocks file open is smaller?
 
 2015-01-21: erase `file-id-table` in `cold`.
 
 2015-01-26: check if `last-filename` works fine, or the addresses of
 `filename-buffers` change.
 
-2015-01-29: fix: improve the "undefined word" message to show the word name.
-this is required in order to know what fails about `include`. 2015-02-01: The
-solution seems to use the new `latest-word`.
+2015-01-29: fix: improve the "undefined word" message to show the word
+name.  this is required in order to know what fails about `include`.
+2015-02-01: The solution seems to use the new `latest-word`.
 
-2015-01-30, 2015-01-16: fix: `(create-file)`. fix the strange issue with its
-fam: +3DOS can not create r/o or s/r files.  The solution is to change the
-fam, create the file and then force the original fam.
+2015-01-30, 2015-01-16: fix: `(create-file)`. fix the strange issue
+with its fam: +3DOS can not create r/o or s/r files.  The solution is
+to change the fam, create the file and then force the original fam.
 
 2015-01-30: Fix: redo the lost renamings in _tools.fb_: `fname` to
-`current-stream-file`; `loadfile` to `current-block-file`. Better names?
+`current-stream-file`; `loadfile` to `current-block-file`. Better
+names?
 
 2015-02-14: Fix: `at-xy` errors return to BASIC.
 
@@ -115,5 +123,3 @@ uses the dictionary]
 routines.
 
 2015-02-20: Write Ed about this: `(name)` and `n>count` converted to `name>string` (after Gforth and Forth-2012).
-
-
