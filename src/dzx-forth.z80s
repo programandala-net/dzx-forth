@@ -5,6 +5,8 @@
 ;
 ; Project under development
 
+; Last modified: 201703081821
+
 ; }}} ==========================================================
 ; Author and License {{{
 
@@ -9975,7 +9977,7 @@ no_free_fid:
   ; Error
   ; ( ca2 fam )
   dw drop_ ; leave only ca2, as an undefined fid
-  dw lit_,-1100,throw_
+  dw lit_,-1100
   dw paren_exit_
 
 ; (CREATE-FILE)  ( ca fam fid -- fid ior )
