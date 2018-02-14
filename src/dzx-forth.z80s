@@ -5,7 +5,7 @@
 ;
 ; Project under development
 
-; Last modified: 201703081821
+; Last modified: 201802142049
 
 ; }}} ==========================================================
 ; Author and License {{{
@@ -10087,7 +10087,7 @@ eof_question:
   dw paren_exit_
   ;
 
-; PAGE-READ-FILE  ( ca len fid +n -- ior )
+; PAGE-READ-FILE  ( ca len1 fid +n -- len2 ior )
 ;
 ; ca len = filename
 ; +n = RAM page for 0xC000..0xFFFF
