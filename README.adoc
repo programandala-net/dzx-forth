@@ -1,14 +1,15 @@
 = DZX-Forth
 :author: Marcos Cruz (programandala.net)
-:revdate: 2016-03-22
+:revdate: 2018-06-22
 
 // This file is part of DZX-Forth
 // http://programandala.net/en.program.dzx-forth.html
 
 == Description
 
-DZX-Forth is a Forth system under development for
-http://www.worldofspectrum.org/zxplus3e[ZX Spectrum +3e].
+DZX-Forth is a http://forth-standard.org[standard Forth] system under
+development for http://www.worldofspectrum.org/zxplus3e[ZX Spectrum
++3e].
 
 Home page: http://programandala.net/en.program.dzx-forth.html
 
@@ -24,22 +25,22 @@ incorporated later into DZX-Forth.
 == Goal
 
 The first goal was to build a modern Forth system for ZX Spectrum +3
-and ZX Spectrum +3e.  But the original +3DOS has an important bug for
-a Forth system: it is impossible to know the size of files that don't
-have a +3DOS header. Happily this bug, was fixed in ZX Spectrum +3e
-v1.37 by its author, Garry Lancaster.  This made ZX Spectrum +3e the
-only platform for DZX-Forth.
+and ZX Spectrum +3e.  But the original +3DOS has an important bug: it
+is impossible to know the size of files that don't have a +3DOS
+header. Happily this bug was fixed in ZX Spectrum +3e v1.37 by its
+author, Garry Lancaster.  Thereforme ZX Spectrum +3e became the only
+target platform for DZX-Forth.
 
 Support for
 http://www.worldofspectrum.org/zxplus3e/idedos.html[IDEDOS] and
-http://www.worldofspectrum.org/residos/[ResiDOS] is planned.
+http://www.worldofspectrum.org/residos/[ResiDOS] were planned.
 
 == Status
 
 DZX-Forth is a sleeping project. It was developed from 2014-11-03 to
 2015-05-20.  It's not finished but it's usable.
 
-Two development problems put the project on stand-by for a while:
+Two development problems put the project on stand-by:
 
 - DX-Forth is written for the 8080 processor. Therefore many routines
   are not optimized for the more powerful Z80. This means some code is
@@ -55,10 +56,13 @@ Two development problems put the project on stand-by for a while:
 Some code of DZX-Forth has been reused in
 http://programandala.net/en.program.solo_forth.html[Solo Forth], a
 Forth system with a different approach, under active development, for
-ZX Spectrum 128 and G+DOS.
+ZX Spectrum 128 and compatible computers, supporting +3DOS, G+DOS and
+TR-DOS, and planned support for NextOS and others. At the time of
+writing, Solo Forth has superseded DZX-Forth by far.
 
 A Git repository for DZX-Forth was created on 2016-03-21 with the
-development backups, in order to make future development easier.
+development backups, in order to make future development easier.  It
+was uploaded to GitHub on 2018-06.
 
 == Usage
 
@@ -86,13 +90,13 @@ original documentation of DX-Forth, converted to
 http://asciidoctor.org[Asciidoctor] format, and with some changes and
 addons.
 
-== Compilation
+== Building the Forth system
 
 A Makefile file for `make` is provided.  But at the time of writing
 (2016-03-22) compilation is not possible because the Forth tool which
 builds the BASIC loader depends on some modules of the
 http://programamandala.net/en.program.galope.html[Galope library],
-which is not published. This is noted in the Makefile and will be
+which is not published yet. This is noted in the Makefile and will be
 solved in a future version. Meanwhile, a temporary solution is to edit
 the Makefile and comment out the following recipe, provided the
 address of the Forth system has not been changed (it's 25000 by
@@ -104,21 +108,15 @@ dzx-forth_loader.bas : dzx-forth_loader.bas.raw dzx-forth_kernel.tap
 	./tools/patch_the_loader.fs
 ----
 
-Requirements of the Makefile:
+Then make sure the requirements of the Makefile, which are listed in
+its header, are installed on your system, and start the building with
+one of the following commands:
 
-- http://pasmo.speccy.org/[Pasmo] (by Julián Albo)
-- http://www.seasip.info/ZX/unix.html[tap2dsk] from Taptools (by John
-  Elliott)
-- http://metalbrain.speccy.org/link-eng.htm[bin2code] (by MetalBrain)
-- http://worldofspectrum.org[bas2tap] from the utilities section of
-  World of Spectrum (by Martijn van der Heide)
-- http://gnu.org/software/gforth[Gforth] (by Anton Ertl, Bernd Paysan
-  et al.)
-- http://asciidoctor.org[Asciidoctor] (by Dan Allen), only to build
-  the documentation
+|===
+| Command     | Goal
 
-Then just do `make` and two updated DSK disk images will be created in
-the _bin_ directory. You can build only one of the disks with `make
-dsk1` and `make dsk2`.
-
-To build the documentation from the Asciidoctor sources: `make doc`.
+| `make`      | build both disks
+| `make dsk1` | build only disk 1
+| `make dsk2` | build only disk 2
+| `make doc`  | build the documentation
+|===
