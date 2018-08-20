@@ -1,22 +1,23 @@
 = DZX-Forth
 :author: Marcos Cruz (programandala.net)
-:revdate: 2018-06-22
+:revdate: 2018-08-20
 
 // This file is part of DZX-Forth
 // http://programandala.net/en.program.dzx-forth.html
 
 == Description
 
-DZX-Forth is a http://forth-standard.org[standard Forth] system under
-development for http://www.worldofspectrum.org/zxplus3e[ZX Spectrum
-+3e].
+DZX-Forth is a http://forth-standard.org[standard
+Forth,role="external"] system under development for
+http://www.worldofspectrum.org/zxplus3e[ZX Spectrum
++3e,role="external"].
 
 Home page: http://programandala.net/en.program.dzx-forth.html
 
 == Origin
 
-DZX-Forth was forked from http://dxforth.netbay.com.au/[CP/M DX-Forth]
-a Forth-94 system for 8088 CP/M.
+DZX-Forth was forked from http://dxforth.netbay.com.au/[CP/M
+DX-Forth,role="external"] a Forth-94 system for 8088 CP/M.
 
 The fork was done from DX-Forth 4.00, then updated to DX-Forth 4.09;
 also some changes and fixes from versions 4.10 and 4.11 were
@@ -28,12 +29,13 @@ The first goal was to build a modern Forth system for ZX Spectrum +3
 and ZX Spectrum +3e.  But the original +3DOS has an important bug: it
 is impossible to know the size of files that don't have a +3DOS
 header. Happily this bug was fixed in ZX Spectrum +3e v1.37 by its
-author, Garry Lancaster.  Thereforme ZX Spectrum +3e became the only
+author, Garry Lancaster.  Therefore ZX Spectrum +3e became the only
 target platform for DZX-Forth.
 
 Support for
-http://www.worldofspectrum.org/zxplus3e/idedos.html[IDEDOS] and
-http://www.worldofspectrum.org/residos/[ResiDOS] were planned.
+http://www.worldofspectrum.org/zxplus3e/idedos.html[IDEDOS,role="external"]
+and http://www.worldofspectrum.org/residos/[ResiDOS,role="external"]
+were planned.
 
 == Status
 
@@ -62,7 +64,7 @@ writing, Solo Forth has superseded DZX-Forth by far.
 
 A Git repository for DZX-Forth was created on 2016-03-21 with the
 development backups, in order to make future development easier.  It
-was uploaded to GitHub on 2018-06.
+was uploaded to GitHub on 2018-08.
 
 == Usage
 
@@ -87,8 +89,8 @@ s" b:tools.fb" r/o open-block-file
 
 Documentation is in a very early stage. It mostly consists of the
 original documentation of DX-Forth, converted to
-http://asciidoctor.org[Asciidoctor] format, and with some changes and
-addons.
+http://asciidoctor.org[Asciidoctor,role="external"] format, and with
+some changes and addons.
 
 == Building the Forth system
 
