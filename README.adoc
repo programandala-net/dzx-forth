@@ -16,7 +16,7 @@ Home page: http://programandala.net/en.program.dzx-forth.html
 
 == Origin
 
-DZX-Forth was forked from http://dxforth.netbay.com.au/[CP/M
+DZX-Forth was forked from http://dxforth.mirrors.minimaltype.com/[CP/M
 DX-Forth,role="external"] a Forth-94 system for 8088 CP/M.
 
 The fork was done from DX-Forth 4.00, then updated to DX-Forth 4.09;
